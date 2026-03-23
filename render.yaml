@@ -1,0 +1,78 @@
+####################################################################
+# render.yaml — BizPulse deployment blueprint for Render.com
+#
+# How to use:
+#   1. Push this repo to GitHub
+#   2. Go to dashboard.render.com → New → Blueprint
+#   3. Connect your repo — Render will read this file automatically
+#   4. After services are created, open the bizpulse web service
+#      → Environment tab → fill in all the "sync: false" variables
+#
+# Free-tier note:
+#   The free web service sleeps after 15 min of inactivity.
+#   The 7pm WAT cron job will still fire IF the server is awake.
+#   Upgrade to Starter ($7/mo) for always-on service.
+####################################################################
+
+databases:
+  - name: bizpulse-db
+    plan: free
+    databaseName: bizpulse
+    user: bizpulse
+
+services:
+  - type: web
+    name: bizpulse
+    runtime: node
+    plan: free
+    buildCommand: npm install --omit=dev
+    startCommand: npm start
+    healthCheckPath: /health
+    autoDeploy: true
+
+    envVars:
+      # ── Set automatically by Render ─────────────────────
+      - key: NODE_ENV
+        value: production
+
+      # ── Linked from the Render PostgreSQL above ──────────
+      - key: DATABASE_URL
+        fromDatabase:
+          name: bizpulse-db
+          property: connectionString
+
+      # ── Set manually in Render dashboard ─────────────────
+      # (leave sync:false — Render will prompt you to fill them)
+
+      - key: BASE_URL
+        sync: false          # e.g. https://bizpulse.onrender.com
+
+      - key: WHATSAPP_PHONE_NUMBER_ID
+        sync: false
+
+      - key: WHATSAPP_TOKEN
+        sync: false
+
+      - key: WHATSAPP_VERIFY_TOKEN
+        sync: false
+
+      - key: BIZPULSE_NUMBER
+        sync: false          # e.g. +15551676111
+
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+
+      - key: GOOGLE_REDIRECT_URI
+        sync: false          # https://bizpulse.onrender.com/api/auth/callback
+
+      - key: GEMINI_API_KEY
+        sync: false
+
+      - key: GMAIL_USER
+        sync: false
+
+      - key: GMAIL_APP_PASSWORD
+        sync: false

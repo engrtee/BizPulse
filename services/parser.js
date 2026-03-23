@@ -1,0 +1,157 @@
+/**
+ * services/parser.js
+ * Detect the intent of an incoming WhatsApp message and route it.
+ *
+ * Nigerian language patterns supported:
+ *   - "k" shorthand: "30k" = 30,000
+ *   - Pidgin: "I sell am for 5k" = sold 1 item for ₦5,000
+ *   - Informal: "made 67k today spent 15k on stock"
+ *   - Mixed: "sales 45000 rent 5000 stock 12k transport 2k"
+ *
+ * The parser first tries rule-based detection (fast, no API cost).
+ * If the message is ambiguous, it flags it for Gemini to parse.
+ *
+ * Returns: { type, data, needsAI }
+ *
+ * Types:
+ *   'daily_entry'   - revenue + expenses
+ *   'inventory_in'  - received stock
+ *   'inventory_out' - sold stock
+ *   'stock_check'   - wants current stock levels
+ *   'customer_log'  - customer count
+ *   'summary'       - wants immediate summary
+ *   'help'          - wants command list
+ *   'unknown'       - send to Gemini for parsing
+ */
+
+'use strict';
+
+const { parseAmount } = require('../utils/naira');
+
+// Keywords that unambiguously signal intent
+const INTENT_PATTERNS = {
+  help:         /^(help|\?|commands?)$/i,
+  stock_check:  /^(stock|inventory|stock\?|inventory\?)\??$/i,
+  summary:      /^(summary|report|show me|my report|today's report)$/i,
+  inventory_in: /\b(received|got|bought|purchased|stocked|restocked)\b.*\b(bags?|units?|pieces?|pcs|cartons?|crates?|rolls?|bottles?|packs?|dozens?|sets?|pairs?|items?|shirts?|trousers?|fabric|rice|beans|yam|maize|tomatoes?|pepper|flour|sugar|oil|sachet|gallon|kg|litre?s?|litres?|cans?|tins?)/i,
+  inventory_out:/\b(sold|sell|sold out|cleared)\b.*\b(\d+)\b.*\b(bags?|units?|pieces?|pcs|cartons?|crates?|rolls?|bottles?|packs?|dozens?|shirts?|trousers?|fabric|rice|beans|items?)/i,
+  customer_log: /\b(customers?|clients?|served|people today|new customer|customer today)\b/i,
+};
+
+// Expense category keywords → canonical labels
+const EXPENSE_KEYWORDS = {
+  'Stock / Inventory': /\b(stock|inventory|goods?|product|purchase|raw materials?|restocked?|supplies?)\b/i,
+  'Rent':              /\b(rent|shop rent|store rent|oga rent)\b/i,
+  'Staff Wages':       /\b(staff|salary|salaries|wages?|worker|employee|boy|girl|helped?)\b/i,
+  'Transport':         /\b(transport|logistics?|delivery|dispatch|keke|okada|uber|bolt|tricycle|bike|fuel for trip)\b/i,
+  'Utilities':         /\b(light|nepa|electricity|generator|gen|diesel|fuel|water|recharge|data|internet)\b/i,
+  'Marketing':         /\b(marketing|advert|ads?|flyer|social media|instagram|facebook|promotion)\b/i,
+  'Packaging':         /\b(packaging|bags?|nylons?|wraps?|boxes?|cartons?)\b/i,
+  'Equipment':         /\b(equipment|machine|tools?|repair|fix|maintenance)\b/i,
+  'Food & Supplies':   /\b(food|lunch|meals?|chop|eating|water|drinks?)\b/i,
+  'Other':             /.*/,
+};
+
+/**
+ * Parse informal Nigerian expense text into a structured breakdown object.
+ * e.g. "rent 5000 stock 12k transport 2k" → { 'Rent': 5000, 'Stock / Inventory': 12000, 'Transport': 2000 }
+ */
+function extractExpenses(text) {
+  const breakdown = {};
+
+  // Pattern: word(s) followed by an amount
+  // e.g. "rent 5000", "stock 12k", "gave Emeka 5k for stock"
+  const chunks = text.matchAll(/([a-z\s]{2,30}?)\s+([\d,]+k?)\b/gi);
+  for (const match of chunks) {
+    const label = match[1].trim().toLowerCase();
+    const amount = parseAmount(match[2]);
+    if (amount <= 0) continue;
+
+    // Skip if this looks like the revenue line
+    if (/^(made|sales?|revenue|income|earned|collected|received|profit|turnover)/.test(label)) continue;
+
+    // Map to canonical category
+    let category = 'Other';
+    for (const [cat, re] of Object.entries(EXPENSE_KEYWORDS)) {
+      if (re.test(label)) { category = cat; break; }
+    }
+
+    breakdown[category] = (breakdown[category] || 0) + amount;
+  }
+  return breakdown;
+}
+
+/**
+ * Try to extract a revenue figure from text.
+ * Handles: "made 30k", "sales 45000", "revenue 50k", "I sell for 30k", "collected 20000"
+ */
+function extractRevenue(text) {
+  const patterns = [
+    /(?:made|earned|sales?|revenue|income|collected|sold for|received|profit from sales?)\s+([\d,]+k?)/i,
+    /^([\d,]+k?)\s*(?:naira|ngn)?(?:\s+today)?$/i,  // bare number at start
+  ];
+  for (const re of patterns) {
+    const m = text.match(re);
+    if (m) return parseAmount(m[1]);
+  }
+  return 0;
+}
+
+/**
+ * Main parser — determines message type and extracts structured data.
+ * @param {string} message Raw WhatsApp message text
+ * @returns {{ type: string, data: object, needsAI: boolean }}
+ */
+function parseMessage(message) {
+  if (!message) return { type: 'unknown', data: {}, needsAI: true };
+
+  const text = message.trim();
+  const lower = text.toLowerCase();
+
+  // --- Exact intent matches ---
+  if (INTENT_PATTERNS.help.test(lower))        return { type: 'help',        data: {}, needsAI: false };
+  if (INTENT_PATTERNS.stock_check.test(lower)) return { type: 'stock_check', data: {}, needsAI: false };
+  if (INTENT_PATTERNS.summary.test(lower))     return { type: 'summary',     data: {}, needsAI: false };
+
+  // --- Inventory received ---
+  if (INTENT_PATTERNS.inventory_in.test(text)) {
+    return { type: 'inventory_in', data: {}, needsAI: true }; // Gemini extracts item/qty/price
+  }
+
+  // --- Inventory sold ---
+  if (INTENT_PATTERNS.inventory_out.test(text)) {
+    return { type: 'inventory_out', data: {}, needsAI: true }; // Gemini extracts item/qty
+  }
+
+  // --- Customer count only ---
+  if (INTENT_PATTERNS.customer_log.test(text)) {
+    // Try to grab a number: "customers 15", "served 20 people"
+    const numMatch = text.match(/\b(\d+)\b/);
+    const count = numMatch ? parseInt(numMatch[1], 10) : 0;
+    return { type: 'customer_log', data: { count }, needsAI: false };
+  }
+
+  // --- Daily entry: try rule-based first ---
+  const revenue = extractRevenue(text);
+  if (revenue > 0) {
+    const breakdown = extractExpenses(text);
+    const totalExpenses = Object.values(breakdown).reduce((s, v) => s + v, 0);
+    const profit = revenue - totalExpenses;
+    const margin = revenue > 0 ? parseFloat(((profit / revenue) * 100).toFixed(2)) : 0;
+
+    // Extract customer count if mentioned inline
+    const custMatch = text.match(/(\d+)\s*(?:customers?|clients?|people|transactions?)/i);
+    const customers = custMatch ? parseInt(custMatch[1], 10) : 0;
+
+    return {
+      type: 'daily_entry',
+      data: { revenue, totalExpenses, expenseBreakdown: breakdown, profit, margin, customers },
+      needsAI: false,
+    };
+  }
+
+  // --- Ambiguous / complex — pass to Gemini ---
+  return { type: 'unknown', data: {}, needsAI: true };
+}
+
+module.exports = { parseMessage, extractExpenses, extractRevenue };

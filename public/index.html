@@ -1,0 +1,1137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+  <title>BizPulse — Your Daily Business Pulse</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&display=swap" rel="stylesheet" />
+
+  <style>
+    /* ══ TOKENS ══════════════════════════════════════ */
+    :root {
+      --navy:       #0F2744;
+      --navy-mid:   #1a3a5c;
+      --blue:       #1A56A4;
+      --blue-light: #2B6CB0;
+      --green:      #1A7A4A;
+      --red:        #C53030;
+      --gold:       #B7791F;
+      --bg:         #F0F4FA;
+      --card:       #FFFFFF;
+      --muted:      #718096;
+      --border:     #E2E8F0;
+      --text:       #1A202C;
+      --text-sm:    #4A5568;
+      --sidebar-w:  250px;
+    }
+
+    /* ══ RESET ═══════════════════════════════════════ */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; background: var(--bg); font-family: 'DM Sans', sans-serif; color: var(--text); font-size: 15px; line-height: 1.5; }
+    h1, h2, h3 { font-family: 'DM Serif Display', serif; }
+    button { cursor: pointer; border: none; outline: none; font-family: inherit; }
+    input, select, textarea { font-family: inherit; outline: none; }
+
+    /* ══ LAYOUT SHELL ════════════════════════════════ */
+    #app { display: flex; min-height: 100vh; }
+
+    /* ── Sidebar (desktop) ── */
+    #sidebar {
+      width: var(--sidebar-w);
+      background: var(--navy);
+      display: flex;
+      flex-direction: column;
+      position: fixed;
+      top: 0; left: 0;
+      height: 100vh;
+      z-index: 200;
+      padding: 0;
+    }
+    .sb-logo {
+      padding: 22px 24px 20px;
+      font-family: 'DM Serif Display', serif;
+      font-size: 22px;
+      color: #fff;
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+      letter-spacing: -0.3px;
+    }
+    .sb-logo span { color: #63B3ED; }
+    .sb-logo-sub { font-family: 'DM Sans', sans-serif; font-size: 11px; color: rgba(255,255,255,0.45); font-weight: 400; margin-top: 2px; letter-spacing: 0.03em; }
+    .sb-nav { flex: 1; padding: 16px 12px; display: flex; flex-direction: column; gap: 4px; }
+    .sb-item {
+      display: flex; align-items: center; gap: 12px;
+      padding: 11px 14px; border-radius: 8px;
+      font-size: 14px; font-weight: 500; color: rgba(255,255,255,0.65);
+      background: transparent; width: 100%; text-align: left;
+      transition: background 0.15s, color 0.15s;
+    }
+    .sb-item .sb-icon { font-size: 17px; width: 22px; text-align: center; }
+    .sb-item:hover { background: rgba(255,255,255,0.07); color: #fff; }
+    .sb-item.active { background: rgba(99,179,237,0.15); color: #63B3ED; font-weight: 600; }
+    .sb-section-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: rgba(255,255,255,0.3); padding: 12px 14px 4px; }
+    .sb-user {
+      padding: 16px 20px; border-top: 1px solid rgba(255,255,255,0.08);
+      font-size: 13px;
+    }
+    .sb-user-name { font-weight: 600; color: #fff; margin-bottom: 2px; }
+    .sb-user-biz { color: rgba(255,255,255,0.45); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+    /* ── Mobile top bar ── */
+    #top-bar {
+      display: none;
+      position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+      background: var(--navy);
+      height: 52px; padding: 0 16px;
+      align-items: center; justify-content: space-between;
+    }
+    .tb-brand { font-family: 'DM Serif Display', serif; font-size: 20px; color: #fff; }
+    .tb-brand span { color: #63B3ED; }
+    .tb-user { font-size: 13px; color: #BEE3F8; font-weight: 500; }
+
+    /* ── Main content ── */
+    #main {
+      flex: 1;
+      margin-left: var(--sidebar-w);
+      min-height: 100vh;
+      overflow-y: auto;
+    }
+
+    /* ── Mobile bottom nav ── */
+    #bottom-nav {
+      display: none;
+      position: fixed; bottom: 0; left: 0; right: 0; z-index: 100;
+      background: #fff; border-top: 1px solid var(--border);
+    }
+    .nav-tab {
+      flex: 1; display: flex; flex-direction: column; align-items: center;
+      justify-content: center; padding: 8px 4px 6px;
+      font-size: 11px; color: var(--muted); font-weight: 500; background: none;
+    }
+    .nav-tab .ni { font-size: 20px; margin-bottom: 2px; }
+    .nav-tab.active { color: var(--blue); }
+
+    /* ══ MOBILE OVERRIDES ════════════════════════════ */
+    @media (max-width: 767px) {
+      #sidebar { display: none; }
+      #top-bar { display: flex; }
+      #bottom-nav { display: flex; }
+      #main { margin-left: 0; padding-top: 52px; padding-bottom: 68px; }
+      #main .inner { max-width: 480px; margin: 0 auto; }
+    }
+
+    /* ══ SCREENS ═════════════════════════════════════ */
+    .screen { display: none; }
+    .screen.active { display: block; }
+
+    /* ══ DESKTOP PAGE HEADER ════════════════════════ */
+    .page-header {
+      background: linear-gradient(135deg, var(--navy) 0%, var(--blue) 100%);
+      padding: 32px 36px 28px;
+      color: #fff;
+    }
+    .page-header h1 { font-size: 26px; margin-bottom: 6px; }
+    .page-header p { font-size: 14px; color: #BEE3F8; }
+
+    /* ══ CONTENT WRAPPER ════════════════════════════ */
+    .content { padding: 24px 32px 40px; }
+    @media (max-width: 767px) {
+      .page-header { padding: 24px 20px 20px; }
+      .page-header h1 { font-size: 22px; }
+      .content { padding: 12px 0 0; }
+    }
+
+    /* ══ DESKTOP GRID ════════════════════════════════ */
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+    .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; }
+    .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+    @media (max-width: 1100px) { .grid-4 { grid-template-columns: repeat(2,1fr); } }
+    @media (max-width: 767px) { .grid-2,.grid-3,.grid-4 { grid-template-columns: 1fr; gap: 0; } }
+
+    /* ══ CARD ════════════════════════════════════════ */
+    .card {
+      background: var(--card); border-radius: 12px;
+      padding: 24px; box-shadow: 0 1px 6px rgba(0,0,0,0.07);
+      border: 1px solid var(--border);
+    }
+    @media (max-width: 767px) {
+      .card { border-radius: 12px; margin: 12px 16px; padding: 18px; border: none; box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
+    }
+    .card-title {
+      font-size: 11px; font-weight: 700; color: var(--navy);
+      text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 16px;
+    }
+
+    /* ══ STAT CARD ═══════════════════════════════════ */
+    .stat-card {
+      background: var(--card); border-radius: 12px; padding: 20px 22px;
+      border: 1px solid var(--border); box-shadow: 0 1px 4px rgba(0,0,0,0.05);
+    }
+    .stat-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 8px; }
+    .stat-value { font-size: 26px; font-weight: 700; font-family: 'DM Serif Display', serif; line-height: 1; }
+    .stat-sub { font-size: 12px; color: var(--muted); margin-top: 6px; }
+    @media (max-width: 767px) {
+      .stat-card { border-radius: 0; margin: 0; border: none; border-bottom: 1px solid var(--border); box-shadow: none; padding: 14px 16px; }
+      .stat-value { font-size: 20px; }
+    }
+
+    /* Metric grid for mobile (2x2 inside a card) */
+    .metric-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--border); border-radius: 8px; overflow: hidden; border: 1px solid var(--border); }
+    .metric { background: var(--card); padding: 12px 14px; }
+    .metric-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 4px; }
+    .metric-value { font-size: 18px; font-weight: 700; }
+
+    /* ══ COLOURS ═════════════════════════════════════ */
+    .c-blue  { color: var(--blue); }
+    .c-green { color: var(--green); }
+    .c-red   { color: var(--red); }
+    .c-gold  { color: var(--gold); }
+    .c-navy  { color: var(--navy); }
+    .c-muted { color: var(--muted); }
+
+    /* ══ BUTTONS ═════════════════════════════════════ */
+    .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 12px 20px; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; transition: opacity .15s, transform .1s; border: none; }
+    .btn:active { opacity: .85; transform: scale(.98); }
+    .btn-block { display: flex; width: 100%; }
+    .btn-navy  { background: var(--navy);  color: #fff; }
+    .btn-blue  { background: var(--blue);  color: #fff; }
+    .btn-green { background: var(--green); color: #fff; }
+    .btn-outline-blue { background: transparent; color: var(--blue); border: 2px solid var(--blue); }
+    .btn-outline-red  { background: transparent; color: var(--red);  border: 2px solid var(--red); }
+    .btn:disabled { opacity: .5; pointer-events: none; }
+    .btn + .btn { margin-top: 10px; }
+    .btn-dashed { width: 100%; padding: 12px; border: 2px dashed var(--border); border-radius: 8px; background: transparent; color: var(--blue); font-size: 14px; font-weight: 600; margin-top: 10px; cursor: pointer; }
+
+    /* ══ FORMS ═══════════════════════════════════════ */
+    .form-group { margin-bottom: 16px; }
+    .form-label { display: block; font-size: 13px; font-weight: 600; color: var(--text-sm); margin-bottom: 5px; }
+    .form-input { width: 100%; padding: 11px 14px; border: 1.5px solid var(--border); border-radius: 8px; font-size: 15px; color: var(--text); background: #fff; transition: border-color .2s; }
+    .form-input:focus { border-color: var(--blue); }
+    select.form-input { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23718096' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 12px center; padding-right: 36px; }
+    textarea.form-input { resize: vertical; min-height: 80px; }
+    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    @media (max-width: 600px) { .form-row { grid-template-columns: 1fr; } }
+
+    /* ══ MISC COMPONENTS ═════════════════════════════ */
+    .section-divider { display: flex; align-items: center; gap: 10px; margin: 20px 0 14px; }
+    .section-divider::before, .section-divider::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+    .section-divider-label { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; white-space: nowrap; }
+
+    .row-item { display: flex; gap: 8px; align-items: flex-start; margin-bottom: 10px; }
+    .row-fields { flex: 1; }
+    .row-remove { width: 36px; height: 36px; border-radius: 6px; background: #FFF5F5; color: var(--red); font-size: 18px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+
+    .direction-toggle { padding: 8px 12px; border-radius: 6px; font-size: 13px; font-weight: 600; border: 2px solid; flex-shrink: 0; cursor: pointer; }
+    .direction-toggle.received { border-color: var(--green); color: var(--green); background: #F0FFF4; }
+    .direction-toggle.sold     { border-color: var(--red);   color: var(--red);   background: #FFF5F5; }
+
+    .msg { padding: 10px 14px; border-radius: 8px; font-size: 14px; margin-top: 12px; display: none; }
+    .msg.visible { display: block; }
+    .msg.success { background: #F0FFF4; color: var(--green); border: 1px solid #9AE6B4; }
+    .msg.error   { background: #FFF5F5; color: var(--red);   border: 1px solid #FC8181; }
+
+    .health-pill { display: inline-block; padding: 5px 16px; border-radius: 20px; font-size: 13px; font-weight: 700; }
+    .health-excellent       { background: #C6F6D5; color: #276749; }
+    .health-good            { background: #FEFCBF; color: #744210; }
+    .health-fair            { background: #FEEBC8; color: #7B341E; }
+    .health-needs-attention { background: #FED7D7; color: #822727; }
+
+    .low-stock-box { background: #FFF5F5; border: 1px solid #FC8181; border-radius: 8px; padding: 14px 16px; margin-top: 16px; }
+    .low-stock-title { font-weight: 700; color: var(--red); margin-bottom: 8px; font-size: 14px; }
+    .low-stock-item  { font-size: 14px; color: #742A2A; margin-bottom: 4px; }
+
+    .ai-box { border-left: 4px solid var(--blue); background: #EBF8FF; border-radius: 0 8px 8px 0; padding: 16px 18px; margin-top: 16px; }
+    .ai-label { font-size: 11px; font-weight: 700; color: var(--blue); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 12px; }
+    .ai-risk { background: #FFF5F5; border: 1px solid #FC8181; border-radius: 6px; padding: 10px 12px; margin-bottom: 12px; }
+    .ai-risk-label { font-size: 11px; font-weight: 700; color: var(--red); margin-bottom: 4px; }
+    .ai-actions { font-size: 14px; color: var(--text-sm); }
+    .ai-actions ol { padding-left: 18px; margin-top: 6px; }
+    .ai-actions li { margin-bottom: 8px; line-height: 1.5; }
+
+    .history-row { display: flex; justify-content: space-between; align-items: center; padding: 12px 0; border-bottom: 1px solid var(--border); }
+    .history-row:last-child { border-bottom: none; }
+    .history-date { font-size: 12px; color: var(--muted); margin-bottom: 2px; }
+    .history-rev  { font-size: 15px; font-weight: 700; color: var(--navy); }
+    .history-profit { font-size: 14px; font-weight: 700; }
+
+    .empty-state { text-align: center; padding: 40px 20px; color: var(--muted); }
+    .empty-icon  { font-size: 44px; margin-bottom: 12px; }
+    .empty-text  { font-size: 15px; }
+
+    .how-step { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 14px; font-size: 14px; color: var(--text-sm); }
+
+    .step-indicator { display: flex; justify-content: center; gap: 8px; margin-bottom: 20px; }
+    .step-dot { width: 10px; height: 10px; border-radius: 50%; background: #CBD5E0; transition: background .2s; }
+    .step-dot.active { background: var(--navy); }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid rgba(255,255,255,.4); border-top-color: #fff; border-radius: 50%; animation: spin .7s linear infinite; vertical-align: middle; margin-right: 6px; }
+
+    /* ══ REGISTER (full screen, no sidebar) ══════════ */
+    #screen-register { min-height: 100vh; background: var(--bg); }
+    .reg-wrap { max-width: 480px; margin: 0 auto; padding: 0 0 40px; }
+    .reg-hero { background: linear-gradient(135deg, var(--navy) 0%, var(--blue) 100%); padding: 40px 28px 32px; color: #fff; }
+    .reg-hero h1 { font-size: 30px; line-height: 1.2; margin-bottom: 10px; }
+    .reg-hero p  { font-size: 14px; color: #BEE3F8; line-height: 1.6; }
+    .reg-form { padding: 28px 20px 0; }
+
+    /* ══ HOME DESKTOP ════════════════════════════════ */
+    .home-stats-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 20px; }
+    @media (max-width: 1100px) { .home-stats-row { grid-template-columns: repeat(2,1fr); } }
+    @media (max-width: 767px)  { .home-stats-row { display: none; } }
+
+    .home-lower { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+    @media (max-width: 900px)  { .home-lower { grid-template-columns: 1fr; } }
+    @media (max-width: 767px)  { .home-lower { display: block; } }
+
+    /* ══ SUMMARY DESKTOP ══════════════════════════════ */
+    .summary-top { display: grid; grid-template-columns: 1.2fr 1fr; gap: 20px; margin-bottom: 20px; }
+    @media (max-width: 900px)  { .summary-top { grid-template-columns: 1fr; } }
+    @media (max-width: 767px)  { .summary-top { display: block; } }
+
+    /* ══ SETTINGS DESKTOP ════════════════════════════ */
+    .settings-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+    @media (max-width: 900px)  { .settings-grid { grid-template-columns: 1fr; } }
+    @media (max-width: 767px)  { .settings-grid { display: block; } }
+
+    /* ══ QUICK ACTION BUTTONS ════════════════════════ */
+    .qa-btn {
+      display: flex; align-items: center; gap: 12px; width: 100%;
+      padding: 14px 18px; border-radius: 10px; font-size: 15px; font-weight: 600;
+      transition: opacity .15s, transform .1s; margin-bottom: 10px; border: none;
+    }
+    .qa-btn:last-child { margin-bottom: 0; }
+    .qa-btn:active { opacity: .85; transform: scale(.98); }
+    .qa-icon { font-size: 20px; }
+    .qa-green { background: var(--green); color: #fff; }
+    .qa-blue  { background: var(--blue);  color: #fff; }
+
+    /* ══ ENTRY DESKTOP ════════════════════════════════ */
+    .entry-wrap { max-width: 860px; }
+  </style>
+</head>
+<body>
+<div id="app">
+
+  <!-- ══ DESKTOP SIDEBAR ══════════════════════════════ -->
+  <aside id="sidebar" style="display:none">
+    <div class="sb-logo">
+      Biz<span>Pulse</span>
+      <div class="sb-logo-sub">Financial OS for Nigerian SMEs</div>
+    </div>
+    <nav class="sb-nav">
+      <div class="sb-section-label">Menu</div>
+      <button class="sb-item active" id="snav-home"     onclick="switchTab('home')">    <span class="sb-icon">🏠</span> Home</button>
+      <button class="sb-item"        id="snav-entry"    onclick="switchTab('entry')">   <span class="sb-icon">✏️</span> Daily Entry</button>
+      <button class="sb-item"        id="snav-summary"  onclick="switchTab('summary')"> <span class="sb-icon">📈</span> Summary</button>
+      <button class="sb-item"        id="snav-settings" onclick="switchTab('settings')"><span class="sb-icon">⚙️</span> Settings</button>
+    </nav>
+    <div class="sb-user">
+      <div class="sb-user-name" id="sb-user-name">—</div>
+      <div class="sb-user-biz"  id="sb-user-biz">—</div>
+    </div>
+  </aside>
+
+  <!-- ══ MOBILE TOP BAR ════════════════════════════════ -->
+  <div id="top-bar">
+    <div class="tb-brand">Biz<span>Pulse</span></div>
+    <div class="tb-user" id="top-user-name"></div>
+  </div>
+
+  <!-- ══ MAIN ══════════════════════════════════════════ -->
+  <div id="main">
+    <div class="inner">
+
+      <!-- ══════════════ REGISTER ══════════════ -->
+      <div id="screen-register" class="screen active">
+        <div class="reg-wrap">
+          <div class="reg-hero">
+            <h1>Your Daily<br>Business Pulse</h1>
+            <p style="margin-top:8px">Track sales and expenses in 2 minutes.<br>Get AI-powered insights every evening automatically.</p>
+          </div>
+
+          <!-- Step 1 -->
+          <div id="reg-step-1" class="reg-form">
+            <div class="step-indicator" style="margin-top:24px">
+              <div class="step-dot active"></div><div class="step-dot"></div>
+            </div>
+            <p style="font-size:17px;font-weight:700;color:var(--navy);margin-bottom:18px">About You</p>
+            <div class="form-group"><label class="form-label">Your Name</label>
+              <input id="reg-name" class="form-input" type="text" placeholder="e.g. Amaka Obi" /></div>
+            <div class="form-group"><label class="form-label">Email Address</label>
+              <input id="reg-email" class="form-input" type="email" placeholder="you@gmail.com" /></div>
+            <div class="form-group">
+              <label class="form-label">WhatsApp Number <span style="color:var(--muted);font-weight:400">(optional)</span></label>
+              <input id="reg-phone" class="form-input" type="tel" placeholder="+234 801 234 5678" />
+            </div>
+            <div id="reg-step1-msg" class="msg"></div>
+            <button class="btn btn-navy btn-block" style="margin-top:8px" onclick="goToStep2()">Continue →</button>
+          </div>
+
+          <!-- Step 2 -->
+          <div id="reg-step-2" class="reg-form" style="display:none">
+            <div class="step-indicator" style="margin-top:24px">
+              <div class="step-dot active"></div><div class="step-dot active"></div>
+            </div>
+            <p style="font-size:17px;font-weight:700;color:var(--navy);margin-bottom:18px">Your Business</p>
+            <div class="form-group"><label class="form-label">Business Name</label>
+              <input id="reg-biz-name" class="form-input" type="text" placeholder="e.g. Amaka Fashion Store" /></div>
+            <div class="form-group"><label class="form-label">Business Type</label>
+              <select id="reg-biz-type" class="form-input">
+                <option value="">Select your business type</option>
+                <option>Food & Beverages</option><option>Retail / Trading</option>
+                <option>Fashion & Clothing</option><option>Beauty & Personal Care</option>
+                <option>Agriculture</option><option>Bakery / Food Production</option>
+                <option>Transport & Logistics</option><option>Professional Services</option>
+                <option>Technology</option><option>Education & Training</option>
+                <option>Furnishings & Supplies</option><option>Production / Manufacturing</option>
+                <option>FMCG</option><option>Online Business / E-commerce</option><option>Other</option>
+              </select></div>
+            <div class="form-group"><label class="form-label">State / Location</label>
+              <input id="reg-state" class="form-input" type="text" placeholder="e.g. Lagos, Kano, Abuja" /></div>
+            <div id="reg-step2-msg" class="msg"></div>
+            <button class="btn btn-green btn-block" style="margin-top:8px" onclick="registerAndEnter()" id="connect-btn">
+              Create Account &amp; Enter Dashboard
+            </button>
+            <button class="btn btn-outline-blue btn-block" style="margin-top:10px" onclick="goToStep1()">← Back</button>
+          </div>
+
+          <!-- Success -->
+          <div id="reg-success" class="reg-form" style="display:none;padding-top:32px;text-align:center">
+            <div style="font-size:52px;margin-bottom:12px">✅</div>
+            <h2 style="font-size:22px;color:var(--navy);margin-bottom:8px" id="reg-success-title">You're all set!</h2>
+            <p style="color:var(--muted);margin-bottom:24px;font-size:14px">Your BizPulse account is active.</p>
+            <div class="card" style="text-align:left;margin:0 0 20px">
+              <div class="card-title">WhatsApp Activation</div>
+              <p style="font-size:14px;color:var(--text-sm);margin-bottom:10px">Save this number as a contact on WhatsApp:</p>
+              <div style="background:var(--bg);padding:12px 16px;border-radius:8px;font-weight:700;color:var(--navy);font-size:16px;margin-bottom:14px" id="bizpulse-number-display">+15551676111</div>
+              <p style="font-size:14px;color:var(--text-sm);margin-bottom:8px">Then send this message:</p>
+              <div style="background:var(--bg);padding:12px 16px;border-radius:8px;font-weight:600;color:var(--navy)">Hello BizPulse</div>
+              <p style="font-size:13px;color:var(--muted);margin-top:12px">We'll do the rest 🚀</p>
+            </div>
+            <button class="btn btn-navy btn-block" onclick="enterApp()">Go to Dashboard →</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ══════════════ HOME ══════════════ -->
+      <div id="screen-home" class="screen">
+        <div class="page-header">
+          <h1 id="home-greeting">Good morning!</h1>
+          <p id="home-subtitle">Start fresh — log today's numbers early.</p>
+        </div>
+        <div class="content">
+
+          <!-- Desktop stat row -->
+          <div class="home-stats-row">
+            <div class="stat-card">
+              <div class="stat-label">Today's Revenue</div>
+              <div class="stat-value c-blue" id="ds-revenue">—</div>
+              <div class="stat-sub">Latest entry</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Net Profit</div>
+              <div class="stat-value" id="ds-profit">—</div>
+              <div class="stat-sub" id="ds-margin">—</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Top Expense</div>
+              <div class="stat-value c-muted" style="font-size:20px" id="ds-expense">—</div>
+              <div class="stat-sub">Highest category</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Customers</div>
+              <div class="stat-value c-navy" id="ds-customers">—</div>
+              <div class="stat-sub">Latest entry</div>
+            </div>
+          </div>
+
+          <!-- Desktop lower row -->
+          <div class="home-lower">
+            <!-- Quick actions -->
+            <div class="card">
+              <div class="card-title">Quick Actions</div>
+              <button class="qa-btn qa-green" onclick="switchTab('entry')">
+                <span class="qa-icon">✏️</span><span>Log Today's Numbers</span>
+              </button>
+              <button class="qa-btn qa-blue" onclick="sendSummaryNow()" id="home-summary-btn">
+                <span class="qa-icon">📩</span><span>Send Me a Summary Now</span>
+              </button>
+              <div id="home-action-msg" class="msg"></div>
+            </div>
+
+            <!-- How it works -->
+            <div class="card">
+              <div class="card-title">How It Works</div>
+              <div class="how-step"><span>1️⃣</span><span>Log your daily sales and expenses here or on WhatsApp</span></div>
+              <div class="how-step"><span>2️⃣</span><span>AI analyses your numbers every evening</span></div>
+              <div class="how-step"><span>3️⃣</span><span>Get a detailed summary email by 7pm</span></div>
+              <div class="how-step"><span>4️⃣</span><span>Track your progress week by week</span></div>
+            </div>
+          </div>
+
+          <!-- Mobile snapshot card (hidden on desktop) -->
+          <div class="card" id="mobile-snapshot" style="display:none">
+            <div class="card-title">Latest Snapshot</div>
+            <div id="home-snapshot-empty" class="empty-state" style="padding:20px 0">
+              <div class="empty-icon">📊</div>
+              <div class="empty-text" style="font-size:14px">No data yet. Log your first entry.</div>
+            </div>
+            <div id="home-snapshot-data" style="display:none">
+              <div class="metric-grid">
+                <div class="metric"><div class="metric-label">Revenue</div><div class="metric-value c-blue" id="snap-revenue">—</div></div>
+                <div class="metric"><div class="metric-label">Profit</div><div class="metric-value" id="snap-profit">—</div></div>
+                <div class="metric"><div class="metric-label">Top Expense</div><div class="metric-value c-muted" style="font-size:14px" id="snap-expense">—</div></div>
+                <div class="metric"><div class="metric-label">Customers</div><div class="metric-value c-navy" id="snap-customers">—</div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ══════════════ DAILY ENTRY ══════════════ -->
+      <div id="screen-entry" class="screen">
+        <div class="page-header">
+          <h1 id="entry-date-title">Today's Entry</h1>
+          <p>Log your sales, expenses and stock for today</p>
+        </div>
+        <div class="content">
+          <div class="entry-wrap">
+            <div class="card">
+              <!-- Sales row -->
+              <div class="card-title">Sales</div>
+              <div class="form-row">
+                <div class="form-group" style="margin-bottom:0">
+                  <label class="form-label">Total Revenue / Sales (₦)</label>
+                  <input id="entry-revenue" class="form-input" type="number" min="0" placeholder="e.g. 45000" />
+                </div>
+                <div class="form-group" style="margin-bottom:0">
+                  <label class="form-label">Number of Customers</label>
+                  <input id="entry-customers" class="form-input" type="number" min="0" placeholder="e.g. 12" />
+                </div>
+              </div>
+
+              <!-- Expenses -->
+              <div class="section-divider"><span class="section-divider-label">Expenses</span></div>
+              <div id="expense-rows"></div>
+              <button class="btn-dashed" onclick="addExpenseRow()">+ Add Expense</button>
+
+              <!-- Stock -->
+              <div class="section-divider"><span class="section-divider-label">Stock Movement</span></div>
+              <div id="stock-rows"></div>
+              <button class="btn-dashed" onclick="addStockRow()">+ Add Stock Entry</button>
+
+              <!-- Notes -->
+              <div class="section-divider"><span class="section-divider-label">Notes</span></div>
+              <textarea id="entry-notes" class="form-input" placeholder="Anything notable today? (optional)"></textarea>
+
+              <div id="entry-msg" class="msg"></div>
+              <button class="btn btn-navy btn-block" style="margin-top:16px" id="entry-submit-btn" onclick="submitEntry()">
+                Submit Today's Entry
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ══════════════ SUMMARY ══════════════ -->
+      <div id="screen-summary" class="screen">
+        <div class="page-header">
+          <h1>Business Summary</h1>
+          <p>Your latest performance at a glance</p>
+        </div>
+        <div class="content">
+          <div class="summary-top">
+            <!-- Left: metrics -->
+            <div class="card">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+                <div class="card-title" style="margin:0">Latest Summary</div>
+                <div id="summary-date" style="font-size:12px;color:var(--muted)"></div>
+              </div>
+              <div id="summary-empty" class="empty-state" style="padding:20px 0">
+                <div class="empty-icon">📬</div>
+                <div class="empty-text">No entries yet. Log your first entry to see summary here.</div>
+              </div>
+              <div id="summary-data" style="display:none">
+                <div class="grid-2" style="gap:12px;margin-bottom:12px">
+                  <div class="stat-card" style="padding:16px">
+                    <div class="stat-label">Revenue</div><div class="stat-value c-blue" id="sum-revenue" style="font-size:22px">—</div></div>
+                  <div class="stat-card" style="padding:16px">
+                    <div class="stat-label">Expenses</div><div class="stat-value c-red" id="sum-expenses" style="font-size:22px">—</div></div>
+                  <div class="stat-card" style="padding:16px">
+                    <div class="stat-label">Net Profit</div><div class="stat-value" id="sum-profit" style="font-size:22px">—</div></div>
+                  <div class="stat-card" style="padding:16px">
+                    <div class="stat-label">Margin</div><div class="stat-value c-gold" id="sum-margin" style="font-size:22px">—</div></div>
+                  <div class="stat-card" style="padding:16px">
+                    <div class="stat-label">Customers</div><div class="stat-value c-navy" id="sum-customers" style="font-size:22px">—</div></div>
+                  <div class="stat-card" style="padding:16px">
+                    <div class="stat-label">Top Expense</div><div class="stat-value c-muted" id="sum-top-expense" style="font-size:18px">—</div></div>
+                </div>
+                <div style="margin-bottom:14px">
+                  <span class="health-pill" id="sum-health-pill">—</span>
+                </div>
+                <div id="sum-low-stock"></div>
+              </div>
+            </div>
+
+            <!-- Right: AI + history -->
+            <div style="display:flex;flex-direction:column;gap:20px">
+              <div class="card">
+                <div class="card-title">AI Recommendation</div>
+                <div id="sum-ai-empty" style="color:var(--muted);font-size:14px">Submit an entry to receive your AI recommendation.</div>
+                <div id="sum-ai-box" style="display:none">
+                  <div class="ai-risk">
+                    <div class="ai-risk-label">⚠️ Risk</div>
+                    <div id="sum-ai-risk" style="font-size:14px;color:#742A2A">—</div>
+                  </div>
+                  <div class="ai-actions">
+                    <strong style="font-size:13px;color:var(--text-sm)">Actions to take:</strong>
+                    <ol id="sum-ai-actions" style="margin-top:8px"></ol>
+                  </div>
+                </div>
+              </div>
+
+              <div class="card">
+                <div class="card-title">Entry History</div>
+                <div id="history-empty" style="color:var(--muted);font-size:14px">No entries yet.</div>
+                <div id="history-list" style="display:none"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ══════════════ SETTINGS ══════════════ -->
+      <div id="screen-settings" class="screen">
+        <div class="page-header">
+          <h1>Settings</h1>
+          <p>Manage your account and preferences</p>
+        </div>
+        <div class="content">
+          <div class="settings-grid">
+
+            <!-- Account -->
+            <div class="card">
+              <div class="card-title">Your Account</div>
+              <div class="form-group"><label class="form-label">Name</label>
+                <input id="set-name" class="form-input" type="text" /></div>
+              <div class="form-group"><label class="form-label">Email</label>
+                <input id="set-email" class="form-input" type="email" /></div>
+              <div class="form-group"><label class="form-label">Business Name</label>
+                <input id="set-biz-name" class="form-input" type="text" /></div>
+              <div class="form-group"><label class="form-label">Business Type</label>
+                <select id="set-biz-type" class="form-input">
+                  <option>Food & Beverages</option><option>Retail / Trading</option>
+                  <option>Fashion & Clothing</option><option>Beauty & Personal Care</option>
+                  <option>Agriculture</option><option>Bakery / Food Production</option>
+                  <option>Transport & Logistics</option><option>Professional Services</option>
+                  <option>Technology</option><option>Education & Training</option>
+                  <option>Furnishings & Supplies</option><option>Production / Manufacturing</option>
+                  <option>FMCG</option><option>Online Business / E-commerce</option><option>Other</option>
+                </select></div>
+              <div id="set-account-msg" class="msg"></div>
+              <button class="btn btn-blue btn-block" onclick="saveSettings()">Save Changes</button>
+            </div>
+
+            <!-- Daily summaries -->
+            <div class="card">
+              <div class="card-title">Daily Summaries</div>
+              <p style="font-size:14px;color:var(--muted);margin-bottom:16px">
+                You receive automatic daily summaries every evening at 7pm WAT. Request one anytime below.
+              </p>
+              <button class="btn btn-outline-blue btn-block" onclick="sendSummaryNow()">📩 Send Summary Now</button>
+              <div id="set-summary-msg" class="msg"></div>
+            </div>
+
+            <!-- Google Drive -->
+            <div class="card">
+              <div class="card-title">Google Drive Sync</div>
+              <p style="font-size:14px;color:var(--muted);margin-bottom:16px">
+                Connect Google Drive to auto-sync every entry to your personal Google Sheet with 4 tabs: Transactions, Inventory, Customers, Summary.
+              </p>
+              <button class="btn btn-outline-blue btn-block" onclick="connectGoogleDrive()" id="google-connect-btn">🔗 Connect Google Drive</button>
+              <div id="set-google-msg" class="msg"></div>
+            </div>
+
+            <!-- WhatsApp -->
+            <div class="card">
+              <div class="card-title">WhatsApp</div>
+              <p style="font-size:14px;color:var(--muted);margin-bottom:10px">Your BizPulse WhatsApp number:</p>
+              <div style="background:var(--bg);padding:14px 16px;border-radius:8px;font-weight:700;font-size:17px;color:var(--navy);margin-bottom:12px" id="settings-wa-number">+15551676111</div>
+              <p style="font-size:13px;color:var(--muted);margin-bottom:16px">Save it as a contact and send messages any time to log entries or check your stock.</p>
+              <div style="background:#F0FFF4;border:1px solid #9AE6B4;border-radius:8px;padding:14px 16px">
+                <div style="font-size:12px;font-weight:700;color:var(--green);margin-bottom:8px;text-transform:uppercase;letter-spacing:.04em">WhatsApp Commands</div>
+                <div style="font-size:13px;color:var(--text-sm);line-height:1.8">
+                  <code style="background:#E6FFED;padding:1px 6px;border-radius:4px">made 30k today stock 10k</code> → log sales<br>
+                  <code style="background:#E6FFED;padding:1px 6px;border-radius:4px">received 50 bags rice at 900</code> → stock in<br>
+                  <code style="background:#E6FFED;padding:1px 6px;border-radius:4px">sold 12 bags rice</code> → stock out<br>
+                  <code style="background:#E6FFED;padding:1px 6px;border-radius:4px">stock?</code> → check stock levels<br>
+                  <code style="background:#E6FFED;padding:1px 6px;border-radius:4px">summary</code> → get report now<br>
+                  <code style="background:#E6FFED;padding:1px 6px;border-radius:4px">help</code> → see all commands
+                </div>
+              </div>
+            </div>
+
+            <!-- Sign out -->
+            <div class="card">
+              <div class="card-title">Account</div>
+              <p style="font-size:14px;color:var(--muted);margin-bottom:16px">Sign out and clear your session from this device.</p>
+              <button class="btn btn-outline-red btn-block" onclick="signOut()">Sign Out &amp; Clear Data</button>
+            </div>
+
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /.inner -->
+  </div><!-- /#main -->
+
+  <!-- ══ MOBILE BOTTOM NAV ══════════════════════════════ -->
+  <div id="bottom-nav" style="display:none">
+    <button class="nav-tab active" id="nav-home"     onclick="switchTab('home')">    <span class="ni">🏠</span>Home</button>
+    <button class="nav-tab"        id="nav-entry"    onclick="switchTab('entry')">   <span class="ni">✏️</span>Daily Entry</button>
+    <button class="nav-tab"        id="nav-summary"  onclick="switchTab('summary')"> <span class="ni">📈</span>Summary</button>
+    <button class="nav-tab"        id="nav-settings" onclick="switchTab('settings')"><span class="ni">⚙️</span>Settings</button>
+  </div>
+
+</div><!-- /#app -->
+
+<script>
+'use strict';
+
+// ── State ──────────────────────────────────────────
+let currentUser  = null;
+let currentTab   = 'home';
+let expenseCount = 0;
+let stockCount   = 0;
+const isDesktop  = () => window.innerWidth >= 768;
+
+const EXPENSE_CATEGORIES = ['Stock / Inventory','Rent','Staff Wages','Transport','Utilities','Marketing','Packaging','Equipment','Food & Supplies','Other'];
+
+// ── Init ────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  applyLayout();
+  window.addEventListener('resize', applyLayout);
+
+  const params   = new URLSearchParams(window.location.search);
+  const auth     = params.get('auth');
+  const userId   = params.get('userId');
+  const name     = params.get('name');
+
+  if (auth === 'success' && userId) {
+    localStorage.setItem('bizpulse_user_id', userId);
+    if (name) localStorage.setItem('bizpulse_user_name', decodeURIComponent(name));
+    window.history.replaceState({}, '', '/');
+    showRegisterSuccess(name);
+    return;
+  }
+
+  if (params.get('go') && userId) {
+    localStorage.setItem('bizpulse_user_id', userId);
+    window.history.replaceState({}, '', '/');
+    loadUser(userId).then(() => enterApp());
+    return;
+  }
+
+  const savedId = localStorage.getItem('bizpulse_user_id');
+  if (savedId) {
+    loadUser(savedId).then(() => enterApp());
+  } else {
+    showRegisterScreen();
+  }
+  setEntryTitle();
+});
+
+// ── Layout (desktop vs mobile) ─────────────────────
+function applyLayout() {
+  const desk = isDesktop();
+  document.getElementById('sidebar').style.display    = desk ? 'flex' : 'none';
+  document.getElementById('top-bar').style.display    = desk ? 'none' : 'flex';
+  document.getElementById('bottom-nav').style.display = desk ? 'none' : 'flex';
+  document.getElementById('main').style.marginLeft    = desk ? 'var(--sidebar-w)' : '0';
+  document.getElementById('main').style.paddingTop    = desk ? '0' : '52px';
+  document.getElementById('main').style.paddingBottom = desk ? '0' : '68px';
+  const mobileSnap = document.getElementById('mobile-snapshot');
+  if (mobileSnap) mobileSnap.style.display = desk ? 'none' : 'block';
+}
+
+// ── Formatting ──────────────────────────────────────
+function fmtNaira(n) {
+  const num = parseFloat(n) || 0;
+  return '₦' + num.toLocaleString('en-NG');
+}
+function fmtDate(dateStr) {
+  if (!dateStr) return '';
+  const d = (typeof dateStr === 'string' && dateStr.includes('T'))
+    ? new Date(dateStr)
+    : new Date(dateStr + 'T12:00:00');
+  if (isNaN(d.getTime())) return '';
+  return d.toLocaleDateString('en-NG', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+function setEntryTitle() {
+  const now = new Date();
+  const str = now.toLocaleDateString('en-NG', { weekday:'long', day:'numeric', month:'long' });
+  const el  = document.getElementById('entry-date-title');
+  if (el) el.textContent = 'Today\'s Entry — ' + str;
+}
+
+// ── Screens ─────────────────────────────────────────
+function showRegisterScreen() {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById('screen-register').classList.add('active');
+  document.getElementById('sidebar').style.display    = 'none';
+  document.getElementById('top-bar').style.display    = 'none';
+  document.getElementById('bottom-nav').style.display = 'none';
+  document.getElementById('main').style.marginLeft    = '0';
+  document.getElementById('main').style.paddingTop    = '0';
+  document.getElementById('main').style.paddingBottom = '0';
+}
+
+function showScreen(name) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById('screen-' + name)?.classList.add('active');
+}
+
+function switchTab(tab) {
+  currentTab = tab;
+  showScreen(tab);
+  // Desktop sidebar
+  document.querySelectorAll('.sb-item').forEach(b => b.classList.remove('active'));
+  document.getElementById('snav-' + tab)?.classList.add('active');
+  // Mobile bottom nav
+  document.querySelectorAll('.nav-tab').forEach(b => b.classList.remove('active'));
+  document.getElementById('nav-' + tab)?.classList.add('active');
+
+  if (tab === 'home')     { updateHomeGreeting(); }
+  if (tab === 'summary')  { loadSummary(); }
+  if (tab === 'settings') { populateSettings(); }
+  if (tab === 'entry')    { initEntryForm(); }
+}
+
+// ── User ─────────────────────────────────────────────
+async function loadUser(userId) {
+  try {
+    const res  = await fetch('/api/user?userId=' + userId);
+    if (!res.ok) return;
+    currentUser = await res.json();
+    localStorage.setItem('bizpulse_user_id',   currentUser.id);
+    localStorage.setItem('bizpulse_user_name', currentUser.name);
+    updateUserUI();
+  } catch(e) {}
+}
+
+function updateUserUI() {
+  if (!currentUser) return;
+  const first = currentUser.name.split(' ')[0];
+  document.getElementById('top-user-name').textContent = first;
+  document.getElementById('sb-user-name').textContent  = currentUser.name;
+  document.getElementById('sb-user-biz').textContent   = currentUser.biz_name || currentUser.biz_type || '';
+}
+
+function enterApp() {
+  const userId = localStorage.getItem('bizpulse_user_id');
+  if (!userId) { showRegisterScreen(); return; }
+  applyLayout();
+  updateHomeGreeting();
+  switchTab('home');
+}
+
+// ── Home ──────────────────────────────────────────────
+function updateHomeGreeting() {
+  const firstName = (currentUser?.name || localStorage.getItem('bizpulse_user_name') || 'there').split(' ')[0];
+  const hour = new Date().getHours();
+  let greeting, subtitle;
+  if (hour < 12) {
+    greeting = 'Good morning ' + firstName + ' \uD83D\uDC4B';
+    subtitle = 'Start fresh \u2014 log today\'s numbers early.';
+  } else if (hour < 17) {
+    greeting = 'Good afternoon ' + firstName + ' \uD83D\uDC4B';
+    subtitle = 'How\'s business going today?';
+  } else {
+    greeting = 'Good evening ' + firstName + ' \uD83D\uDC4B';
+    subtitle = 'Ready to log today\'s numbers?';
+  }
+  document.getElementById('home-greeting').textContent = greeting;
+  document.getElementById('home-subtitle').textContent  = subtitle;
+  loadHomeSnapshot();
+}
+
+async function loadHomeSnapshot() {
+  const userId = localStorage.getItem('bizpulse_user_id');
+  if (!userId) return;
+  try {
+    const res  = await fetch('/api/summary/latest?userId=' + userId);
+    const data = await res.json();
+    const s    = data.summary;
+
+    // Desktop stat cards
+    if (s) {
+      const pColor = parseFloat(s.profit) >= 0 ? 'var(--green)' : 'var(--red)';
+      document.getElementById('ds-revenue').textContent   = fmtNaira(s.revenue);
+      const dsp = document.getElementById('ds-profit');
+      dsp.textContent  = fmtNaira(s.profit);
+      dsp.style.color  = pColor;
+      document.getElementById('ds-margin').textContent    = parseFloat(s.margin).toFixed(1) + '% margin';
+      document.getElementById('ds-expense').textContent   = s.topExpense?.category || '—';
+      document.getElementById('ds-customers').textContent = s.customers || 0;
+    }
+
+    // Mobile snapshot
+    if (!data.hasData) {
+      document.getElementById('home-snapshot-empty').style.display = 'block';
+      document.getElementById('home-snapshot-data').style.display  = 'none';
+      return;
+    }
+    document.getElementById('home-snapshot-empty').style.display = 'none';
+    document.getElementById('home-snapshot-data').style.display  = 'block';
+    document.getElementById('snap-revenue').textContent   = fmtNaira(s.revenue);
+    const sp = document.getElementById('snap-profit');
+    sp.textContent = fmtNaira(s.profit);
+    sp.className   = 'metric-value ' + (parseFloat(s.profit) >= 0 ? 'c-green' : 'c-red');
+    document.getElementById('snap-expense').textContent   = s.topExpense?.category || '—';
+    document.getElementById('snap-customers').textContent = s.customers || 0;
+  } catch(e) {}
+}
+
+// ── Registration ──────────────────────────────────────
+function goToStep1() {
+  document.getElementById('reg-step-1').style.display = 'block';
+  document.getElementById('reg-step-2').style.display = 'none';
+}
+function goToStep2() {
+  const name  = document.getElementById('reg-name').value.trim();
+  const email = document.getElementById('reg-email').value.trim();
+  const msg   = document.getElementById('reg-step1-msg');
+  if (!name)  { showMsg(msg, 'error', 'Please enter your name.'); return; }
+  if (!email || !email.includes('@')) { showMsg(msg, 'error', 'Please enter a valid email.'); return; }
+  hideMsg(msg);
+  document.getElementById('reg-step-1').style.display = 'none';
+  document.getElementById('reg-step-2').style.display = 'block';
+}
+
+async function registerAndEnter() {
+  const bizName = document.getElementById('reg-biz-name').value.trim();
+  const bizType = document.getElementById('reg-biz-type').value;
+  const state   = document.getElementById('reg-state').value.trim();
+  const msg     = document.getElementById('reg-step2-msg');
+  const btn     = document.getElementById('connect-btn');
+  if (!bizName) { showMsg(msg, 'error', 'Please enter your business name.'); return; }
+  if (!bizType) { showMsg(msg, 'error', 'Please select your business type.'); return; }
+  hideMsg(msg);
+  btn.disabled  = true;
+  btn.innerHTML = '<span class="spinner"></span>Setting up your account\u2026';
+  try {
+    const res  = await fetch('/api/register', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({
+        name:           document.getElementById('reg-name').value.trim(),
+        email:          document.getElementById('reg-email').value.trim(),
+        whatsappNumber: document.getElementById('reg-phone').value.trim(),
+        bizName, bizType, state,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok && res.status !== 409) {
+      showMsg(msg, 'error', data.error || 'Registration failed. Please try again.');
+      btn.disabled  = false;
+      btn.innerHTML = 'Create Account & Enter Dashboard';
+      return;
+    }
+    localStorage.setItem('bizpulse_user_id',   data.userId);
+    localStorage.setItem('bizpulse_user_name', document.getElementById('reg-name').value.trim());
+    await loadUser(data.userId);
+    enterApp();
+  } catch(e) {
+    showMsg(msg, 'error', 'Something went wrong. Please try again.');
+    btn.disabled  = false;
+    btn.innerHTML = 'Create Account & Enter Dashboard';
+  }
+}
+
+function showRegisterSuccess(name) {
+  const firstName = (name ? decodeURIComponent(name) : 'there').split(' ')[0];
+  document.getElementById('reg-step-1').style.display  = 'none';
+  document.getElementById('reg-step-2').style.display  = 'none';
+  document.getElementById('reg-success').style.display = 'block';
+  document.getElementById('reg-success-title').textContent = 'You\'re all set, ' + firstName + '!';
+}
+
+// ── Daily Entry ────────────────────────────────────────
+function initEntryForm() {
+  if (document.getElementById('expense-rows').children.length === 0) addExpenseRow();
+}
+function addExpenseRow() {
+  expenseCount++;
+  const id  = 'exp-' + expenseCount;
+  const div = document.createElement('div');
+  div.className = 'row-item'; div.id = id;
+  const opts = EXPENSE_CATEGORIES.map(c => '<option>' + c + '</option>').join('');
+  div.innerHTML = '<div class="row-fields"><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><select class="form-input" data-field="category">' + opts + '</select><input type="number" min="0" placeholder="\u20A6 Amount" class="form-input" data-field="amount" /></div></div><button class="row-remove" onclick="removeRow(\'' + id + '\')">&#x2715;</button>';
+  document.getElementById('expense-rows').appendChild(div);
+}
+function addStockRow() {
+  stockCount++;
+  const id  = 'stk-' + stockCount;
+  const div = document.createElement('div');
+  div.className = 'row-item'; div.id = id;
+  div.innerHTML = '<div class="row-fields"><div style="display:grid;grid-template-columns:2fr 1fr auto;gap:8px;margin-bottom:8px"><input type="text" placeholder="Item name" class="form-input" data-field="item" /><input type="number" min="0" placeholder="Qty" class="form-input" data-field="quantity" /><button class="direction-toggle received" onclick="toggleDirection(this)" data-field="direction" data-value="received">Received</button></div><input type="number" min="0" placeholder="Unit price (\u20A6)" class="form-input" data-field="unitPrice" /></div><button class="row-remove" onclick="removeRow(\'' + id + '\')">&#x2715;</button>';
+  document.getElementById('stock-rows').appendChild(div);
+}
+function toggleDirection(btn) {
+  if (btn.dataset.value === 'received') { btn.dataset.value='sold'; btn.textContent='Sold'; btn.className='direction-toggle sold'; }
+  else { btn.dataset.value='received'; btn.textContent='Received'; btn.className='direction-toggle received'; }
+}
+function removeRow(id) { document.getElementById(id)?.remove(); }
+
+async function submitEntry() {
+  const userId = localStorage.getItem('bizpulse_user_id');
+  const btn    = document.getElementById('entry-submit-btn');
+  const msg    = document.getElementById('entry-msg');
+  if (!userId) { showMsg(msg, 'error', 'Please log in first.'); return; }
+  const expenses = [];
+  document.querySelectorAll('#expense-rows .row-item').forEach(r => {
+    const cat = r.querySelector('[data-field="category"]')?.value;
+    const amt = parseFloat(r.querySelector('[data-field="amount"]')?.value) || 0;
+    if (cat && amt > 0) expenses.push({ category: cat, amount: amt });
+  });
+  const stockMovements = [];
+  document.querySelectorAll('#stock-rows .row-item').forEach(r => {
+    const item  = r.querySelector('[data-field="item"]')?.value?.trim();
+    const qty   = parseFloat(r.querySelector('[data-field="quantity"]')?.value) || 0;
+    const dir   = r.querySelector('[data-field="direction"]')?.dataset?.value || 'received';
+    const price = parseFloat(r.querySelector('[data-field="unitPrice"]')?.value) || 0;
+    if (item && qty > 0) stockMovements.push({ item, quantity: qty, direction: dir, unitPrice: price });
+  });
+  const payload = {
+    userId, expenses, stockMovements,
+    revenue:   parseFloat(document.getElementById('entry-revenue').value) || 0,
+    customers: parseInt(document.getElementById('entry-customers').value, 10) || 0,
+    notes:     document.getElementById('entry-notes').value.trim(),
+  };
+  btn.disabled  = true;
+  btn.innerHTML = '<span class="spinner"></span>Saving\u2026';
+  hideMsg(msg);
+  try {
+    const res  = await fetch('/api/entry', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+    const data = await res.json();
+    if (!res.ok) {
+      showMsg(msg, 'error', data.error || 'Failed to save entry.');
+    } else {
+      showMsg(msg, 'success', '\u2705 Saved! Revenue: ' + fmtNaira(data.entry.revenue) + ' | Profit: ' + fmtNaira(data.entry.profit) + ' (' + parseFloat(data.entry.margin).toFixed(1) + '%) | Summary arrives at 7pm \uD83C\uDFAF');
+      document.getElementById('entry-revenue').value=''; document.getElementById('entry-customers').value=''; document.getElementById('entry-notes').value='';
+      document.getElementById('expense-rows').innerHTML=''; document.getElementById('stock-rows').innerHTML='';
+      expenseCount=0; stockCount=0; addExpenseRow();
+    }
+  } catch(e) { showMsg(msg, 'error', 'Something went wrong. Please try again.'); }
+  finally { btn.disabled=false; btn.innerHTML='Submit Today\'s Entry'; }
+}
+
+// ── Summary ────────────────────────────────────────────
+async function loadSummary() {
+  const userId = localStorage.getItem('bizpulse_user_id');
+  if (!userId) return;
+  try {
+    const res  = await fetch('/api/summary/latest?userId=' + userId);
+    const data = await res.json();
+    // History
+    if (data.history?.length > 0) {
+      document.getElementById('history-empty').style.display = 'none';
+      const hl = document.getElementById('history-list');
+      hl.style.display = 'block';
+      hl.innerHTML = data.history.map(r => {
+        const p   = parseFloat(r.profit) || 0;
+        const cls = p >= 0 ? 'c-green' : 'c-red';
+        const sgn = p >= 0 ? '+' : '';
+        return '<div class="history-row"><div><div class="history-date">' + fmtDate(r.date) + '</div><div class="history-rev">' + fmtNaira(r.revenue) + '</div></div><div class="history-profit ' + cls + '">' + sgn + fmtNaira(p) + '</div></div>';
+      }).join('');
+    }
+    if (!data.hasData) {
+      document.getElementById('summary-empty').style.display = 'block';
+      document.getElementById('summary-data').style.display  = 'none';
+      return;
+    }
+    const s = data.summary;
+    document.getElementById('summary-empty').style.display = 'none';
+    document.getElementById('summary-data').style.display  = 'block';
+    document.getElementById('summary-date').textContent    = fmtDate(s.date);
+    document.getElementById('sum-revenue').textContent     = fmtNaira(s.revenue);
+    document.getElementById('sum-expenses').textContent    = fmtNaira(s.totalExpenses);
+    const sp = document.getElementById('sum-profit');
+    sp.textContent = fmtNaira(s.profit);
+    sp.className   = 'stat-value ' + (parseFloat(s.profit) >= 0 ? 'c-green' : 'c-red');
+    document.getElementById('sum-margin').textContent      = parseFloat(s.margin).toFixed(1) + '%';
+    document.getElementById('sum-customers').textContent   = s.customers || 0;
+    document.getElementById('sum-top-expense').textContent = s.topExpense?.category || '\u2014';
+    const pill = document.getElementById('sum-health-pill');
+    pill.textContent = s.healthEmoji + ' ' + s.healthLabel;
+    pill.className   = 'health-pill health-' + s.healthKey;
+    const ls = document.getElementById('sum-low-stock');
+    ls.innerHTML = data.lowStock?.length > 0
+      ? '<div class="low-stock-box"><div class="low-stock-title">\u26A0\uFE0F Low Stock Alert</div>' + data.lowStock.map(i => '<div class="low-stock-item">\u2022 ' + i.item_name + ': <strong>' + parseFloat(i.current_balance).toLocaleString('en-NG') + ' units</strong></div>').join('') + '</div>'
+      : '';
+  } catch(e) {}
+}
+
+// ── Send summary ───────────────────────────────────────
+async function sendSummaryNow() {
+  const userId  = localStorage.getItem('bizpulse_user_id');
+  if (!userId) return;
+  const homeMsg = document.getElementById('home-action-msg');
+  const setMsg  = document.getElementById('set-summary-msg');
+  const activeMsg = currentTab === 'settings' ? setMsg : homeMsg;
+  hideMsg(homeMsg); hideMsg(setMsg);
+  showMsg(activeMsg, 'success', 'Sending\u2026');
+  try {
+    const res  = await fetch('/api/summary/send', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ userId }) });
+    const data = await res.json();
+    showMsg(activeMsg, res.ok ? 'success' : 'error', res.ok ? '\uD83D\uDCE9 ' + data.message : data.error || 'Failed to send summary.');
+  } catch(e) { showMsg(activeMsg, 'error', 'Something went wrong.'); }
+}
+
+// ── Settings ───────────────────────────────────────────
+function populateSettings() {
+  if (!currentUser) { const id = localStorage.getItem('bizpulse_user_id'); if (id) loadUser(id).then(() => populateSettings()); return; }
+  document.getElementById('set-name').value     = currentUser.name      || '';
+  document.getElementById('set-email').value    = currentUser.email     || '';
+  document.getElementById('set-biz-name').value = currentUser.biz_name  || '';
+  const bt = document.getElementById('set-biz-type');
+  for (const o of bt.options) { if (o.value === currentUser.biz_type) { o.selected = true; break; } }
+  const waNum = document.getElementById('settings-wa-number');
+  if (waNum) waNum.textContent = currentUser.whatsapp_number || '+15551676111';
+}
+async function saveSettings() {
+  const userId = localStorage.getItem('bizpulse_user_id');
+  const msg    = document.getElementById('set-account-msg');
+  hideMsg(msg);
+  try {
+    const res  = await fetch('/api/user/update', { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ userId, name: document.getElementById('set-name').value.trim(), email: document.getElementById('set-email').value.trim(), bizName: document.getElementById('set-biz-name').value.trim(), bizType: document.getElementById('set-biz-type').value }) });
+    const data = await res.json();
+    if (res.ok) { currentUser = data.user; updateUserUI(); showMsg(msg, 'success', '\u2705 Settings saved.'); }
+    else showMsg(msg, 'error', data.error || 'Failed to save.');
+  } catch(e) { showMsg(msg, 'error', 'Something went wrong.'); }
+}
+function connectGoogleDrive() {
+  const userId = localStorage.getItem('bizpulse_user_id');
+  if (!userId) return;
+  const msg = document.getElementById('set-google-msg');
+  showMsg(msg, 'success', 'Redirecting to Google\u2026');
+  setTimeout(() => { window.location.href = '/api/auth/google?userId=' + userId; }, 500);
+}
+function signOut() {
+  if (!confirm('Sign out and clear saved data from this device?')) return;
+  localStorage.clear(); currentUser = null;
+  document.getElementById('reg-step-1').style.display  = 'block';
+  document.getElementById('reg-step-2').style.display  = 'none';
+  document.getElementById('reg-success').style.display = 'none';
+  document.getElementById('expense-rows').innerHTML = '';
+  expenseCount = 0;
+  showRegisterScreen();
+}
+
+// ── Helpers ────────────────────────────────────────────
+function showMsg(el, type, text) { if (!el) return; el.textContent = text; el.className = 'msg ' + type + ' visible'; }
+function hideMsg(el) { if (!el) return; el.className = 'msg'; el.textContent = ''; }
+</script>
+</body>
+</html>
