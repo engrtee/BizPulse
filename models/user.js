@@ -77,12 +77,37 @@ const UserModel = {
     );
   },
 
-  /** Update last entry date so the cron job can skip users with no data */
+  /** Update last entry date and recalculate streak */
   async touchLastEntry(userId) {
-    await query(
-      'UPDATE users SET last_entry_date = CURRENT_DATE WHERE id = $1',
+    // Get current last_entry_date and streak
+    const cur = await query(
+      'SELECT last_entry_date, streak FROM users WHERE id = $1',
       [userId]
     );
+    if (!cur.rows[0]) return;
+
+    const { last_entry_date, streak } = cur.rows[0];
+    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Lagos' });
+    const yesterday = new Date(Date.now() - 86400000).toLocaleDateString('en-CA', { timeZone: 'Africa/Lagos' });
+
+    let newStreak = 1;
+    if (last_entry_date) {
+      const lastDate = new Date(last_entry_date).toLocaleDateString('en-CA', { timeZone: 'Africa/Lagos' });
+      if (lastDate === today) {
+        // Already logged today — keep streak as is
+        newStreak = streak || 1;
+      } else if (lastDate === yesterday) {
+        // Consecutive day — increment
+        newStreak = (streak || 0) + 1;
+      }
+      // else streak resets to 1
+    }
+
+    await query(
+      'UPDATE users SET last_entry_date = CURRENT_DATE, streak = $1 WHERE id = $2',
+      [newStreak, userId]
+    );
+    return newStreak;
   },
 
   /** Update user profile settings from the frontend */

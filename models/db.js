@@ -46,8 +46,11 @@ async function initDb() {
       google_refresh_token TEXT,
       created_at           TIMESTAMPTZ DEFAULT NOW(),
       active               BOOLEAN DEFAULT TRUE,
-      last_entry_date      DATE
+      last_entry_date      DATE,
+      streak               INTEGER DEFAULT 0
     );
+
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS streak INTEGER DEFAULT 0;
 
     CREATE TABLE IF NOT EXISTS transactions (
       id               SERIAL PRIMARY KEY,

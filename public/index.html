@@ -423,6 +423,15 @@
         </div>
         <div class="content">
 
+          <!-- Streak banner -->
+          <div id="streak-banner" style="display:none;background:var(--navy);color:#fff;border-radius:12px;padding:14px 20px;margin-bottom:20px;display:flex;align-items:center;gap:14px">
+            <div style="font-size:28px" id="streak-emoji">🔥</div>
+            <div>
+              <div style="font-weight:700;font-size:15px" id="streak-label">0-day streak</div>
+              <div style="font-size:13px;opacity:.75;margin-top:2px" id="streak-msg">Log today to start your streak!</div>
+            </div>
+          </div>
+
           <!-- Desktop stat row -->
           <div class="home-stats-row">
             <div class="stat-card">
@@ -644,16 +653,6 @@
               <div id="set-summary-msg" class="msg"></div>
             </div>
 
-            <!-- Google Drive -->
-            <div class="card">
-              <div class="card-title">Google Drive Sync</div>
-              <p style="font-size:14px;color:var(--muted);margin-bottom:16px">
-                Connect Google Drive to auto-sync every entry to your personal Google Sheet with 4 tabs: Transactions, Inventory, Customers, Summary.
-              </p>
-              <button class="btn btn-outline-blue btn-block" onclick="connectGoogleDrive()" id="google-connect-btn">🔗 Connect Google Drive</button>
-              <div id="set-google-msg" class="msg"></div>
-            </div>
-
             <!-- WhatsApp -->
             <div class="card">
               <div class="card-title">WhatsApp</div>
@@ -827,6 +826,24 @@ function updateUserUI() {
   document.getElementById('top-user-name').textContent = first;
   document.getElementById('sb-user-name').textContent  = currentUser.name;
   document.getElementById('sb-user-biz').textContent   = currentUser.biz_name || currentUser.biz_type || '';
+  updateStreakBanner(currentUser.streak || 0);
+}
+
+function updateStreakBanner(streak) {
+  const s = parseInt(streak, 10) || 0;
+  const banner = document.getElementById('streak-banner');
+  if (!banner) return;
+  banner.style.display = 'flex';
+  let emoji, label, msg;
+  if (s === 0)      { emoji='🌱'; label='No streak yet';        msg='Log today to start your streak!'; }
+  else if (s === 1) { emoji='🔥'; label='1-day streak';         msg='Great start! Log again tomorrow to build your streak.'; }
+  else if (s < 7)   { emoji='🔥'; label=s+'-day streak';        msg=s+' days in a row \u2014 keep it up!'; }
+  else if (s < 14)  { emoji='🔥'; label=s+'-day streak';        msg='One week strong! You\'re building real business discipline.'; }
+  else if (s < 30)  { emoji='🔥🔥'; label=s+'-day streak';      msg=s+' days! You\'re in the top 10% of business owners who track consistently.'; }
+  else              { emoji='🏆'; label=s+'-day streak';         msg=s+' days! You\'re a BizPulse legend. Your data is your superpower.'; }
+  document.getElementById('streak-emoji').textContent = emoji;
+  document.getElementById('streak-label').textContent = label;
+  document.getElementById('streak-msg').textContent   = msg;
 }
 
 function enterApp() {
@@ -1019,6 +1036,7 @@ async function submitEntry() {
       showMsg(msg, 'error', data.error || 'Failed to save entry.');
     } else {
       showMsg(msg, 'success', '\u2705 Saved! Revenue: ' + fmtNaira(data.entry.revenue) + ' | Profit: ' + fmtNaira(data.entry.profit) + ' (' + parseFloat(data.entry.margin).toFixed(1) + '%) | Summary arrives at 7pm \uD83C\uDFAF');
+      if (data.streak) { updateStreakBanner(data.streak); if (currentUser) currentUser.streak = data.streak; }
       document.getElementById('entry-revenue').value=''; document.getElementById('entry-customers').value=''; document.getElementById('entry-notes').value='';
       document.getElementById('expense-rows').innerHTML=''; document.getElementById('stock-rows').innerHTML='';
       expenseCount=0; stockCount=0; addExpenseRow();

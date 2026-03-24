@@ -183,8 +183,8 @@ async function handleDailyEntry(user, from, data, rawMessage) {
     rawMessage,
   });
 
-  // Update last_entry_date
-  await UserModel.touchLastEntry(user.id);
+  // Update last_entry_date and streak
+  const newStreak = await UserModel.touchLastEntry(user.id);
 
   // Append to Google Sheets (non-blocking — failure must not block the WhatsApp reply)
   if (user.sheet_id) {
@@ -200,9 +200,9 @@ async function handleDailyEntry(user, from, data, rawMessage) {
     }).catch((err) => console.error('[Sheets] appendTransaction error:', err.message));
   }
 
-  // Send instant WhatsApp acknowledgement
+  // Send instant WhatsApp acknowledgement with streak
   await WhatsAppService.sendEntryAck(from, user.name.split(' ')[0], {
-    revenue, totalExpenses, profit, margin, customers,
+    revenue, totalExpenses, profit, margin, customers, streak: newStreak,
   });
 }
 

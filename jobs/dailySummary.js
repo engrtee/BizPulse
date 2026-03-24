@@ -27,6 +27,7 @@ const TransactionModel = require('../models/transaction');
 const InventoryService = require('../services/inventory');
 const GeminiService    = require('../services/gemini');
 const EmailService     = require('../services/email');
+const WhatsAppService  = require('../services/whatsapp');
 
 const { calcHealthScore, healthLabel, topExpenseCategory, todayWAT } = require('../utils/formatter');
 const { calcMargin } = require('../utils/naira');
@@ -108,11 +109,44 @@ async function runDailySummary() {
  * Cron format: second minute hour day month weekday
  * "0 18 * * *" = 6:00 PM UTC = 7:00 PM WAT every day.
  */
-function scheduleDailySummary() {
-  cron.schedule('0 18 * * *', runDailySummary, {
-    timezone: 'UTC',   // We offset by 1h manually; WAT = UTC+1
-  });
-  console.log('[Cron] Daily summary job scheduled for 7:00 PM WAT (6:00 PM UTC).');
+/**
+ * Send WhatsApp reminder to users who haven't logged today.
+ * Runs at 5:00 PM UTC = 6:00 PM WAT.
+ */
+async function runReminderJob() {
+  console.log(`[Cron] 🔔 Reminder job started at ${new Date().toISOString()}`);
+  try {
+    const users = await UserModel.findAllActive();
+    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Lagos' });
+
+    for (const user of users) {
+      if (!user.whatsapp_number) continue;
+      // Skip if already logged today
+      if (user.last_entry_date) {
+        const lastDate = new Date(user.last_entry_date).toLocaleDateString('en-CA', { timeZone: 'Africa/Lagos' });
+        if (lastDate === today) continue;
+      }
+      try {
+        const firstName = user.name.split(' ')[0];
+        await WhatsAppService.sendReminder(user.whatsapp_number, firstName, user.streak || 0);
+        console.log(`[Cron] 🔔 Reminder sent to ${user.name}`);
+      } catch (err) {
+        console.error(`[Cron] Reminder failed for ${user.name}:`, err.message);
+      }
+    }
+  } catch (err) {
+    console.error('[Cron] Reminder job error:', err.message);
+  }
 }
 
-module.exports = { scheduleDailySummary, runDailySummary };
+function scheduleDailySummary() {
+  // 7:00 PM WAT = 6:00 PM UTC — full summary email
+  cron.schedule('0 18 * * *', runDailySummary, { timezone: 'UTC' });
+  console.log('[Cron] Daily summary job scheduled for 7:00 PM WAT (6:00 PM UTC).');
+
+  // 6:00 PM WAT = 5:00 PM UTC — WhatsApp reminder for users who haven't logged
+  cron.schedule('0 17 * * *', runReminderJob, { timezone: 'UTC' });
+  console.log('[Cron] Reminder job scheduled for 6:00 PM WAT (5:00 PM UTC).');
+}
+
+module.exports = { scheduleDailySummary, runDailySummary, runReminderJob };

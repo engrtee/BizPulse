@@ -59,10 +59,18 @@ async function sendMessage(to, body) {
  * @param {string} firstName   User's first name
  * @param {object} data        { revenue, totalExpenses, profit, margin, customers }
  */
-async function sendEntryAck(to, firstName, { revenue, totalExpenses, profit, margin, customers }) {
+async function sendEntryAck(to, firstName, { revenue, totalExpenses, profit, margin, customers, streak }) {
   const fmt = (n) => Number(n).toLocaleString('en-NG');
   const marginStr = `${parseFloat(margin).toFixed(1)}%`;
   const profitSign = profit >= 0 ? '' : '-';
+  const s = parseInt(streak, 10) || 1;
+
+  let streakLine = '';
+  if (s === 1)      streakLine = '\n🌱 Day 1 streak — great start!';
+  else if (s < 7)   streakLine = `\n🔥 ${s}-day streak — keep it going!`;
+  else if (s < 14)  streakLine = `\n🔥 ${s}-day streak — one week strong!`;
+  else if (s < 30)  streakLine = `\n🔥🔥 ${s}-day streak — you're crushing it!`;
+  else              streakLine = `\n🏆 ${s}-day streak — absolute legend!`;
 
   const body =
     `✅ Logged ${firstName}!\n\n` +
@@ -70,7 +78,26 @@ async function sendEntryAck(to, firstName, { revenue, totalExpenses, profit, mar
     `Expenses: ₦${fmt(totalExpenses)}\n` +
     `Profit:   ${profitSign}₦${fmt(Math.abs(profit))} (${marginStr} margin)\n\n` +
     (customers > 0 ? `Customers today: ${customers}\n\n` : '') +
-    `Your full summary hits your inbox at 7pm 🎯`;
+    `Your full summary hits your inbox at 7pm 🎯` +
+    streakLine;
+
+  return sendMessage(to, body);
+}
+
+/**
+ * Send a 6pm reminder to users who haven't logged today.
+ */
+async function sendReminder(to, firstName, streak) {
+  const s = parseInt(streak, 10) || 0;
+  let streakWarning = '';
+  if (s >= 3) streakWarning = `\n\n⚠️ Don't break your ${s}-day streak!`;
+
+  const body =
+    `👋 Hey ${firstName}, you haven't logged today's numbers yet.\n\n` +
+    `Take 30 seconds now — just send:\n` +
+    `"sales 50k expenses 15k"\n\n` +
+    `Small habit, big results. 💪` +
+    streakWarning;
 
   return sendMessage(to, body);
 }
@@ -128,4 +155,4 @@ async function sendNotRegistered(to) {
   return sendMessage(to, body);
 }
 
-module.exports = { sendMessage, sendEntryAck, sendStockReply, sendHelp, sendNotRegistered };
+module.exports = { sendMessage, sendEntryAck, sendStockReply, sendHelp, sendNotRegistered, sendReminder };

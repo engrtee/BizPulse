@@ -91,8 +91,8 @@ router.post('/entry', async (req, res) => {
       rawMessage:       'web_entry',
     });
 
-    // Update last_entry_date
-    await UserModel.touchLastEntry(user.id);
+    // Update last_entry_date and streak
+    const newStreak = await UserModel.touchLastEntry(user.id);
 
     // Append to Google Sheets (non-blocking)
     if (user.sheet_id) {
@@ -122,6 +122,7 @@ router.post('/entry', async (req, res) => {
 
     res.json({
       success: true,
+      streak: newStreak || 1,
       entry: {
         revenue: rev,
         totalExpenses,

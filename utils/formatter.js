@@ -92,4 +92,17 @@ function greeting(firstName) {
   return `Good evening ${firstName}`;
 }
 
-module.exports = { formatDate, todayWAT, calcHealthScore, healthLabel, topExpenseCategory, greeting };
+/**
+ * Return a streak label + emoji for a given streak count.
+ */
+function streakInfo(streak) {
+  const s = parseInt(streak, 10) || 0;
+  if (s === 0) return { emoji: '🌱', label: 'No streak yet', msg: 'Log today to start your streak!' };
+  if (s === 1) return { emoji: '🔥', label: '1-day streak', msg: 'Great start! Log again tomorrow to build your streak.' };
+  if (s < 7)   return { emoji: '🔥', label: `${s}-day streak`, msg: `${s} days in a row — keep it up!` };
+  if (s < 14)  return { emoji: '🔥🔥', label: `${s}-day streak`, msg: `One week strong! You\'re building real business discipline.` };
+  if (s < 30)  return { emoji: '🔥🔥🔥', label: `${s}-day streak`, msg: `${s} days! You\'re in the top 10% of business owners who track consistently.` };
+  return { emoji: '🏆', label: `${s}-day streak`, msg: `${s} days! You\'re a BizPulse legend. Your data is your superpower.` };
+}
+
+module.exports = { formatDate, todayWAT, calcHealthScore, healthLabel, topExpenseCategory, greeting, streakInfo };
