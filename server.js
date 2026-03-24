@@ -65,7 +65,7 @@ async function start() {
     await initDb();
 
     // Start HTTP server
-    app.listen(PORT, () => {
+    app.listen(PORT, '0.0.0.0', () => {
       console.log(`\n🚀 BizPulse running at http://localhost:${PORT}`);
       console.log(`   Webhook endpoint: POST http://localhost:${PORT}/webhook`);
       console.log(`   WhatsApp verify:  GET  http://localhost:${PORT}/webhook`);
