@@ -122,6 +122,70 @@ const TransactionModel = {
     );
     return res.rows.map((r) => r.expense_breakdown);
   },
+  /** % of last N days that have expense breakdown data */
+  async getCompleteness(userId, limit = 10) {
+    const res = await query(
+      `SELECT
+         COUNT(*)                                              AS total_days,
+         COUNT(CASE WHEN has_expenses THEN 1 END)             AS days_with_expenses
+       FROM (
+         SELECT date,
+           BOOL_OR(total_expenses > 0) AS has_expenses
+         FROM transactions
+         WHERE user_id = $1
+         GROUP BY date
+         ORDER BY date DESC
+         LIMIT $2
+       ) sub`,
+      [userId, limit]
+    );
+    const r       = res.rows[0];
+    const total   = parseInt(r.total_days, 10)         || 0;
+    const withExp = parseInt(r.days_with_expenses, 10) || 0;
+    return {
+      totalDays:        total,
+      daysWithExpenses: withExp,
+      percentage:       total > 0 ? Math.round((withExp / total) * 100) : 0,
+    };
+  },
+
+  /** Revenue / expenses / profit for this month vs last month */
+  async getMonthlyTotals(userId) {
+    const res = await query(
+      `SELECT
+         COALESCE(SUM(CASE WHEN date >= date_trunc('month', CURRENT_DATE)
+                           THEN revenue ELSE 0 END), 0)        AS this_revenue,
+         COALESCE(SUM(CASE WHEN date >= date_trunc('month', CURRENT_DATE)
+                           THEN total_expenses ELSE 0 END), 0) AS this_expenses,
+         COALESCE(SUM(CASE WHEN date >= date_trunc('month', CURRENT_DATE)
+                           THEN profit ELSE 0 END), 0)         AS this_profit,
+         COALESCE(SUM(CASE WHEN date >= date_trunc('month', CURRENT_DATE - INTERVAL '1 month')
+                            AND date < date_trunc('month', CURRENT_DATE)
+                           THEN revenue ELSE 0 END), 0)        AS last_revenue,
+         COALESCE(SUM(CASE WHEN date >= date_trunc('month', CURRENT_DATE - INTERVAL '1 month')
+                            AND date < date_trunc('month', CURRENT_DATE)
+                           THEN total_expenses ELSE 0 END), 0) AS last_expenses,
+         COALESCE(SUM(CASE WHEN date >= date_trunc('month', CURRENT_DATE - INTERVAL '1 month')
+                            AND date < date_trunc('month', CURRENT_DATE)
+                           THEN profit ELSE 0 END), 0)         AS last_profit
+       FROM transactions
+       WHERE user_id = $1`,
+      [userId]
+    );
+    const r = res.rows[0];
+    return {
+      thisMonth: {
+        revenue:  parseFloat(r.this_revenue)  || 0,
+        expenses: parseFloat(r.this_expenses) || 0,
+        profit:   parseFloat(r.this_profit)   || 0,
+      },
+      lastMonth: {
+        revenue:  parseFloat(r.last_revenue)  || 0,
+        expenses: parseFloat(r.last_expenses) || 0,
+        profit:   parseFloat(r.last_profit)   || 0,
+      },
+    };
+  },
 };
 
 module.exports = TransactionModel;

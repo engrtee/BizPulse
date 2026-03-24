@@ -204,6 +204,16 @@ async function handleDailyEntry(user, from, data, rawMessage) {
   await WhatsAppService.sendEntryAck(from, user.name.split(' ')[0], {
     revenue, totalExpenses, profit, margin, customers, streak: newStreak,
   });
+
+  // If any expenses landed in "Other", ask for clarification
+  if ((expenseBreakdown?.Other || 0) > 0) {
+    const amt = Number(expenseBreakdown.Other).toLocaleString('en-NG');
+    WhatsAppService.sendMessage(from,
+      `📝 Quick one: ₦${amt} in expenses couldn't be categorised and was filed as "Other".\n\n` +
+      `What was it for? E.g. "₦3k was transport, ₦2k was packaging"\n\n` +
+      `This keeps your expense reports clean! 📊`
+    ).catch(() => {});
+  }
 }
 
 // ─────────────────────────────────────────────

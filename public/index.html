@@ -386,6 +386,7 @@
                 <option>Transport & Logistics</option><option>Professional Services</option>
                 <option>Technology</option><option>Education & Training</option>
                 <option>Furnishings & Supplies</option><option>Production / Manufacturing</option>
+                <option>Advertising / Marketing</option><option>WhatsApp Business</option>
                 <option>FMCG</option><option>Online Business / E-commerce</option><option>Other</option>
               </select></div>
             <div class="form-group"><label class="form-label">State / Location</label>
@@ -424,7 +425,7 @@
         <div class="content">
 
           <!-- Streak banner -->
-          <div id="streak-banner" style="display:none;background:var(--navy);color:#fff;border-radius:12px;padding:14px 20px;margin-bottom:20px;display:flex;align-items:center;gap:14px">
+          <div id="streak-banner" style="display:none;background:var(--navy);color:#fff;border-radius:12px;padding:14px 20px;margin-bottom:20px;align-items:center;gap:14px">
             <div style="font-size:28px" id="streak-emoji">🔥</div>
             <div>
               <div style="font-weight:700;font-size:15px" id="streak-label">0-day streak</div>
@@ -531,11 +532,32 @@
               <div id="stock-rows"></div>
               <button class="btn-dashed" onclick="addStockRow()">+ Add Stock Entry</button>
 
+              <!-- Top product -->
+              <div class="section-divider"><span class="section-divider-label">Today's Top Seller</span></div>
+              <div class="form-group" style="margin-bottom:0">
+                <label class="form-label">What sold best today? <span style="color:var(--muted);font-weight:400">(optional)</span></label>
+                <input id="entry-top-product" class="form-input" type="text" placeholder='e.g. "ankara fabric" or "jollof rice"' />
+              </div>
+
               <!-- Notes -->
               <div class="section-divider"><span class="section-divider-label">Notes</span></div>
-              <textarea id="entry-notes" class="form-input" placeholder="Anything notable today? (optional)"></textarea>
+              <textarea id="entry-notes" class="form-input" placeholder="Anything else notable today? (optional)"></textarea>
 
               <div id="entry-msg" class="msg"></div>
+
+              <!-- AI Recommendation (appears after submission) -->
+              <div id="entry-ai-box" style="display:none;margin-top:16px;border-left:4px solid var(--blue);background:#EBF8FF;border-radius:0 8px 8px 0;padding:16px 18px">
+                <div style="font-size:11px;font-weight:700;color:var(--blue);text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px">🤖 AI Recommendation</div>
+                <div id="entry-ai-risk" style="background:#FFF5F5;border:1px solid #FC8181;border-radius:6px;padding:10px 12px;margin-bottom:12px">
+                  <div style="font-size:11px;font-weight:700;color:var(--red);margin-bottom:4px">⚠️ Risk</div>
+                  <div id="entry-ai-risk-text" style="font-size:14px;color:#742A2A">—</div>
+                </div>
+                <div style="font-size:14px;color:var(--text-sm)">
+                  <strong style="font-size:13px">Actions to take:</strong>
+                  <ol id="entry-ai-actions" style="margin-top:8px;padding-left:18px"></ol>
+                </div>
+              </div>
+
               <button class="btn btn-navy btn-block" style="margin-top:16px" id="entry-submit-btn" onclick="submitEntry()">
                 Submit Today's Entry
               </button>
@@ -577,10 +599,16 @@
                   <div class="stat-card" style="padding:16px">
                     <div class="stat-label">Top Expense</div><div class="stat-value c-muted" id="sum-top-expense" style="font-size:18px">—</div></div>
                 </div>
-                <div style="margin-bottom:14px">
+                <!-- Profit plain-English explanation -->
+                <div id="sum-profit-explain" style="display:none;font-size:13px;color:var(--text-sm);margin-bottom:12px;padding:10px 14px;background:var(--bg);border-radius:8px;line-height:1.5"></div>
+
+                <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">
                   <span class="health-pill" id="sum-health-pill">—</span>
+                  <span id="sum-streak-row" style="display:none;font-size:13px;color:var(--muted)"></span>
                 </div>
                 <div id="sum-low-stock"></div>
+                <!-- Data completeness -->
+                <div id="sum-completeness" style="display:none;margin-top:12px;padding:10px 14px;background:#F7FAFC;border:1px solid var(--border);border-radius:8px;font-size:13px;color:var(--text-sm)"></div>
                 <!-- Expense breakdown detail -->
                 <div id="sum-expense-breakdown" style="display:none;margin-top:14px">
                   <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:8px">Expense Breakdown</div>
@@ -604,6 +632,11 @@
                     <ol id="sum-ai-actions" style="margin-top:8px"></ol>
                   </div>
                 </div>
+              </div>
+
+              <div class="card" id="sum-monthly-card" style="display:none">
+                <div class="card-title">Month vs Last Month</div>
+                <div id="sum-monthly-content"></div>
               </div>
 
               <div class="card">
@@ -647,6 +680,7 @@
                   <option>Transport & Logistics</option><option>Professional Services</option>
                   <option>Technology</option><option>Education & Training</option>
                   <option>Furnishings & Supplies</option><option>Production / Manufacturing</option>
+                  <option>Advertising / Marketing</option><option>WhatsApp Business</option>
                   <option>FMCG</option><option>Online Business / E-commerce</option><option>Other</option>
                 </select></div>
               <div id="set-account-msg" class="msg"></div>
@@ -680,6 +714,13 @@
                   <code style="background:#E6FFED;padding:1px 6px;border-radius:4px">help</code> → see all commands
                 </div>
               </div>
+            </div>
+
+            <!-- Export -->
+            <div class="card">
+              <div class="card-title">Export Data</div>
+              <p style="font-size:14px;color:var(--muted);margin-bottom:16px">Download all your transaction history as a spreadsheet-ready CSV file.</p>
+              <button class="btn btn-outline-blue btn-block" onclick="exportCSV()">⬇️ Download My Data (CSV)</button>
             </div>
 
             <!-- Sign out -->
@@ -1033,9 +1074,10 @@ async function submitEntry() {
   });
   const payload = {
     userId, expenses, stockMovements,
-    revenue:   parseFloat(document.getElementById('entry-revenue').value) || 0,
-    customers: parseInt(document.getElementById('entry-customers').value, 10) || 0,
-    notes:     document.getElementById('entry-notes').value.trim(),
+    revenue:    parseFloat(document.getElementById('entry-revenue').value) || 0,
+    customers:  parseInt(document.getElementById('entry-customers').value, 10) || 0,
+    notes:      document.getElementById('entry-notes').value.trim(),
+    topProduct: document.getElementById('entry-top-product')?.value?.trim() || '',
   };
   btn.disabled  = true;
   btn.innerHTML = '<span class="spinner"></span>Saving\u2026';
@@ -1048,7 +1090,16 @@ async function submitEntry() {
     } else {
       showMsg(msg, 'success', '\u2705 Saved! Revenue: ' + fmtNaira(data.entry.revenue) + ' | Profit: ' + fmtNaira(data.entry.profit) + ' (' + parseFloat(data.entry.margin).toFixed(1) + '%) | Summary arrives at 7pm \uD83C\uDFAF');
       if (data.streak) { updateStreakBanner(data.streak); if (currentUser) currentUser.streak = data.streak; }
+      // Show AI recommendation if returned
+      const aiBox = document.getElementById('entry-ai-box');
+      if (data.aiRec && aiBox) {
+        document.getElementById('entry-ai-risk-text').textContent = data.aiRec.risk || '—';
+        const aiOl = document.getElementById('entry-ai-actions');
+        aiOl.innerHTML = (data.aiRec.actions || []).map(a => '<li style="margin-bottom:6px;line-height:1.5">' + a + '</li>').join('');
+        aiBox.style.display = 'block';
+      }
       document.getElementById('entry-revenue').value=''; document.getElementById('entry-customers').value=''; document.getElementById('entry-notes').value='';
+      document.getElementById('entry-top-product') && (document.getElementById('entry-top-product').value='');
       document.getElementById('expense-rows').innerHTML=''; document.getElementById('stock-rows').innerHTML='';
       expenseCount=0; stockCount=0; addExpenseRow();
     }
@@ -1061,7 +1112,7 @@ async function loadSummary() {
   const userId = localStorage.getItem('bizpulse_user_id');
   if (!userId) return;
   try {
-    const res  = await fetch('/api/summary/latest?userId=' + userId);
+    const res  = await fetch('/api/summary/latest?userId=' + userId + '&ai=1');
     const data = await res.json();
     // History
     if (data.history?.length > 0) {
@@ -1099,6 +1150,75 @@ async function loadSummary() {
     ls.innerHTML = data.lowStock?.length > 0
       ? '<div class="low-stock-box"><div class="low-stock-title">\u26A0\uFE0F Low Stock Alert</div>' + data.lowStock.map(i => '<div class="low-stock-item">\u2022 ' + i.item_name + ': <strong>' + parseFloat(i.current_balance).toLocaleString('en-NG') + ' units</strong></div>').join('') + '</div>'
       : '';
+
+    // Profit plain-English explanation
+    const profExplain = document.getElementById('sum-profit-explain');
+    const profitNum   = parseFloat(s.profit) || 0;
+    if (profExplain) {
+      profExplain.textContent = profitNum >= 0
+        ? 'You earned ' + fmtNaira(profitNum) + ' more than your expenses today.'
+        : 'Your expenses exceeded revenue by ' + fmtNaira(Math.abs(profitNum)) + ' today. Consider reviewing your costs.';
+      profExplain.style.display = 'block';
+    }
+
+    // Streak on summary screen
+    const streakRow = document.getElementById('sum-streak-row');
+    if (streakRow && currentUser?.streak) {
+      streakRow.textContent = '\uD83D\uDD25 ' + (currentUser.streak) + '-day streak';
+      streakRow.style.display = 'inline';
+    }
+
+    // Data completeness
+    const compEl = document.getElementById('sum-completeness');
+    if (compEl && data.completeness) {
+      const c = data.completeness;
+      compEl.innerHTML = '\uD83D\uDCCA <strong>Data quality: ' + c.percentage + '%</strong> \u2014 based on ' + c.daysWithExpenses + ' of your last ' + c.totalDays + ' entries having full expense breakdown.';
+      compEl.style.display = 'block';
+    }
+
+    // AI Recommendation
+    if (data.aiRec) {
+      const aiEmpty = document.getElementById('sum-ai-empty');
+      const aiBox   = document.getElementById('sum-ai-box');
+      if (aiEmpty) aiEmpty.style.display = 'none';
+      if (aiBox)   aiBox.style.display   = 'block';
+      const riskEl = document.getElementById('sum-ai-risk');
+      if (riskEl) riskEl.textContent = data.aiRec.risk || '\u2014';
+      const actEl = document.getElementById('sum-ai-actions');
+      if (actEl) actEl.innerHTML = (data.aiRec.actions || []).map(a => '<li>' + a + '</li>').join('');
+    }
+
+    // Monthly comparison
+    const monthlyCard = document.getElementById('sum-monthly-card');
+    const monthlyEl   = document.getElementById('sum-monthly-content');
+    if (monthlyCard && monthlyEl && data.monthly) {
+      const m    = data.monthly;
+      const now  = new Date();
+      const thisLabel = now.toLocaleString('en-NG', { month: 'long', timeZone: 'Africa/Lagos' });
+      const lastDate  = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      const lastLabel = lastDate.toLocaleString('en-NG', { month: 'long' });
+      function arrow(cur, prev) {
+        if (prev === 0) return '';
+        const pct = Math.round(((cur - prev) / prev) * 100);
+        return pct >= 0
+          ? ' <span style="color:var(--green);font-weight:700">\u2191 ' + pct + '%</span>'
+          : ' <span style="color:var(--red);font-weight:700">\u2193 ' + Math.abs(pct) + '%</span>';
+      }
+      monthlyEl.innerHTML =
+        '<div style="font-size:12px;color:var(--muted);margin-bottom:10px">' + thisLabel + ' vs ' + lastLabel + '</div>' +
+        '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;font-size:13px">' +
+          '<div style="text-align:center"><div style="color:var(--muted);font-size:11px;margin-bottom:4px">REVENUE</div>' +
+            '<div style="font-weight:700;color:var(--blue)">' + fmtNaira(m.thisMonth.revenue) + arrow(m.thisMonth.revenue, m.lastMonth.revenue) + '</div>' +
+            '<div style="color:var(--muted);font-size:12px">' + fmtNaira(m.lastMonth.revenue) + '</div></div>' +
+          '<div style="text-align:center"><div style="color:var(--muted);font-size:11px;margin-bottom:4px">EXPENSES</div>' +
+            '<div style="font-weight:700;color:var(--red)">' + fmtNaira(m.thisMonth.expenses) + arrow(m.lastMonth.expenses, m.thisMonth.expenses) + '</div>' +
+            '<div style="color:var(--muted);font-size:12px">' + fmtNaira(m.lastMonth.expenses) + '</div></div>' +
+          '<div style="text-align:center"><div style="color:var(--muted);font-size:11px;margin-bottom:4px">PROFIT</div>' +
+            '<div style="font-weight:700;' + (m.thisMonth.profit >= 0 ? 'color:var(--green)' : 'color:var(--red)') + '">' + fmtNaira(m.thisMonth.profit) + arrow(m.thisMonth.profit, m.lastMonth.profit) + '</div>' +
+            '<div style="color:var(--muted);font-size:12px">' + fmtNaira(m.lastMonth.profit) + '</div></div>' +
+        '</div>';
+      monthlyCard.style.display = 'block';
+    }
 
     // Expense breakdown detail
     const eb    = s.expenseBreakdown || {};
@@ -1182,6 +1302,13 @@ function signOut() {
   document.getElementById('expense-rows').innerHTML = '';
   expenseCount = 0;
   showRegisterScreen();
+}
+
+// ── Export ─────────────────────────────────────────────
+function exportCSV() {
+  const userId = localStorage.getItem('bizpulse_user_id');
+  if (!userId) return;
+  window.location.href = '/api/export/csv?userId=' + userId;
 }
 
 // ── Helpers ────────────────────────────────────────────

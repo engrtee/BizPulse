@@ -19,6 +19,8 @@ const TransactionModel   = require('../models/transaction');
 const InventoryService   = require('../services/inventory');
 const SheetsService      = require('../services/sheets');
 
+const GeminiService      = require('../services/gemini');
+
 const { calcHealthScore, healthLabel, topExpenseCategory, todayWAT } = require('../utils/formatter');
 const { calcMargin } = require('../utils/naira');
 
@@ -56,7 +58,7 @@ router.post('/register', async (req, res) => {
 // ─────────────────────────────────────────────
 router.post('/entry', async (req, res) => {
   try {
-    const { userId, revenue, expenses, stockMovements, customers, notes } = req.body;
+    const { userId, revenue, expenses, stockMovements, customers, notes, topProduct } = req.body;
 
     if (!userId) return res.status(400).json({ error: 'userId is required.' });
 
@@ -78,6 +80,12 @@ router.post('/entry', async (req, res) => {
     const profit = rev - totalExpenses;
     const margin = calcMargin(profit, rev);
 
+    // Combine top product into notes
+    const combinedNotes = [
+      topProduct ? `Top product: ${topProduct}` : '',
+      notes || '',
+    ].filter(Boolean).join('\n') || null;
+
     // Save transaction to DB
     const txn = await TransactionModel.create({
       userId: user.id,
@@ -87,7 +95,7 @@ router.post('/entry', async (req, res) => {
       profit,
       margin,
       customers:        parseInt(customers, 10) || 0,
-      notes:            notes || null,
+      notes:            combinedNotes,
       rawMessage:       'web_entry',
     });
 
@@ -104,7 +112,7 @@ router.post('/entry', async (req, res) => {
         profit,
         margin,
         customers:        parseInt(customers, 10) || 0,
-        notes:            notes || '',
+        notes:            combinedNotes || '',
       }).catch((err) => console.error('[Sheets] web entry append error:', err.message));
     }
 
@@ -120,9 +128,32 @@ router.post('/entry', async (req, res) => {
       }
     }
 
+    // Get today's aggregated totals for AI recommendation
+    let aiRec = null;
+    try {
+      const aiTotals     = await TransactionModel.getDailyTotals(user.id, todayWAT());
+      const aiRev        = parseFloat(aiTotals.revenue)       || 0;
+      const aiExp        = parseFloat(aiTotals.total_expenses) || 0;
+      const aiProfit     = parseFloat(aiTotals.profit)         || 0;
+      const aiCust       = parseInt(aiTotals.customers, 10)    || 0;
+      const aiMargin     = calcMargin(aiProfit, aiRev);
+      const aiScore      = calcHealthScore(aiMargin);
+      const aiHl         = healthLabel(aiScore);
+      const aiBreakdowns = await TransactionModel.getExpenseBreakdowns(user.id, todayWAT());
+      const aiTopExp     = topExpenseCategory(aiBreakdowns);
+      aiRec = await GeminiService.generateRecommendation({
+        revenue: aiRev, totalExpenses: aiExp, profit: aiProfit, margin: aiMargin,
+        healthScore: aiScore, healthKey: aiHl.key, topExpense: aiTopExp,
+        customers: aiCust, date: todayWAT(),
+      }, user);
+    } catch (e) {
+      console.error('[API] AI recommendation error:', e.message);
+    }
+
     res.json({
       success: true,
-      streak: newStreak || 1,
+      streak:  newStreak || 1,
+      aiRec,
       entry: {
         revenue: rev,
         totalExpenses,
@@ -149,13 +180,17 @@ router.get('/summary/latest', async (req, res) => {
     const user = await UserModel.findById(userId);
     if (!user) return res.status(404).json({ error: 'User not found.' });
 
-    const latest   = await TransactionModel.getLatest(user.id);
-    const history  = await TransactionModel.getHistory(user.id, 10);
-    const lowStock = await InventoryService.getLowStockAlerts(user.id);
-    const stock    = await InventoryService.getStock(user.id);
+    const [latest, history, lowStock, stock, completeness, monthly] = await Promise.all([
+      TransactionModel.getLatest(user.id),
+      TransactionModel.getHistory(user.id, 10),
+      InventoryService.getLowStockAlerts(user.id),
+      InventoryService.getStock(user.id),
+      TransactionModel.getCompleteness(user.id, 10),
+      TransactionModel.getMonthlyTotals(user.id),
+    ]);
 
     if (!latest) {
-      return res.json({ hasData: false, history: [], lowStock, stock: stock || [] });
+      return res.json({ hasData: false, history: [], lowStock, stock: stock || [], completeness, monthly });
     }
 
     const score = calcHealthScore(parseFloat(latest.margin) || 0);
@@ -164,6 +199,26 @@ router.get('/summary/latest', async (req, res) => {
     // Merge all expense_breakdown JSONs for the latest date into one object
     const breakdown  = await TransactionModel.getDailyExpenseBreakdown(user.id, latest.date);
     const topExpense = topExpenseCategory([breakdown]);
+
+    // Only call Gemini when explicitly requested (Summary screen), not on every home snapshot load
+    let aiRec = null;
+    if (req.query.ai === '1') {
+      try {
+        aiRec = await GeminiService.generateRecommendation({
+          revenue:      parseFloat(latest.revenue)       || 0,
+          totalExpenses:parseFloat(latest.total_expenses) || 0,
+          profit:       parseFloat(latest.profit)         || 0,
+          margin:       parseFloat(latest.margin)         || 0,
+          healthScore:  score,
+          healthKey:    hl.key,
+          topExpense,
+          customers:    parseInt(latest.customers, 10)    || 0,
+          date:         latest.date,
+        }, user);
+      } catch (e) {
+        console.error('[API] AI recommendation error:', e.message);
+      }
+    }
 
     res.json({
       hasData: true,
@@ -183,7 +238,10 @@ router.get('/summary/latest', async (req, res) => {
       },
       history,
       lowStock,
-      stock: stock || [],
+      stock:        stock || [],
+      completeness,
+      monthly,
+      aiRec,
     });
   } catch (err) {
     console.error('[API] /summary/latest error:', err.message);
@@ -240,6 +298,37 @@ router.get('/user', async (req, res) => {
     res.json(safe);
   } catch (err) {
     res.status(500).json({ error: 'Failed to load user.' });
+  }
+});
+
+// ─────────────────────────────────────────────
+// GET /api/export/csv?userId=<id>
+// Download all transaction history as CSV.
+// ─────────────────────────────────────────────
+router.get('/export/csv', async (req, res) => {
+  try {
+    const { userId } = req.query;
+    if (!userId) return res.status(400).json({ error: 'userId is required.' });
+    const user = await UserModel.findById(userId);
+    if (!user) return res.status(404).json({ error: 'User not found.' });
+
+    const rows = await TransactionModel.getHistory(user.id, 365);
+    const header = 'Date,Revenue (NGN),Expenses (NGN),Profit (NGN),Margin (%),Customers';
+    const lines  = rows.map(r => [
+      r.date,
+      parseFloat(r.revenue)        || 0,
+      parseFloat(r.total_expenses) || 0,
+      parseFloat(r.profit)         || 0,
+      (parseFloat(r.margin)        || 0).toFixed(1),
+      parseInt(r.customers, 10)    || 0,
+    ].join(','));
+
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename="bizpulse-${todayWAT()}.csv"`);
+    res.send([header, ...lines].join('\n'));
+  } catch (err) {
+    console.error('[API] /export/csv error:', err.message);
+    res.status(500).json({ error: 'Export failed.' });
   }
 });
 
