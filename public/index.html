@@ -437,7 +437,7 @@
             <div class="stat-card">
               <div class="stat-label">Today's Revenue</div>
               <div class="stat-value c-blue" id="ds-revenue">—</div>
-              <div class="stat-sub">Latest entry</div>
+              <div class="stat-sub">Daily total</div>
             </div>
             <div class="stat-card">
               <div class="stat-label">Net Profit</div>
@@ -452,7 +452,7 @@
             <div class="stat-card">
               <div class="stat-label">Customers</div>
               <div class="stat-value c-navy" id="ds-customers">—</div>
-              <div class="stat-sub">Latest entry</div>
+              <div class="stat-sub">Daily total</div>
             </div>
           </div>
 
@@ -581,10 +581,15 @@
                   <span class="health-pill" id="sum-health-pill">—</span>
                 </div>
                 <div id="sum-low-stock"></div>
+                <!-- Expense breakdown detail -->
+                <div id="sum-expense-breakdown" style="display:none;margin-top:14px">
+                  <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:8px">Expense Breakdown</div>
+                  <div id="sum-expense-breakdown-list"></div>
+                </div>
               </div>
             </div>
 
-            <!-- Right: AI + history -->
+            <!-- Right: AI + history + inventory -->
             <div style="display:flex;flex-direction:column;gap:20px">
               <div class="card">
                 <div class="card-title">AI Recommendation</div>
@@ -605,6 +610,11 @@
                 <div class="card-title">Entry History</div>
                 <div id="history-empty" style="color:var(--muted);font-size:14px">No entries yet.</div>
                 <div id="history-list" style="display:none"></div>
+              </div>
+
+              <div class="card" id="sum-inventory-card" style="display:none">
+                <div class="card-title">Current Inventory</div>
+                <div id="sum-inventory-list"></div>
               </div>
             </div>
           </div>
@@ -890,7 +900,8 @@ async function loadHomeSnapshot() {
       dsp.textContent  = fmtNaira(s.profit);
       dsp.style.color  = pColor;
       document.getElementById('ds-margin').textContent    = parseFloat(s.margin).toFixed(1) + '% margin';
-      document.getElementById('ds-expense').textContent   = s.topExpense?.category || '—';
+      const topCat = s.topExpense ? s.topExpense.category + ' (' + fmtNaira(s.topExpense.amount) + ')' : '—';
+      document.getElementById('ds-expense').textContent   = topCat;
       document.getElementById('ds-customers').textContent = s.customers || 0;
     }
 
@@ -1088,6 +1099,32 @@ async function loadSummary() {
     ls.innerHTML = data.lowStock?.length > 0
       ? '<div class="low-stock-box"><div class="low-stock-title">\u26A0\uFE0F Low Stock Alert</div>' + data.lowStock.map(i => '<div class="low-stock-item">\u2022 ' + i.item_name + ': <strong>' + parseFloat(i.current_balance).toLocaleString('en-NG') + ' units</strong></div>').join('') + '</div>'
       : '';
+
+    // Expense breakdown detail
+    const eb    = s.expenseBreakdown || {};
+    const ebDiv = document.getElementById('sum-expense-breakdown');
+    const ebList= document.getElementById('sum-expense-breakdown-list');
+    const ebEntries = Object.entries(eb).filter(([,v]) => parseFloat(v) > 0).sort(([,a],[,b]) => b - a);
+    if (ebEntries.length > 0) {
+      ebDiv.style.display = 'block';
+      ebList.innerHTML = ebEntries.map(([cat, amt]) =>
+        '<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);font-size:14px"><span>' + cat + '</span><span style="font-weight:600">' + fmtNaira(amt) + '</span></div>'
+      ).join('');
+    } else {
+      ebDiv.style.display = 'none';
+    }
+
+    // Current inventory
+    const invCard = document.getElementById('sum-inventory-card');
+    const invList = document.getElementById('sum-inventory-list');
+    if (data.stock?.length > 0) {
+      invCard.style.display = 'block';
+      invList.innerHTML = data.stock.map(i =>
+        '<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);font-size:14px"><span>' + i.item_name + '</span><span style="font-weight:600">' + parseFloat(i.current_balance).toLocaleString('en-NG') + ' units</span></div>'
+      ).join('');
+    } else {
+      invCard.style.display = 'none';
+    }
   } catch(e) {}
 }
 

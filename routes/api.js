@@ -152,35 +152,38 @@ router.get('/summary/latest', async (req, res) => {
     const latest   = await TransactionModel.getLatest(user.id);
     const history  = await TransactionModel.getHistory(user.id, 10);
     const lowStock = await InventoryService.getLowStockAlerts(user.id);
+    const stock    = await InventoryService.getStock(user.id);
 
     if (!latest) {
-      return res.json({ hasData: false, history: [], lowStock });
+      return res.json({ hasData: false, history: [], lowStock, stock: stock || [] });
     }
 
     const score = calcHealthScore(parseFloat(latest.margin) || 0);
     const hl    = healthLabel(score);
 
-    // Rebuild top expense from breakdown
-    const breakdown  = latest.expense_breakdown || {};
+    // Merge all expense_breakdown JSONs for the latest date into one object
+    const breakdown  = await TransactionModel.getDailyExpenseBreakdown(user.id, latest.date);
     const topExpense = topExpenseCategory([breakdown]);
 
     res.json({
       hasData: true,
       summary: {
-        date:          latest.date,
-        revenue:       latest.revenue,
-        totalExpenses: latest.total_expenses,
-        profit:        latest.profit,
-        margin:        latest.margin,
-        customers:     latest.customers,
-        healthScore:   score,
-        healthLabel:   hl.label,
-        healthEmoji:   hl.emoji,
-        healthKey:     hl.key,
+        date:             latest.date,
+        revenue:          latest.revenue,
+        totalExpenses:    latest.total_expenses,
+        profit:           latest.profit,
+        margin:           latest.margin,
+        customers:        latest.customers,
+        healthScore:      score,
+        healthLabel:      hl.label,
+        healthEmoji:      hl.emoji,
+        healthKey:        hl.key,
         topExpense,
+        expenseBreakdown: breakdown,
       },
       history,
       lowStock,
+      stock: stock || [],
     });
   } catch (err) {
     console.error('[API] /summary/latest error:', err.message);

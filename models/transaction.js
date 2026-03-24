@@ -41,28 +41,61 @@ const TransactionModel = {
     return res.rows[0] || null;
   },
 
-  /** Get the most recent entry (for the frontend Latest Snapshot) */
+  /** Get the most recent DATE that has entries, then return that day's aggregated totals */
   async getLatest(userId) {
     const res = await query(
-      `SELECT * FROM transactions
+      `SELECT
+         date,
+         COALESCE(SUM(revenue), 0)        AS revenue,
+         COALESCE(SUM(total_expenses), 0) AS total_expenses,
+         COALESCE(SUM(profit), 0)         AS profit,
+         COALESCE(SUM(customers), 0)      AS customers,
+         COALESCE(AVG(margin), 0)         AS margin
+       FROM transactions
        WHERE user_id = $1
-       ORDER BY date DESC, created_at DESC LIMIT 1`,
+       GROUP BY date
+       ORDER BY date DESC
+       LIMIT 1`,
       [userId]
     );
     return res.rows[0] || null;
   },
 
-  /** Get last N entries for the Entry History list on the frontend */
+  /** Get last N days of aggregated daily totals for the Entry History list */
   async getHistory(userId, limit = 10) {
     const res = await query(
-      `SELECT date, revenue, total_expenses, profit, margin, customers
+      `SELECT
+         date,
+         COALESCE(SUM(revenue), 0)        AS revenue,
+         COALESCE(SUM(total_expenses), 0) AS total_expenses,
+         COALESCE(SUM(profit), 0)         AS profit,
+         COALESCE(SUM(customers), 0)      AS customers,
+         COALESCE(AVG(margin), 0)         AS margin
        FROM transactions
        WHERE user_id = $1
-       ORDER BY date DESC, created_at DESC
+       GROUP BY date
+       ORDER BY date DESC
        LIMIT $2`,
       [userId, limit]
     );
     return res.rows;
+  },
+
+  /** Get merged expense breakdown for a date (all entries combined) */
+  async getDailyExpenseBreakdown(userId, date) {
+    const rows = await query(
+      `SELECT expense_breakdown FROM transactions
+       WHERE user_id = $1 AND date = $2`,
+      [userId, date]
+    );
+    const merged = {};
+    for (const r of rows.rows) {
+      const b = r.expense_breakdown || {};
+      for (const [cat, amt] of Object.entries(b)) {
+        merged[cat] = (merged[cat] || 0) + parseFloat(amt || 0);
+      }
+    }
+    return merged;
   },
 
   /** Accumulate totals for a given date (for the cron job) */
