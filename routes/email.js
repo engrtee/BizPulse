@@ -59,13 +59,21 @@ router.post('/send', async (req, res) => {
       topExpense, customers, date,
     };
 
-    const aiRec = await GeminiService.generateRecommendation(summaryData, user);
-    await EmailService.sendSummaryEmail(user, summaryData, aiRec, lowStock);
+    const aiRec  = await GeminiService.generateRecommendation(summaryData, user);
+    const result = await EmailService.sendSummaryEmail(user, summaryData, aiRec, lowStock);
+
+    // Detect silent dev-mode (GMAIL env vars not configured on the server)
+    if (result?.status === 'dev_mode') {
+      return res.status(500).json({
+        error: 'Email not configured on server. Set GMAIL_USER and GMAIL_APP_PASSWORD in your Render environment variables, then redeploy.',
+      });
+    }
 
     res.json({ success: true, message: `Summary sent to ${user.email}` });
   } catch (err) {
     console.error('[Email Route] /send error:', err.message);
-    res.status(500).json({ error: 'Failed to send summary. Please try again.' });
+    // Surface the real nodemailer error so it's visible in the UI
+    res.status(500).json({ error: `Email failed: ${err.message}` });
   }
 });
 
