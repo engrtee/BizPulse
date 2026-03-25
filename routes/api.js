@@ -20,6 +20,7 @@ const InventoryService   = require('../services/inventory');
 const SheetsService      = require('../services/sheets');
 
 const GeminiService      = require('../services/gemini');
+const EmailService       = require('../services/email');
 
 const { calcHealthScore, healthLabel, topExpenseCategory, todayWAT } = require('../utils/formatter');
 const { calcMargin } = require('../utils/naira');
@@ -246,6 +247,49 @@ router.get('/summary/latest', async (req, res) => {
   } catch (err) {
     console.error('[API] /summary/latest error:', err.message);
     res.status(500).json({ error: 'Failed to load summary.' });
+  }
+});
+
+// ─────────────────────────────────────────────
+// POST /api/summary/send
+// Manually trigger the daily summary email for a user.
+// Called by the "Send Summary Now" button.
+// ─────────────────────────────────────────────
+router.post('/summary/send', async (req, res) => {
+  try {
+    const { userId } = req.body;
+    if (!userId) return res.status(400).json({ error: 'userId is required.' });
+
+    const user = await UserModel.findById(userId);
+    if (!user) return res.status(404).json({ error: 'User not found.' });
+
+    const date      = todayWAT();
+    const totals    = await TransactionModel.getDailyTotals(user.id, date);
+    const revenue   = parseFloat(totals.revenue)       || 0;
+    const expenses  = parseFloat(totals.total_expenses) || 0;
+    const profit    = parseFloat(totals.profit)         || 0;
+    const customers = parseInt(totals.customers, 10)    || 0;
+
+    if (revenue === 0 && expenses === 0) {
+      return res.status(400).json({ error: 'No entries logged today — nothing to summarise.' });
+    }
+
+    const margin     = calcMargin(profit, revenue);
+    const score      = calcHealthScore(margin);
+    const hl         = healthLabel(score);
+    const breakdowns = await TransactionModel.getExpenseBreakdowns(user.id, date);
+    const topExpense = topExpenseCategory(breakdowns);
+    const lowStock   = await require('../services/inventory').getLowStockAlerts(user.id);
+
+    const summaryData = { revenue, totalExpenses: expenses, profit, margin, healthScore: score, healthKey: hl.key, topExpense, customers, date };
+
+    const aiRec = await GeminiService.generateRecommendation(summaryData, user);
+    await EmailService.sendSummaryEmail(user, summaryData, aiRec, lowStock);
+
+    res.json({ success: true, message: `Summary sent to ${user.email}` });
+  } catch (err) {
+    console.error('[API] /summary/send error:', err.message);
+    res.status(500).json({ error: `Email failed: ${err.message}` });
   }
 });
 
