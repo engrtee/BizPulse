@@ -33,13 +33,28 @@ router.post('/send', async (req, res) => {
     const user = await UserModel.findById(userId);
     if (!user) return res.status(404).json({ error: 'User not found.' });
 
-    const date      = todayWAT();
-    const totals    = await TransactionModel.getDailyTotals(user.id, date);
-    const breakdowns= await TransactionModel.getExpenseBreakdowns(user.id, date);
+    // Try today first; fall back to most recent date if nothing logged today
+    const todayDate = todayWAT();
+    let effectiveDate = todayDate;
+
+    let totals = await TransactionModel.getDailyTotals(user.id, todayDate);
+    let revenue       = parseFloat(totals?.revenue)        || 0;
+    let totalExpenses = parseFloat(totals?.total_expenses) || 0;
+
+    if (revenue === 0 && totalExpenses === 0) {
+      const latest = await TransactionModel.getLatest(user.id);
+      if (!latest) {
+        return res.status(400).json({ error: 'No entries found yet. Log some numbers first and try again.' });
+      }
+      effectiveDate = latest.date;
+      totals        = { revenue: latest.revenue, total_expenses: latest.total_expenses, profit: latest.profit, customers: latest.customers };
+      revenue       = parseFloat(latest.revenue)        || 0;
+      totalExpenses = parseFloat(latest.total_expenses) || 0;
+    }
+
+    const breakdowns= await TransactionModel.getExpenseBreakdowns(user.id, effectiveDate);
     const lowStock  = await InventoryService.getLowStockAlerts(user.id);
 
-    const revenue       = parseFloat(totals.revenue)       || 0;
-    const totalExpenses = parseFloat(totals.total_expenses) || 0;
     const profit        = parseFloat(totals.profit)         || 0;
     const customers     = parseInt(totals.customers, 10)    || 0;
     const margin        = calcMargin(profit, revenue);
@@ -47,16 +62,10 @@ router.post('/send', async (req, res) => {
     const hl            = healthLabel(score);
     const topExpense    = topExpenseCategory(breakdowns);
 
-    if (revenue === 0 && totalExpenses === 0) {
-      return res.status(400).json({
-        error: 'No entries found for today. Log some sales or expenses first.',
-      });
-    }
-
     const summaryData = {
       revenue, totalExpenses, profit, margin,
       healthScore: score, healthKey: hl.key,
-      topExpense, customers, date,
+      topExpense, customers, date: effectiveDate,
     };
 
     const aiRec  = await GeminiService.generateRecommendation(summaryData, user);
