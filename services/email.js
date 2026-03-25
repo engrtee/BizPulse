@@ -9,21 +9,11 @@
 'use strict';
 
 require('dotenv').config();
-const nodemailer                              = require('nodemailer');
-const { formatDate }                         = require('../utils/formatter');
-const { formatNaira }                        = require('../utils/naira');
+const axios          = require('axios');
+const { formatDate } = require('../utils/formatter');
+const { formatNaira }= require('../utils/naira');
 
-// ---------- Nodemailer transporter ----------
-
-function getTransporter() {
-  return nodemailer.createTransport({
-    service: 'gmail',
-    auth: {
-      user: process.env.GMAIL_USER,
-      pass: process.env.GMAIL_APP_PASSWORD,
-    },
-  });
-}
+// ---------- Brevo (HTTP API — no SMTP ports, works on Render free tier) ----------
 
 // ---------- Health score pill styles ----------
 
@@ -181,25 +171,34 @@ function buildEmailHtml(user, summary, aiRec, lowStock = []) {
  * @param {Array}  lowStock Low-stock inventory items
  */
 async function sendSummaryEmail(user, summary, aiRec, lowStock = []) {
-  if (!process.env.GMAIL_USER || !process.env.GMAIL_APP_PASSWORD) {
-    console.log(`[Email DEV] Would send summary to ${user.email}`);
+  if (!process.env.BREVO_API_KEY) {
+    console.log(`[Email DEV] Would send summary to ${user.email} — set BREVO_API_KEY to enable`);
     return { status: 'dev_mode' };
   }
 
   const firstName = user.name.split(' ')[0];
   const dateStr   = formatDate(summary.date || new Date());
   const html      = buildEmailHtml(user, summary, aiRec, lowStock);
+  const fromEmail = process.env.BREVO_FROM_EMAIL || process.env.GMAIL_USER;
 
-  const transporter = getTransporter();
-  const info = await transporter.sendMail({
-    from:    `BizPulse 📊 <${process.env.GMAIL_USER}>`,
-    to:      user.email,
-    subject: `📊 ${firstName}, your BizPulse summary for ${dateStr}`,
-    html,
-  });
+  const res = await axios.post(
+    'https://api.brevo.com/v3/smtp/email',
+    {
+      sender:      { name: 'BizPulse', email: fromEmail },
+      to:          [{ email: user.email, name: user.name }],
+      subject:     `📊 ${firstName}, your BizPulse summary for ${dateStr}`,
+      htmlContent: html,
+    },
+    {
+      headers: {
+        'api-key':      process.env.BREVO_API_KEY,
+        'Content-Type': 'application/json',
+      },
+    }
+  );
 
-  console.log(`[Email] Sent to ${user.email} — MessageId: ${info.messageId}`);
-  return info;
+  console.log(`[Email] Sent to ${user.email} via Brevo — ID: ${res.data.messageId}`);
+  return res.data;
 }
 
 module.exports = { sendSummaryEmail, buildEmailHtml };
