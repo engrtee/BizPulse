@@ -57,30 +57,63 @@ async function sendMessage(to, body) {
  * Send the instant acknowledgement reply after a daily entry.
  * @param {string} to          WhatsApp number
  * @param {string} firstName   User's first name
- * @param {object} data        { revenue, totalExpenses, profit, margin, customers }
+ * @param {object} data        { revenue, totalExpenses, profit, margin, customers, streak, topExpense }
  */
-async function sendEntryAck(to, firstName, { revenue, totalExpenses, profit, margin, customers, streak }) {
+async function sendEntryAck(to, firstName, { revenue, totalExpenses, profit, margin, customers, streak, topExpense }) {
   const fmt = (n) => Number(n).toLocaleString('en-NG');
   const marginStr = `${parseFloat(margin).toFixed(1)}%`;
-  const profitSign = profit >= 0 ? '' : '-';
+  const profitAbs = Math.abs(profit);
   const s = parseInt(streak, 10) || 1;
 
-  let streakLine = '';
-  if (s === 1)      streakLine = '\n🌱 Day 1 streak — great start!';
-  else if (s < 7)   streakLine = `\n🔥 ${s}-day streak — keep it going!`;
-  else if (s < 14)  streakLine = `\n🔥 ${s}-day streak — one week strong!`;
-  else if (s < 30)  streakLine = `\n🔥🔥 ${s}-day streak — you're crushing it!`;
-  else              streakLine = `\n🏆 ${s}-day streak — absolute legend!`;
+  // Streak in header line
+  let streakHeader = '';
+  if (s === 1)    streakHeader = ' 🌱 Day 1 streak';
+  else            streakHeader = ` 🔥 Day ${s} streak`;
 
   const body =
-    `✅ Logged ${firstName}!\n\n` +
-    `Revenue:  ₦${fmt(revenue)}\n` +
-    `Expenses: ₦${fmt(totalExpenses)}\n` +
-    `Profit:   ${profitSign}₦${fmt(Math.abs(profit))} (${marginStr} margin)\n\n` +
-    (customers > 0 ? `Customers today: ${customers}\n\n` : '') +
-    `Your full summary hits your inbox at 7pm 🎯` +
-    streakLine;
+    `✅ Logged ${firstName}!${streakHeader}\n\n` +
+    `Revenue:   ₦${fmt(revenue)}\n` +
+    `Expenses:  ₦${fmt(totalExpenses)}\n` +
+    `Profit:    ${profit < 0 ? '-' : ''}₦${fmt(profitAbs)}\n` +
+    `Margin:    ${marginStr}\n` +
+    (customers > 0 ? `\nCustomers today: ${customers}\n` : '\n') +
+    (topExpense ? `Top expense: ${topExpense.category}\n` : '') +
+    `\nYour full summary hits your inbox at 7pm 🎯`;
 
+  return sendMessage(to, body);
+}
+
+/**
+ * Send a milestone celebration message.
+ * Called after streak milestones or engagement milestones.
+ * @param {string} to        WhatsApp number
+ * @param {string} type      Milestone type key
+ * @param {object} context   { firstName, streak, profit }
+ */
+async function sendMilestone(to, type, { firstName = '', streak = 0, profit = 0 } = {}) {
+  let body = '';
+  switch (type) {
+    case 'day1':
+      body = `🎉 Welcome ${firstName}! Your BizPulse journey starts today. Keep logging and I'll keep the insights coming.`;
+      break;
+    case 'streak7':
+      body = `🔥 One week strong, ${firstName}! You're building a powerful habit. 7 days of data is already telling a story.`;
+      break;
+    case 'streak30':
+      body = `📊 One month of data, ${firstName}! You can now see real trends in your business. Keep going!`;
+      break;
+    case 'streak100':
+      body = `🏆 100 days, ${firstName}! You're a data champion. Your business intelligence puts you ahead of 99% of Nigerian SMEs.`;
+      break;
+    case 'first_profit':
+      body = `💰 Profitable day, ${firstName}! Keep it going — consistency is what separates thriving businesses.`;
+      break;
+    case 'entry10':
+      body = `📈 10 entries logged, ${firstName}! Your data is starting to tell a story. Check your Summary for trends.`;
+      break;
+    default:
+      return;
+  }
   return sendMessage(to, body);
 }
 
@@ -155,4 +188,4 @@ async function sendNotRegistered(to) {
   return sendMessage(to, body);
 }
 
-module.exports = { sendMessage, sendEntryAck, sendStockReply, sendHelp, sendNotRegistered, sendReminder };
+module.exports = { sendMessage, sendEntryAck, sendMilestone, sendStockReply, sendHelp, sendNotRegistered, sendReminder };

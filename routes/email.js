@@ -71,10 +71,10 @@ router.post('/send', async (req, res) => {
     const aiRec  = await GeminiService.generateRecommendation(summaryData, user);
     const result = await EmailService.sendSummaryEmail(user, summaryData, aiRec, lowStock);
 
-    // Detect silent dev-mode (GMAIL env vars not configured on the server)
+    // Detect dev-mode (BREVO_API_KEY not configured on the server)
     if (result?.status === 'dev_mode') {
       return res.status(500).json({
-        error: 'Email not configured on server. Set GMAIL_USER and GMAIL_APP_PASSWORD in your Render environment variables, then redeploy.',
+        error: 'Email not configured on server. Set BREVO_API_KEY in your Render environment variables, then redeploy.',
       });
     }
 

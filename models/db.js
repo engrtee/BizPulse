@@ -50,7 +50,11 @@ async function initDb() {
       streak               INTEGER DEFAULT 0
     );
 
-    ALTER TABLE users ADD COLUMN IF NOT EXISTS streak INTEGER DEFAULT 0;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS streak               INTEGER DEFAULT 0;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS first_message_date  DATE;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS last_message_date   DATE;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS total_messages_sent INTEGER DEFAULT 0;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS referred_by         INTEGER REFERENCES users(id);
 
     CREATE TABLE IF NOT EXISTS transactions (
       id               SERIAL PRIMARY KEY,

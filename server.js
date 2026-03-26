@@ -13,12 +13,14 @@ const express = require('express');
 const cors    = require('cors');
 const path    = require('path');
 
-const { initDb }            = require('./models/db');
-const webhookRouter         = require('./routes/webhook');
-const authRouter            = require('./routes/auth');
-const apiRouter             = require('./routes/api');
-const emailRouter           = require('./routes/email');
+const { initDb }               = require('./models/db');
+const webhookRouter            = require('./routes/webhook');
+const authRouter               = require('./routes/auth');
+const apiRouter                = require('./routes/api');
+const emailRouter              = require('./routes/email');
+const adminRouter              = require('./routes/admin');
 const { scheduleDailySummary } = require('./jobs/dailySummary');
+const { scheduleRetentionNudge } = require('./jobs/retentionNudge');
 
 const app  = express();
 const PORT = process.env.PORT || 3000;
@@ -45,6 +47,7 @@ app.use('/webhook',        webhookRouter);
 app.use('/api/auth',       authRouter);
 app.use('/api',            apiRouter);
 app.use('/api/summary',    emailRouter);
+app.use('/admin',          adminRouter);
 
 // Health check (useful for Render and uptime monitors)
 app.get('/health', (_req, res) => {
@@ -74,6 +77,9 @@ async function start() {
 
     // Start the 7pm WAT daily summary cron
     scheduleDailySummary();
+
+    // Start the 10am WAT retention nudge cron
+    scheduleRetentionNudge();
   } catch (err) {
     console.error('❌ Failed to start BizPulse:', err.message);
     process.exit(1);

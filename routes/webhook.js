@@ -200,10 +200,35 @@ async function handleDailyEntry(user, from, data, rawMessage) {
     }).catch((err) => console.error('[Sheets] appendTransaction error:', err.message));
   }
 
-  // Send instant WhatsApp acknowledgement with streak
+  // Derive top expense from this entry's breakdown
+  const topExpense = topExpenseCategory([expenseBreakdown || {}]);
+
+  // Send instant WhatsApp acknowledgement
   await WhatsAppService.sendEntryAck(from, user.name.split(' ')[0], {
-    revenue, totalExpenses, profit, margin, customers, streak: newStreak,
+    revenue, totalExpenses, profit, margin, customers, streak: newStreak, topExpense,
   });
+
+  // Milestone celebrations (non-blocking)
+  const firstName = user.name.split(' ')[0];
+  const totalMsgs = await UserModel.getTotalMessages(user.id);
+  const s = parseInt(newStreak, 10) || 1;
+
+  if (s === 1 && totalMsgs === 1) {
+    WhatsAppService.sendMilestone(from, 'day1', { firstName }).catch(() => {});
+  } else if (s === 7) {
+    WhatsAppService.sendMilestone(from, 'streak7', { firstName }).catch(() => {});
+  } else if (s === 30) {
+    WhatsAppService.sendMilestone(from, 'streak30', { firstName }).catch(() => {});
+  } else if (s === 100) {
+    WhatsAppService.sendMilestone(from, 'streak100', { firstName }).catch(() => {});
+  }
+  if (totalMsgs === 10) {
+    WhatsAppService.sendMilestone(from, 'entry10', { firstName }).catch(() => {});
+  }
+  if (parseFloat(profit) > 0 && totalMsgs === 1) {
+    // First entry and profitable
+    WhatsAppService.sendMilestone(from, 'first_profit', { firstName }).catch(() => {});
+  }
 
   // If any expenses landed in "Other", ask for clarification
   if ((expenseBreakdown?.Other || 0) > 0) {

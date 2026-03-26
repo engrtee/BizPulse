@@ -77,37 +77,95 @@ const UserModel = {
     );
   },
 
-  /** Update last entry date and recalculate streak */
+  /** Update last entry date, recalculate streak, and track message activity */
   async touchLastEntry(userId) {
-    // Get current last_entry_date and streak
     const cur = await query(
-      'SELECT last_entry_date, streak FROM users WHERE id = $1',
+      'SELECT last_entry_date, streak, first_message_date, total_messages_sent FROM users WHERE id = $1',
       [userId]
     );
     if (!cur.rows[0]) return;
 
-    const { last_entry_date, streak } = cur.rows[0];
-    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Lagos' });
+    const { last_entry_date, streak, first_message_date, total_messages_sent } = cur.rows[0];
+    const today     = new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Lagos' });
     const yesterday = new Date(Date.now() - 86400000).toLocaleDateString('en-CA', { timeZone: 'Africa/Lagos' });
 
     let newStreak = 1;
     if (last_entry_date) {
       const lastDate = new Date(last_entry_date).toLocaleDateString('en-CA', { timeZone: 'Africa/Lagos' });
-      if (lastDate === today) {
-        // Already logged today — keep streak as is
-        newStreak = streak || 1;
-      } else if (lastDate === yesterday) {
-        // Consecutive day — increment
-        newStreak = (streak || 0) + 1;
-      }
+      if (lastDate === today)     newStreak = streak || 1;
+      else if (lastDate === yesterday) newStreak = (streak || 0) + 1;
       // else streak resets to 1
     }
 
     await query(
-      'UPDATE users SET last_entry_date = CURRENT_DATE, streak = $1 WHERE id = $2',
+      `UPDATE users
+       SET last_entry_date        = CURRENT_DATE,
+           streak                 = $1,
+           last_message_date      = CURRENT_DATE,
+           total_messages_sent    = total_messages_sent + 1,
+           first_message_date     = COALESCE(first_message_date, CURRENT_DATE)
+       WHERE id = $2`,
       [newStreak, userId]
     );
     return newStreak;
+  },
+
+  /** Return total messages sent for a user (used for milestone detection) */
+  async getTotalMessages(userId) {
+    const res = await query(
+      'SELECT total_messages_sent FROM users WHERE id = $1',
+      [userId]
+    );
+    return parseInt(res.rows[0]?.total_messages_sent, 10) || 0;
+  },
+
+  /** Admin dashboard stats */
+  async getAdminStats() {
+    const res = await query(`
+      SELECT
+        COUNT(*)                                                                  AS total_users,
+        COUNT(first_message_date)                                                 AS activated,
+        COUNT(CASE WHEN last_message_date >= CURRENT_DATE - INTERVAL '7 days'
+                   THEN 1 END)                                                   AS active_this_week,
+        COUNT(CASE WHEN last_message_date >= CURRENT_DATE - INTERVAL '14 days'
+                    AND last_message_date <  CURRENT_DATE - INTERVAL '5 days'
+                   THEN 1 END)                                                   AS at_risk,
+        COUNT(CASE WHEN last_message_date <  CURRENT_DATE - INTERVAL '14 days'
+                    OR last_message_date IS NULL AND first_message_date IS NOT NULL
+                   THEN 1 END)                                                   AS churned,
+        ROUND(AVG(total_messages_sent), 1)                                       AS avg_messages_per_user
+      FROM users WHERE active = TRUE
+    `);
+    return res.rows[0];
+  },
+
+  /** New registrations in last N days */
+  async getRecentRegistrations(days = 7) {
+    const res = await query(
+      `SELECT DATE(created_at AT TIME ZONE 'Africa/Lagos') AS day, COUNT(*) AS count
+       FROM users
+       WHERE created_at >= NOW() - ($1 || ' days')::INTERVAL
+       GROUP BY day ORDER BY day DESC`,
+      [days]
+    );
+    return res.rows;
+  },
+
+  /** Users who haven't messaged in N+ days (for retention nudges) */
+  async findInactiveFor(days) {
+    const res = await query(
+      `SELECT * FROM users
+       WHERE active = TRUE
+         AND whatsapp_number IS NOT NULL
+         AND first_message_date IS NOT NULL
+         AND (
+           last_message_date IS NULL
+           OR last_message_date = CURRENT_DATE - $1::INTEGER * INTERVAL '1 day'
+         )
+       ORDER BY id`,
+      [days]
+    );
+    return res.rows;
   },
 
   /** Update user profile settings from the frontend */
