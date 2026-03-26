@@ -26,9 +26,34 @@ const { calcHealthScore, healthLabel, topExpenseCategory, todayWAT } = require('
 const { calcMargin } = require('../utils/naira');
 
 // ─────────────────────────────────────────────
+// POST /api/auth/login
+// Called from the "Login" tab on the register screen.
+// Looks up user by email and returns their userId so the
+// frontend can store it in localStorage (passwordless login).
+// ─────────────────────────────────────────────
+router.post('/auth/login', async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ error: 'Email is required.' });
+
+    const user = await UserModel.findByEmail(email);
+    if (!user) {
+      return res.status(404).json({ error: 'No account found with this email address. Please register first.' });
+    }
+    if (!user.active) {
+      return res.status(403).json({ error: 'This account has been deactivated. Please contact support.' });
+    }
+    res.json({ success: true, userId: user.id, name: user.name });
+  } catch (err) {
+    console.error('[API] /auth/login error:', err.message);
+    res.status(500).json({ error: 'Login failed. Please try again.' });
+  }
+});
+
+// ─────────────────────────────────────────────
 // POST /api/register
-// Called by the Step 2 registration form before OAuth redirect.
-// Creates the user row. OAuth callback will add tokens + sheetId.
+// Called by the Step 2 registration form.
+// Creates the user row.
 // ─────────────────────────────────────────────
 router.post('/register', async (req, res) => {
   try {

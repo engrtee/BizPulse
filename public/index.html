@@ -358,6 +358,29 @@
             <p style="margin-top:8px">Track sales and expenses in 2 minutes.<br>Get AI-powered insights every evening automatically.</p>
           </div>
 
+          <!-- Tab switcher -->
+          <div style="display:flex;gap:0;margin-bottom:4px;border-radius:10px;overflow:hidden;border:1px solid var(--border)">
+            <button id="tab-register" onclick="switchAuthTab('register')"
+              style="flex:1;padding:10px;font-size:14px;font-weight:600;background:var(--navy);color:#fff;border:none;cursor:pointer;transition:background 0.15s">
+              New Account
+            </button>
+            <button id="tab-login" onclick="switchAuthTab('login')"
+              style="flex:1;padding:10px;font-size:14px;font-weight:600;background:#fff;color:var(--navy);border:none;cursor:pointer;transition:background 0.15s">
+              Login
+            </button>
+          </div>
+
+          <!-- Login form -->
+          <div id="reg-login" class="reg-form" style="display:none">
+            <p style="font-size:15px;color:var(--muted);margin-bottom:18px;margin-top:8px">Enter your email to access your account.</p>
+            <div class="form-group">
+              <label class="form-label">Email Address</label>
+              <input id="login-email" class="form-input" type="email" placeholder="you@gmail.com" />
+            </div>
+            <div id="login-msg" class="msg"></div>
+            <button class="btn btn-navy btn-block" style="margin-top:8px" onclick="loginWithEmail()">Access My Account →</button>
+          </div>
+
           <!-- Step 1 -->
           <div id="reg-step-1" class="reg-form">
             <div class="step-indicator" style="margin-top:24px">
@@ -1085,6 +1108,50 @@ async function registerAndEnter() {
     showMsg(msg, 'error', 'Something went wrong. Please try again.');
     btn.disabled  = false;
     btn.innerHTML = 'Create Account & Enter Dashboard';
+  }
+}
+
+function switchAuthTab(tab) {
+  const isLogin = tab === 'login';
+  document.getElementById('reg-login').style.display    = isLogin ? 'block' : 'none';
+  document.getElementById('reg-step-1').style.display  = isLogin ? 'none' : 'block';
+  document.getElementById('reg-step-2').style.display  = 'none';
+  document.getElementById('tab-register').style.background = isLogin ? '#fff' : 'var(--navy)';
+  document.getElementById('tab-register').style.color      = isLogin ? 'var(--navy)' : '#fff';
+  document.getElementById('tab-login').style.background    = isLogin ? 'var(--navy)' : '#fff';
+  document.getElementById('tab-login').style.color         = isLogin ? '#fff' : 'var(--navy)';
+}
+
+async function loginWithEmail() {
+  const email = document.getElementById('login-email').value.trim();
+  const msg   = document.getElementById('login-msg');
+  if (!email) { showMsg(msg, 'error', 'Please enter your email address.'); return; }
+  hideMsg(msg);
+
+  const btn = document.querySelector('#reg-login .btn-navy');
+  btn.disabled  = true;
+  btn.innerHTML = '<span class="spinner"></span>Looking up your account…';
+
+  try {
+    const res  = await fetch('/api/auth/login', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      showMsg(msg, 'error', data.error || 'Login failed. Please try again.');
+      btn.disabled  = false;
+      btn.innerHTML = 'Access My Account →';
+      return;
+    }
+    localStorage.setItem('bizpulse_user_id',   data.userId);
+    localStorage.setItem('bizpulse_user_name', data.name);
+    await loadUser(data.userId);
+    enterApp();
+  } catch (e) {
+    showMsg(msg, 'error', 'Something went wrong. Please try again.');
+    btn.disabled  = false;
+    btn.innerHTML = 'Access My Account →';
   }
 }
 
