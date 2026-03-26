@@ -10,9 +10,10 @@
 
 'use strict';
 
-const InventoryModel = require('../models/inventory');
-const SheetsService  = require('./sheets');
-const { todayWAT }   = require('../utils/formatter');
+const InventoryModel  = require('../models/inventory');
+const SheetsService   = require('./sheets');
+const WhatsAppService = require('./whatsapp');
+const { todayWAT }    = require('../utils/formatter');
 
 /**
  * Record stock received from a supplier.
@@ -59,6 +60,14 @@ async function sellStock(user, { item, quantity }) {
   const qty   = parseFloat(quantity) || 0;
 
   const row = await InventoryModel.applyMovement(user.id, item, 'sold', qty, null);
+
+  // Out-of-stock alert — different from low-stock, more urgent
+  if (parseFloat(row.current_balance) === 0 && user.whatsapp_number) {
+    WhatsAppService.sendMessage(
+      user.whatsapp_number,
+      `⚠️ Your ${item} stock shows 0 units. Please update your inventory.`
+    ).catch((err) => console.error('[Inventory] OOS WhatsApp alert error:', err.message));
+  }
 
   if (user.sheet_id) {
     await SheetsService.appendInventory(user, {

@@ -116,44 +116,41 @@ Rules:
  * @returns {object}            { risk: string, actions: string[] }
  */
 async function generateRecommendation(summaryData, user) {
-  const { revenue, totalExpenses, profit, margin, healthScore, topExpense, customers, date } = summaryData;
+  const { revenue, totalExpenses, profit, margin, topExpense, customers, date } = summaryData;
+  const streak      = user.streak || 0;
+  const bizType     = user.biz_type || 'Retail';
+  const isProfitable = parseFloat(profit) >= 0;
+  const topCat      = topExpense?.category || 'General expenses';
+  const topAmt      = topExpense?.amount   || 0;
+  const marginVal   = parseFloat(margin).toFixed(1);
 
-  const prompt = `
-${NIGERIA_CONTEXT}
+  const prompt = `A Nigerian ${bizType} business recorded:
+Revenue: ₦${Number(revenue).toLocaleString('en-NG')}
+Expenses: ₦${Number(totalExpenses).toLocaleString('en-NG')}
+Net Profit: ₦${Number(profit).toLocaleString('en-NG')}
+Profit Margin: ${marginVal}%
+Top Expense: ${topCat} at ₦${Number(topAmt).toLocaleString('en-NG')}
+Customers Today: ${customers}
+Days logged streak: ${streak}
 
-Generate a personalised business recommendation for a Nigerian SME owner.
+The business is ${isProfitable ? 'profitable' : 'loss-making'} today.
 
-Business owner: ${user.name}
-Business type: ${user.biz_type || 'Retail'}
-Location: ${user.state || 'Nigeria'}
-Date: ${date}
-
-Today's numbers:
-- Revenue: ₦${Number(revenue).toLocaleString('en-NG')}
-- Total Expenses: ₦${Number(totalExpenses).toLocaleString('en-NG')}
-- Profit: ₦${Number(profit).toLocaleString('en-NG')}
-- Margin: ${margin}%
-- Health Score: ${healthScore}/100
-- Top Expense Category: ${topExpense?.category || 'Unknown'} (₦${Number(topExpense?.amount || 0).toLocaleString('en-NG')})
-- Customers Served: ${customers}
-
-Return ONLY a JSON object with this exact shape:
+Respond in this exact JSON format — no markdown, no code blocks, just JSON:
 {
-  "risk": "One sentence describing the main financial risk today",
+  "risk": "One specific sentence referencing their actual top expense (${topCat}) or margin (${marginVal}%) — not generic advice",
   "actions": [
-    "Specific action 1 relevant to their business type",
+    "Specific action referencing their business type (${bizType}) and actual numbers",
     "Specific action 2",
     "Specific action 3"
   ]
 }
 
 Rules:
-- Be specific to their business type (${user.biz_type}) and Nigerian market conditions.
-- Use plain English, not accounting jargon.
-- Actions must be actionable TODAY or THIS WEEK, not generic.
-- Risk must be honest but not alarming.
-- Return ONLY valid JSON. No markdown, no code blocks.
-`;
+- Reference the actual top expense category and margin percentage in the risk sentence.
+- Reference their business type (${bizType}) in at least one action.
+- Use Nigerian business context (naira, local market conditions).
+- Keep the total response under 100 words.
+- Actions must be actionable this week, not generic.`;
 
   try {
     const model = getClient().getGenerativeModel({ model: 'gemini-1.5-flash' });

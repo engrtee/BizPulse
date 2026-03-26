@@ -34,6 +34,7 @@ const InventoryModel = {
    * Upsert a stock movement.
    * direction: 'received' | 'sold'
    * qty: number of units
+   * Tracks total_received for dynamic low-stock threshold (20% of ever received).
    */
   async applyMovement(userId, itemName, direction, qty, unitPrice) {
     const existing = await InventoryModel.getItem(userId, itemName);
@@ -47,32 +48,48 @@ const InventoryModel = {
       const res = await query(
         `UPDATE inventory
          SET current_balance = $1,
-             unit_price = COALESCE($2, unit_price),
-             last_updated = NOW()
+             total_received  = CASE WHEN $5 THEN total_received + $6 ELSE total_received END,
+             unit_price      = COALESCE($2, unit_price),
+             last_updated    = NOW()
          WHERE user_id = $3 AND LOWER(item_name) = LOWER($4)
          RETURNING *`,
-        [newBalance, unitPrice || null, userId, itemName]
+        [newBalance, unitPrice || null, userId, itemName, direction === 'received', qty]
       );
       return res.rows[0];
     } else {
       // First time this item is seen — create it
-      const initialBalance = direction === 'received' ? qty : 0;
+      const initialBalance  = direction === 'received' ? qty : 0;
+      const initialReceived = direction === 'received' ? qty : 0;
       const res = await query(
-        `INSERT INTO inventory (user_id, item_name, current_balance, unit_price)
-         VALUES ($1, $2, $3, $4)
+        `INSERT INTO inventory (user_id, item_name, current_balance, total_received, unit_price)
+         VALUES ($1, $2, $3, $4, $5)
          RETURNING *`,
-        [userId, itemName, initialBalance, unitPrice || 0]
+        [userId, itemName, initialBalance, initialReceived, unitPrice || 0]
       );
       return res.rows[0];
     }
   },
 
-  /** Return items whose balance is below low_stock_threshold */
+  /**
+   * Return items that need attention:
+   *   - Out of stock:  current_balance = 0 (most urgent)
+   *   - Low stock:     current_balance < 20% of total_received (but > 0)
+   * Falls back to legacy low_stock_threshold for old items with no total_received data.
+   */
   async getLowStock(userId) {
     const res = await query(
-      `SELECT * FROM inventory
-       WHERE user_id = $1 AND current_balance <= low_stock_threshold
-       ORDER BY item_name`,
+      `SELECT *,
+         (current_balance = 0)                                             AS is_out_of_stock,
+         (current_balance > 0 AND total_received > 0
+          AND current_balance < total_received * 0.20)                    AS is_low_stock
+       FROM inventory
+       WHERE user_id = $1
+         AND (
+           current_balance = 0
+           OR (total_received > 0 AND current_balance < total_received * 0.20)
+           OR (total_received = 0 AND current_balance > 0 AND current_balance <= low_stock_threshold)
+         )
+       ORDER BY current_balance ASC, item_name`,
       [userId]
     );
     return res.rows;

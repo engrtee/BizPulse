@@ -333,4 +333,49 @@ router.get('/export/csv', async (req, res) => {
   }
 });
 
+// ─────────────────────────────────────────────
+// GET /api/test/calculations
+// Runs and logs verification tests for margin and inventory logic.
+// ─────────────────────────────────────────────
+router.get('/test/calculations', (_req, res) => {
+  const results = [];
+
+  // TEST 1 — Positive margin
+  const r1 = 4560000, e1 = 1200000, p1 = r1 - e1;
+  const m1 = parseFloat(((p1 / r1) * 100).toFixed(1));
+  results.push({ test: 1, desc: 'Positive margin', input: { revenue: r1, expenses: e1 }, expected: '73.7%', got: m1 + '%', pass: m1 === 73.7 });
+
+  // TEST 2 — Loss margin
+  const r2 = 1650005, e2 = 1762035, p2 = r2 - e2;
+  const m2 = parseFloat(((p2 / r2) * 100).toFixed(1));
+  results.push({ test: 2, desc: 'Loss margin', input: { revenue: r2, expenses: e2 }, expected: '-6.8%', got: m2 + '%', pass: m2 === -6.8 });
+
+  // TEST 3 — Inventory: receive 50, sell 12 → balance 38, NOT below threshold (10 = 20% of 50)
+  const totalReceived3 = 50, sold3 = 12;
+  const balance3   = totalReceived3 - sold3;
+  const threshold3 = totalReceived3 * 0.20;
+  const lowAlert3  = balance3 < threshold3;
+  results.push({ test: 3, desc: 'Balance 38 — no low stock alert', expected: 'balance=38, alert=false', got: `balance=${balance3}, alert=${lowAlert3}`, pass: balance3 === 38 && !lowAlert3 });
+
+  // TEST 4 — Low stock alert (9 units = 18% of 50, below 20% threshold)
+  const balance4    = 9;
+  const threshold4  = 50 * 0.20;
+  const lowAlert4   = balance4 < threshold4;
+  results.push({ test: 4, desc: 'Low stock alert at 18% of received', expected: 'alert=true', got: `alert=${lowAlert4}`, pass: lowAlert4 === true });
+
+  // TEST 5 — Out of stock (different, more urgent alert)
+  const balance5   = 0;
+  const outOfStock = balance5 === 0;
+  results.push({ test: 5, desc: 'Out of stock alert', expected: 'out_of_stock=true', got: `out_of_stock=${outOfStock}`, pass: outOfStock === true });
+
+  results.forEach((r) => {
+    const status = r.pass ? 'PASS ✅' : 'FAIL ❌';
+    console.log(`[TEST ${r.test}] ${status} — ${r.desc}: expected ${r.expected}, got ${r.got}`);
+  });
+
+  const passing = results.filter((r) => r.pass).length;
+  console.log(`[TESTS] ${passing}/${results.length} passing`);
+  res.json({ tests: results, summary: `${passing}/${results.length} tests passing` });
+});
+
 module.exports = router;

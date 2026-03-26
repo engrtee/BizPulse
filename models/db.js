@@ -72,11 +72,14 @@ async function initDb() {
       user_id             INTEGER REFERENCES users(id) ON DELETE CASCADE,
       item_name           VARCHAR(200) NOT NULL,
       current_balance     NUMERIC(12, 2) DEFAULT 0,
+      total_received      NUMERIC(12, 2) DEFAULT 0,
       unit_price          NUMERIC(15, 2) DEFAULT 0,
       low_stock_threshold NUMERIC(12, 2) DEFAULT 20,
       last_updated        TIMESTAMPTZ DEFAULT NOW(),
       UNIQUE(user_id, item_name)
     );
+
+    ALTER TABLE inventory ADD COLUMN IF NOT EXISTS total_received NUMERIC(12, 2) DEFAULT 0;
 
     CREATE TABLE IF NOT EXISTS customer_logs (
       id         SERIAL PRIMARY KEY,

@@ -102,15 +102,22 @@
     #bottom-nav {
       display: none;
       position: fixed; bottom: 0; left: 0; right: 0; z-index: 100;
-      background: #fff; border-top: 1px solid var(--border);
+      background: var(--navy); border-top: none;
     }
     .nav-tab {
       flex: 1; display: flex; flex-direction: column; align-items: center;
       justify-content: center; padding: 8px 4px 6px;
-      font-size: 11px; color: var(--muted); font-weight: 500; background: none;
+      font-size: 11px; color: rgba(255,255,255,0.55); font-weight: 500; background: none;
+      border-top: 3px solid transparent;
     }
     .nav-tab .ni { font-size: 20px; margin-bottom: 2px; }
-    .nav-tab.active { color: var(--blue); }
+    .nav-tab.active { color: #fff; border-top-color: var(--blue); }
+
+    /* ── Expense bar chart ── */
+    .exp-bar-row { margin-bottom: 10px; }
+    .exp-bar-label { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 4px; color: var(--text-sm); }
+    .exp-bar-track { background: var(--border); border-radius: 4px; height: 8px; overflow: hidden; }
+    .exp-bar-fill  { height: 100%; background: var(--blue); border-radius: 4px; }
 
     /* ══ MOBILE OVERRIDES ════════════════════════════ */
     @media (max-width: 767px) {
@@ -457,6 +464,18 @@
             </div>
           </div>
 
+          <!-- Plain English profit sentence (below stat cards) -->
+          <div id="home-plain-english" style="display:none;font-size:14px;color:var(--text-sm);margin-bottom:16px;padding:12px 16px;background:var(--card);border-radius:10px;border:1px solid var(--border);line-height:1.5"></div>
+
+          <!-- Today's Insight (AI preview) -->
+          <div class="card" style="margin-bottom:20px">
+            <div class="card-title">Today's Insight</div>
+            <div id="home-ai-insight-content" style="font-size:14px;color:var(--muted)">Submit today's entry to get your AI insight.</div>
+            <div id="home-ai-insight-link" style="display:none;margin-top:10px">
+              <span onclick="switchTab('summary')" style="color:var(--blue);font-size:13px;font-weight:600;cursor:pointer">See full recommendation →</span>
+            </div>
+          </div>
+
           <!-- Desktop lower row -->
           <div class="home-lower">
             <!-- Quick actions -->
@@ -466,18 +485,20 @@
                 <span class="qa-icon">✏️</span><span>Log Today's Numbers</span>
               </button>
               <button class="qa-btn qa-blue" onclick="sendSummaryNow()" id="home-summary-btn">
-                <span class="qa-icon">📩</span><span>Send Me a Summary Now</span>
+                <span class="qa-icon">📩</span><span>Get My AI Business Insight Now</span>
               </button>
+              <div style="font-size:12px;color:var(--muted);margin-top:4px;text-align:center">Instant profit analysis sent to your email</div>
               <div id="home-action-msg" class="msg"></div>
             </div>
 
-            <!-- How it works -->
+            <!-- Last 5 Days -->
             <div class="card">
-              <div class="card-title">How It Works</div>
-              <div class="how-step"><span>1️⃣</span><span>Log your daily sales and expenses here or on WhatsApp</span></div>
-              <div class="how-step"><span>2️⃣</span><span>AI analyses your numbers every evening</span></div>
-              <div class="how-step"><span>3️⃣</span><span>Get a detailed summary email by 7pm</span></div>
-              <div class="how-step"><span>4️⃣</span><span>Track your progress week by week</span></div>
+              <div class="card-title">Last 5 Days</div>
+              <div id="home-recent-empty" style="color:var(--muted);font-size:14px">No entries yet. Log more days to build your history.</div>
+              <div id="home-recent-list" style="display:none"></div>
+              <div id="home-recent-more" style="display:none;margin-top:10px">
+                <span onclick="switchTab('summary')" style="color:var(--blue);font-size:13px;font-weight:600;cursor:pointer">View full history →</span>
+              </div>
             </div>
           </div>
 
@@ -573,84 +594,75 @@
           <p>Your latest performance at a glance</p>
         </div>
         <div class="content">
-          <div class="summary-top">
-            <!-- Left: metrics -->
-            <div class="card">
-              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
-                <div class="card-title" style="margin:0">Latest Summary</div>
-                <div id="summary-date" style="font-size:12px;color:var(--muted)"></div>
-              </div>
-              <div id="summary-empty" class="empty-state" style="padding:20px 0">
-                <div class="empty-icon">📬</div>
-                <div class="empty-text">No entries yet. Log your first entry to see summary here.</div>
-              </div>
-              <div id="summary-data" style="display:none">
-                <div class="grid-2" style="gap:12px;margin-bottom:12px">
-                  <div class="stat-card" style="padding:16px">
-                    <div class="stat-label">Revenue</div><div class="stat-value c-blue" id="sum-revenue" style="font-size:22px">—</div></div>
-                  <div class="stat-card" style="padding:16px">
-                    <div class="stat-label">Expenses</div><div class="stat-value c-red" id="sum-expenses" style="font-size:22px">—</div></div>
-                  <div class="stat-card" style="padding:16px">
-                    <div class="stat-label">Net Profit</div><div class="stat-value" id="sum-profit" style="font-size:22px">—</div></div>
-                  <div class="stat-card" style="padding:16px">
-                    <div class="stat-label">Margin</div><div class="stat-value c-gold" id="sum-margin" style="font-size:22px">—</div></div>
-                  <div class="stat-card" style="padding:16px">
-                    <div class="stat-label">Customers</div><div class="stat-value c-navy" id="sum-customers" style="font-size:22px">—</div></div>
-                  <div class="stat-card" style="padding:16px">
-                    <div class="stat-label">Top Expense</div><div class="stat-value c-muted" id="sum-top-expense" style="font-size:18px">—</div></div>
-                </div>
-                <!-- Profit plain-English explanation -->
-                <div id="sum-profit-explain" style="display:none;font-size:13px;color:var(--text-sm);margin-bottom:12px;padding:10px 14px;background:var(--bg);border-radius:8px;line-height:1.5"></div>
 
-                <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">
-                  <span class="health-pill" id="sum-health-pill">—</span>
-                  <span id="sum-streak-row" style="display:none;font-size:13px;color:var(--muted)"></span>
-                </div>
-                <div id="sum-low-stock"></div>
-                <!-- Data completeness -->
-                <div id="sum-completeness" style="display:none;margin-top:12px;padding:10px 14px;background:#F7FAFC;border:1px solid var(--border);border-radius:8px;font-size:13px;color:var(--text-sm)"></div>
-                <!-- Expense breakdown detail -->
-                <div id="sum-expense-breakdown" style="display:none;margin-top:14px">
-                  <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:8px">Expense Breakdown</div>
-                  <div id="sum-expense-breakdown-list"></div>
-                </div>
-              </div>
+          <!-- GROUP 1 — Performance -->
+          <div class="card" style="margin-bottom:20px">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px">
+              <div class="card-title" style="margin:0">Latest Summary</div>
+              <div id="summary-date" style="font-size:12px;color:var(--muted)"></div>
             </div>
-
-            <!-- Right: AI + history + inventory -->
-            <div style="display:flex;flex-direction:column;gap:20px">
-              <div class="card">
-                <div class="card-title">AI Recommendation</div>
-                <div id="sum-ai-empty" style="color:var(--muted);font-size:14px">Submit an entry to receive your AI recommendation.</div>
-                <div id="sum-ai-box" style="display:none">
-                  <div class="ai-risk">
-                    <div class="ai-risk-label">⚠️ Risk</div>
-                    <div id="sum-ai-risk" style="font-size:14px;color:#742A2A">—</div>
-                  </div>
-                  <div class="ai-actions">
-                    <strong style="font-size:13px;color:var(--text-sm)">Actions to take:</strong>
-                    <ol id="sum-ai-actions" style="margin-top:8px"></ol>
-                  </div>
-                </div>
+            <div id="summary-empty" class="empty-state" style="padding:20px 0">
+              <div class="empty-icon">📬</div>
+              <div class="empty-text">No entries yet. Log your first entry to see your summary.</div>
+            </div>
+            <div id="summary-data" style="display:none">
+              <div class="grid-3" style="gap:10px;margin-bottom:10px">
+                <div class="stat-card" style="padding:14px"><div class="stat-label">Revenue</div><div class="stat-value c-blue" id="sum-revenue" style="font-size:20px">—</div></div>
+                <div class="stat-card" style="padding:14px"><div class="stat-label">Expenses</div><div class="stat-value c-red" id="sum-expenses" style="font-size:20px">—</div></div>
+                <div class="stat-card" style="padding:14px"><div class="stat-label">Net Profit</div><div class="stat-value" id="sum-profit" style="font-size:20px">—</div></div>
               </div>
-
-              <div class="card" id="sum-monthly-card" style="display:none">
-                <div class="card-title">Month vs Last Month</div>
-                <div id="sum-monthly-content"></div>
+              <div class="grid-3" style="gap:10px;margin-bottom:14px">
+                <div class="stat-card" style="padding:14px"><div class="stat-label">Margin</div><div class="stat-value c-gold" id="sum-margin" style="font-size:20px">—</div></div>
+                <div class="stat-card" style="padding:14px"><div class="stat-label">Customers</div><div class="stat-value c-navy" id="sum-customers" style="font-size:20px">—</div></div>
+                <div class="stat-card" style="padding:14px"><div class="stat-label">Top Expense</div><div class="stat-value c-muted" id="sum-top-expense" style="font-size:16px">—</div></div>
               </div>
+              <div id="sum-profit-explain" style="display:none;font-size:13px;color:var(--text-sm);margin-bottom:12px;padding:10px 14px;background:var(--bg);border-radius:8px;line-height:1.5"></div>
+              <div style="margin-bottom:8px"><span class="health-pill" id="sum-health-pill">—</span></div>
+              <div id="sum-low-stock"></div>
+            </div>
+          </div>
 
-              <div class="card">
-                <div class="card-title">Entry History</div>
-                <div id="history-empty" style="color:var(--muted);font-size:14px">No entries yet.</div>
-                <div id="history-list" style="display:none"></div>
+          <!-- GROUP 2 — AI Recommendation -->
+          <div class="card" style="margin-bottom:20px">
+            <div class="card-title">💡 AI Recommendation</div>
+            <div id="sum-ai-empty" style="color:var(--muted);font-size:14px">Submit an entry to receive your AI recommendation.</div>
+            <div id="sum-ai-box" style="display:none">
+              <div class="ai-risk">
+                <div class="ai-risk-label">⚠️ Risk</div>
+                <div id="sum-ai-risk" style="font-size:14px;color:#742A2A">—</div>
               </div>
-
-              <div class="card" id="sum-inventory-card" style="display:none">
-                <div class="card-title">Current Inventory</div>
-                <div id="sum-inventory-list"></div>
+              <div class="ai-actions">
+                <strong style="font-size:13px;color:var(--text-sm)">Actions to take:</strong>
+                <ol id="sum-ai-actions" style="margin-top:8px"></ol>
               </div>
             </div>
           </div>
+
+          <!-- GROUP 3 — Where Your Money Went -->
+          <div class="card" id="sum-expense-breakdown-card" style="display:none;margin-bottom:20px">
+            <div class="card-title">Where Your Money Went</div>
+            <div id="sum-expense-breakdown-list"></div>
+          </div>
+
+          <!-- GROUP 4 — Month Comparison -->
+          <div class="card" id="sum-monthly-card" style="display:none;margin-bottom:20px">
+            <div class="card-title">This Month vs Last Month</div>
+            <div id="sum-monthly-content"></div>
+          </div>
+
+          <!-- GROUP 5 — Stock Levels (hidden if no inventory) -->
+          <div class="card" id="sum-inventory-card" style="display:none;margin-bottom:20px">
+            <div class="card-title">Stock Levels</div>
+            <div id="sum-inventory-list"></div>
+          </div>
+
+          <!-- GROUP 6 — Entry History -->
+          <div class="card">
+            <div class="card-title">Entry History</div>
+            <div id="history-empty" style="color:var(--muted);font-size:14px">No entries yet.</div>
+            <div id="history-list" style="display:none"></div>
+          </div>
+
         </div>
       </div>
 
@@ -721,6 +733,12 @@
               <div class="card-title">Export Data</div>
               <p style="font-size:14px;color:var(--muted);margin-bottom:16px">Download all your transaction history as a spreadsheet-ready CSV file.</p>
               <button class="btn btn-outline-blue btn-block" onclick="exportCSV()">⬇️ Download My Data (CSV)</button>
+            </div>
+
+            <!-- Data quality -->
+            <div class="card">
+              <div class="card-title">Data Quality</div>
+              <div id="set-completeness-content" style="font-size:14px;color:var(--muted)">Loading…</div>
             </div>
 
             <!-- Sign out -->
@@ -944,6 +962,58 @@ async function loadHomeSnapshot() {
       const topCat = s.topExpense ? s.topExpense.category + ' (' + fmtNaira(s.topExpense.amount) + ')' : '—';
       document.getElementById('ds-expense').textContent   = topCat;
       document.getElementById('ds-customers').textContent = s.customers || 0;
+
+      // Plain English profit sentence
+      const plainEl = document.getElementById('home-plain-english');
+      if (plainEl) {
+        const profitNum = parseFloat(s.profit) || 0;
+        const topName   = s.topExpense?.category || '';
+        plainEl.textContent = profitNum >= 0
+          ? '✅ You earned ' + fmtNaira(profitNum) + ' more than you spent today.'
+          : '⚠️ You spent ' + fmtNaira(Math.abs(profitNum)) + ' more than you earned today. Your biggest cost was ' + (topName || 'expenses') + '.';
+        plainEl.style.display = 'block';
+      }
+    } else {
+      const plainEl = document.getElementById('home-plain-english');
+      if (plainEl) {
+        plainEl.textContent  = 'No entry yet today. Log your numbers below.';
+        plainEl.style.display = 'block';
+      }
+    }
+
+    // AI Insight preview — use cached rec from last entry submission
+    const cachedAI = localStorage.getItem('bizpulse_ai_rec');
+    const insightContent = document.getElementById('home-ai-insight-content');
+    const insightLink    = document.getElementById('home-ai-insight-link');
+    if (cachedAI && insightContent) {
+      try {
+        const rec = JSON.parse(cachedAI);
+        if (rec.risk) {
+          insightContent.textContent  = rec.risk;
+          insightContent.style.color  = 'var(--text-sm)';
+          if (insightLink) insightLink.style.display = 'block';
+        }
+      } catch(e) {}
+    }
+
+    // Last 5 Days
+    const recent5 = (data.history || []).slice(0, 5);
+    const recentEmpty = document.getElementById('home-recent-empty');
+    const recentList  = document.getElementById('home-recent-list');
+    const recentMore  = document.getElementById('home-recent-more');
+    if (recent5.length > 0 && recentList) {
+      recentEmpty.style.display = 'none';
+      recentList.style.display  = 'block';
+      recentList.innerHTML = recent5.map(r => {
+        const p   = parseFloat(r.profit) || 0;
+        const cls = p >= 0 ? 'c-green' : 'c-red';
+        const sgn = p >= 0 ? '+' : '';
+        return '<div class="history-row"><div><div class="history-date">' + fmtDate(r.date) + '</div><div class="history-rev">' + fmtNaira(r.revenue) + '</div></div><div class="history-profit ' + cls + '">' + sgn + fmtNaira(p) + '</div></div>';
+      }).join('');
+      if (recentMore && (data.history || []).length >= 5) recentMore.style.display = 'block';
+      if (recent5.length < 5 && recentMore) {
+        recentList.innerHTML += '<div style="font-size:13px;color:var(--muted);padding-top:8px">Log more days to build your history.</div>';
+      }
     }
 
     // Mobile snapshot
@@ -1090,6 +1160,8 @@ async function submitEntry() {
     } else {
       showMsg(msg, 'success', '\u2705 Saved! Revenue: ' + fmtNaira(data.entry.revenue) + ' | Profit: ' + fmtNaira(data.entry.profit) + ' (' + parseFloat(data.entry.margin).toFixed(1) + '%) | Summary arrives at 7pm \uD83C\uDFAF');
       if (data.streak) { updateStreakBanner(data.streak); if (currentUser) currentUser.streak = data.streak; }
+      // Cache AI rec for Home screen preview
+      if (data.aiRec) localStorage.setItem('bizpulse_ai_rec', JSON.stringify(data.aiRec));
       // Show AI recommendation if returned
       const aiBox = document.getElementById('entry-ai-box');
       if (data.aiRec && aiBox) {
@@ -1161,23 +1233,9 @@ async function loadSummary() {
       profExplain.style.display = 'block';
     }
 
-    // Streak on summary screen
-    const streakRow = document.getElementById('sum-streak-row');
-    if (streakRow && currentUser?.streak) {
-      streakRow.textContent = '\uD83D\uDD25 ' + (currentUser.streak) + '-day streak';
-      streakRow.style.display = 'inline';
-    }
-
-    // Data completeness
-    const compEl = document.getElementById('sum-completeness');
-    if (compEl && data.completeness) {
-      const c = data.completeness;
-      compEl.innerHTML = '\uD83D\uDCCA <strong>Data quality: ' + c.percentage + '%</strong> \u2014 based on ' + c.daysWithExpenses + ' of your last ' + c.totalDays + ' entries having full expense breakdown.';
-      compEl.style.display = 'block';
-    }
-
     // AI Recommendation
     if (data.aiRec) {
+      localStorage.setItem('bizpulse_ai_rec', JSON.stringify(data.aiRec));
       const aiEmpty = document.getElementById('sum-ai-empty');
       const aiBox   = document.getElementById('sum-ai-box');
       if (aiEmpty) aiEmpty.style.display = 'none';
@@ -1188,61 +1246,77 @@ async function loadSummary() {
       if (actEl) actEl.innerHTML = (data.aiRec.actions || []).map(a => '<li>' + a + '</li>').join('');
     }
 
+    // Expense breakdown — bar chart style
+    const eb       = s.expenseBreakdown || {};
+    const ebCard   = document.getElementById('sum-expense-breakdown-card');
+    const ebList   = document.getElementById('sum-expense-breakdown-list');
+    const ebEntries = Object.entries(eb).filter(([,v]) => parseFloat(v) > 0).sort(([,a],[,b]) => b - a);
+    const ebTotal   = ebEntries.reduce((sum, [,v]) => sum + parseFloat(v), 0);
+    if (ebEntries.length > 0 && ebTotal > 0 && ebCard) {
+      ebCard.style.display = 'block';
+      ebList.innerHTML = ebEntries.map(([cat, amt]) => {
+        const pct = Math.round((parseFloat(amt) / ebTotal) * 100);
+        return '<div class="exp-bar-row"><div class="exp-bar-label"><span>' + cat + '</span><span>' + pct + '% &middot; ' + fmtNaira(amt) + '</span></div><div class="exp-bar-track"><div class="exp-bar-fill" style="width:' + pct + '%"></div></div></div>';
+      }).join('');
+    } else if (ebCard) {
+      ebCard.style.display = 'none';
+    }
+
     // Monthly comparison
     const monthlyCard = document.getElementById('sum-monthly-card');
     const monthlyEl   = document.getElementById('sum-monthly-content');
     if (monthlyCard && monthlyEl && data.monthly) {
-      const m    = data.monthly;
-      const now  = new Date();
+      const m         = data.monthly;
+      const now       = new Date();
       const thisLabel = now.toLocaleString('en-NG', { month: 'long', timeZone: 'Africa/Lagos' });
       const lastDate  = new Date(now.getFullYear(), now.getMonth() - 1, 1);
       const lastLabel = lastDate.toLocaleString('en-NG', { month: 'long' });
-      function arrow(cur, prev) {
-        if (prev === 0) return '';
-        const pct = Math.round(((cur - prev) / prev) * 100);
-        return pct >= 0
-          ? ' <span style="color:var(--green);font-weight:700">\u2191 ' + pct + '%</span>'
-          : ' <span style="color:var(--red);font-weight:700">\u2193 ' + Math.abs(pct) + '%</span>';
-      }
-      monthlyEl.innerHTML =
-        '<div style="font-size:12px;color:var(--muted);margin-bottom:10px">' + thisLabel + ' vs ' + lastLabel + '</div>' +
-        '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;font-size:13px">' +
-          '<div style="text-align:center"><div style="color:var(--muted);font-size:11px;margin-bottom:4px">REVENUE</div>' +
-            '<div style="font-weight:700;color:var(--blue)">' + fmtNaira(m.thisMonth.revenue) + arrow(m.thisMonth.revenue, m.lastMonth.revenue) + '</div>' +
-            '<div style="color:var(--muted);font-size:12px">' + fmtNaira(m.lastMonth.revenue) + '</div></div>' +
-          '<div style="text-align:center"><div style="color:var(--muted);font-size:11px;margin-bottom:4px">EXPENSES</div>' +
-            '<div style="font-weight:700;color:var(--red)">' + fmtNaira(m.thisMonth.expenses) + arrow(m.lastMonth.expenses, m.thisMonth.expenses) + '</div>' +
-            '<div style="color:var(--muted);font-size:12px">' + fmtNaira(m.lastMonth.expenses) + '</div></div>' +
-          '<div style="text-align:center"><div style="color:var(--muted);font-size:11px;margin-bottom:4px">PROFIT</div>' +
-            '<div style="font-weight:700;' + (m.thisMonth.profit >= 0 ? 'color:var(--green)' : 'color:var(--red)') + '">' + fmtNaira(m.thisMonth.profit) + arrow(m.thisMonth.profit, m.lastMonth.profit) + '</div>' +
-            '<div style="color:var(--muted);font-size:12px">' + fmtNaira(m.lastMonth.profit) + '</div></div>' +
-        '</div>';
+      const hasLastMonth = m.lastMonth.revenue > 0 || m.lastMonth.expenses > 0;
       monthlyCard.style.display = 'block';
+      if (!hasLastMonth) {
+        monthlyEl.innerHTML = '<div style="color:var(--muted);font-size:14px;font-style:italic;padding:4px 0">No data yet for ' + lastLabel + '. Keep logging daily to unlock your monthly comparison next month.</div>';
+      } else {
+        function arrow(cur, prev) {
+          if (!prev) return '';
+          const pct = Math.round(((cur - prev) / prev) * 100);
+          return pct >= 0
+            ? ' <span style="color:var(--green);font-weight:700">\u2191 ' + pct + '%</span>'
+            : ' <span style="color:var(--red);font-weight:700">\u2193 ' + Math.abs(pct) + '%</span>';
+        }
+        monthlyEl.innerHTML =
+          '<div style="font-size:12px;color:var(--muted);margin-bottom:10px">' + thisLabel + ' vs ' + lastLabel + '</div>' +
+          '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;font-size:13px">' +
+            '<div style="text-align:center"><div style="color:var(--muted);font-size:11px;margin-bottom:4px">REVENUE</div>' +
+              '<div style="font-weight:700;color:var(--blue)">' + fmtNaira(m.thisMonth.revenue) + arrow(m.thisMonth.revenue, m.lastMonth.revenue) + '</div>' +
+              '<div style="color:var(--muted);font-size:12px">' + fmtNaira(m.lastMonth.revenue) + '</div></div>' +
+            '<div style="text-align:center"><div style="color:var(--muted);font-size:11px;margin-bottom:4px">EXPENSES</div>' +
+              '<div style="font-weight:700;color:var(--red)">' + fmtNaira(m.thisMonth.expenses) + arrow(m.lastMonth.expenses, m.thisMonth.expenses) + '</div>' +
+              '<div style="color:var(--muted);font-size:12px">' + fmtNaira(m.lastMonth.expenses) + '</div></div>' +
+            '<div style="text-align:center"><div style="color:var(--muted);font-size:11px;margin-bottom:4px">PROFIT</div>' +
+              '<div style="font-weight:700;' + (m.thisMonth.profit >= 0 ? 'color:var(--green)' : 'color:var(--red)') + '">' + fmtNaira(m.thisMonth.profit) + arrow(m.thisMonth.profit, m.lastMonth.profit) + '</div>' +
+              '<div style="color:var(--muted);font-size:12px">' + fmtNaira(m.lastMonth.profit) + '</div></div>' +
+          '</div>';
+      }
     }
 
-    // Expense breakdown detail
-    const eb    = s.expenseBreakdown || {};
-    const ebDiv = document.getElementById('sum-expense-breakdown');
-    const ebList= document.getElementById('sum-expense-breakdown-list');
-    const ebEntries = Object.entries(eb).filter(([,v]) => parseFloat(v) > 0).sort(([,a],[,b]) => b - a);
-    if (ebEntries.length > 0) {
-      ebDiv.style.display = 'block';
-      ebList.innerHTML = ebEntries.map(([cat, amt]) =>
-        '<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);font-size:14px"><span>' + cat + '</span><span style="font-weight:600">' + fmtNaira(amt) + '</span></div>'
-      ).join('');
-    } else {
-      ebDiv.style.display = 'none';
-    }
-
-    // Current inventory
+    // Stock Levels — with 🟢🟡🔴 indicators
     const invCard = document.getElementById('sum-inventory-card');
     const invList = document.getElementById('sum-inventory-list');
-    if (data.stock?.length > 0) {
+    if (data.stock?.length > 0 && invCard) {
       invCard.style.display = 'block';
-      invList.innerHTML = data.stock.map(i =>
-        '<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);font-size:14px"><span>' + i.item_name + '</span><span style="font-weight:600">' + parseFloat(i.current_balance).toLocaleString('en-NG') + ' units</span></div>'
-      ).join('');
-    } else {
+      invList.innerHTML = data.stock.map(i => {
+        const bal = parseFloat(i.current_balance);
+        const tot = parseFloat(i.total_received) || 0;
+        let icon = '\uD83D\uDFE2'; let status = 'healthy';
+        if (bal === 0)                              { icon = '\uD83D\uDD34'; status = 'out of stock'; }
+        else if (tot > 0 && bal < tot * 0.20)       { icon = '\uD83D\uDFE1'; status = 'low stock'; }
+        else if (tot === 0 && bal <= parseFloat(i.low_stock_threshold || 20)) { icon = '\uD83D\uDFE1'; status = 'low stock'; }
+        return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);font-size:14px">' +
+          '<span>' + icon + ' ' + i.item_name + '</span>' +
+          '<span style="font-weight:600">' + bal.toLocaleString('en-NG') + ' units <span style="color:var(--muted);font-weight:400;font-size:12px">(' + status + ')</span></span>' +
+          '</div>';
+      }).join('');
+    } else if (invCard) {
       invCard.style.display = 'none';
     }
   } catch(e) {}
@@ -1265,7 +1339,7 @@ async function sendSummaryNow() {
 }
 
 // ── Settings ───────────────────────────────────────────
-function populateSettings() {
+async function populateSettings() {
   if (!currentUser) { const id = localStorage.getItem('bizpulse_user_id'); if (id) loadUser(id).then(() => populateSettings()); return; }
   document.getElementById('set-name').value     = currentUser.name      || '';
   document.getElementById('set-email').value    = currentUser.email     || '';
@@ -1274,6 +1348,21 @@ function populateSettings() {
   for (const o of bt.options) { if (o.value === currentUser.biz_type) { o.selected = true; break; } }
   const waNum = document.getElementById('settings-wa-number');
   if (waNum) waNum.textContent = currentUser.whatsapp_number || '+15551676111';
+  // Data quality
+  try {
+    const userId = localStorage.getItem('bizpulse_user_id');
+    const res    = await fetch('/api/summary/latest?userId=' + userId);
+    const data   = await res.json();
+    const compEl = document.getElementById('set-completeness-content');
+    if (compEl && data.completeness) {
+      const c = data.completeness;
+      if (c.totalDays === 0) {
+        compEl.textContent = 'No entries yet. Start logging to see your data quality.';
+      } else {
+        compEl.innerHTML = '\uD83D\uDCCA <strong>Data quality: ' + c.percentage + '%</strong> \u2014 ' + c.daysWithExpenses + ' of your last ' + c.totalDays + ' entries have full expense breakdown.';
+      }
+    }
+  } catch(e) {}
 }
 async function saveSettings() {
   const userId = localStorage.getItem('bizpulse_user_id');
