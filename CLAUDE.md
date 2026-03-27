@@ -577,14 +577,6 @@ If it is not in the Phase 1 list above — do not build it. Note it for Phase 2.
 - Can add up to 5 test recipient numbers manually in Meta dashboard
 - Full public launch blocked until Meta verification approved
 
-**Meta WhatsApp status:**
-- Test number working
-- Token expires every 24 hours — must regenerate daily
-- Meta Business verification in progress
-- Using The Tosin Ilesanmi Data Academy CAC for verification
-- Can add up to 5 test recipient numbers manually
-- Full public launch blocked until Meta verification approved
-
 ---
 
 ## FINAL REMINDER

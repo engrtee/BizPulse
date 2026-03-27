@@ -836,7 +836,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // ── Layout (desktop vs mobile) ─────────────────────
 function applyLayout() {
-  const desk = isDesktop();
+  const desk   = isDesktop();
+  const onAuth = document.getElementById('screen-register')?.classList.contains('active');
+
+  // On the register/login screen — hide all navigation regardless of screen size
+  if (onAuth) {
+    document.getElementById('sidebar').style.display    = 'none';
+    document.getElementById('top-bar').style.display    = 'none';
+    document.getElementById('bottom-nav').style.display = 'none';
+    document.getElementById('main').style.marginLeft    = '0';
+    document.getElementById('main').style.paddingTop    = '0';
+    document.getElementById('main').style.paddingBottom = '0';
+    return;
+  }
+
   document.getElementById('sidebar').style.display    = desk ? 'flex' : 'none';
   document.getElementById('top-bar').style.display    = desk ? 'none' : 'flex';
   document.getElementById('bottom-nav').style.display = desk ? 'none' : 'flex';
