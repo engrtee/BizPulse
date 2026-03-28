@@ -954,9 +954,9 @@ function updateStreakBanner(streak) {
 function enterApp() {
   const userId = localStorage.getItem('bizpulse_user_id');
   if (!userId) { showRegisterScreen(); return; }
+  switchTab('home');   // removes active from screen-register before applyLayout checks it
   applyLayout();
   updateHomeGreeting();
-  switchTab('home');
 }
 
 // ── Home ──────────────────────────────────────────────
