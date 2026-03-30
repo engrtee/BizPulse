@@ -111,29 +111,46 @@ Rules:
 /**
  * Generate a personalised daily AI recommendation for the evening email.
  *
- * @param {object} summaryData  { revenue, totalExpenses, profit, margin, healthScore, topExpense, customers, date }
- * @param {object} user         User record (name, biz_type, state)
+ * @param {object} summaryData  { revenue, totalExpenses, profit, margin, healthScore, topExpense, expenseBreakdown, customers, date }
+ * @param {object} user         User record (name, biz_type, state, streak)
  * @returns {object}            { risk: string, actions: string[] }
  */
 async function generateRecommendation(summaryData, user) {
-  const { revenue, totalExpenses, profit, margin, topExpense, customers, date } = summaryData;
-  const streak      = user.streak || 0;
-  const bizType     = user.biz_type || 'Retail';
+  const { revenue, totalExpenses, profit, margin, topExpense, expenseBreakdown, customers, date } = summaryData;
+  const streak       = user.streak || 0;
+  const bizType      = user.biz_type || 'Retail';
   const isProfitable = parseFloat(profit) >= 0;
-  const topCat      = topExpense?.category || 'General expenses';
-  const topAmt      = topExpense?.amount   || 0;
-  const marginVal   = parseFloat(margin).toFixed(1);
+  const topCat       = topExpense?.category || 'General expenses';
+  const topAmt       = topExpense?.amount   || 0;
+  const marginVal    = parseFloat(margin).toFixed(1);
+
+  // Build an expense breakdown section if available
+  const breakdownLines = expenseBreakdown && Object.keys(expenseBreakdown).length > 0
+    ? Object.entries(expenseBreakdown)
+        .sort(([,a],[,b]) => b - a)
+        .map(([cat, amt]) => `  - ${cat}: ₦${Number(amt).toLocaleString('en-NG')}`)
+        .join('\n')
+    : '  (no breakdown available)';
+
+  // Tailor the customer label by business type
+  const isService = /service|consult|technology|advertising|education|photography|project/i.test(bizType);
+  const custLabel = isService ? 'Clients Served' : 'Customers Today';
 
   const prompt = `A Nigerian ${bizType} business recorded:
 Revenue: ₦${Number(revenue).toLocaleString('en-NG')}
-Expenses: ₦${Number(totalExpenses).toLocaleString('en-NG')}
+Total Expenses: ₦${Number(totalExpenses).toLocaleString('en-NG')}
 Net Profit: ₦${Number(profit).toLocaleString('en-NG')}
 Profit Margin: ${marginVal}%
-Top Expense: ${topCat} at ₦${Number(topAmt).toLocaleString('en-NG')}
-Customers Today: ${customers}
-Days logged streak: ${streak}
+${custLabel}: ${customers}
+Consecutive Days Tracked: ${streak}
 
+Expense Breakdown:
+${breakdownLines}
+
+Top Expense Category: ${topCat} at ₦${Number(topAmt).toLocaleString('en-NG')}
 The business is ${isProfitable ? 'profitable' : 'loss-making'} today.
+
+${isService ? `Note: This is a service business — "Stock" costs are likely materials/supplies, not physical inventory. "Staff Wages" are a primary cost driver.` : ''}
 
 Respond in this exact JSON format — no markdown, no code blocks, just JSON:
 {
@@ -149,8 +166,9 @@ Rules:
 - Reference the actual top expense category and margin percentage in the risk sentence.
 - Reference their business type (${bizType}) in at least one action.
 - Use Nigerian business context (naira, local market conditions).
-- Keep the total response under 100 words.
-- Actions must be actionable this week, not generic.`;
+- Keep the total response under 120 words.
+- Actions must be actionable this week, not generic.
+- Never give generic advice like "monitor your expenses" — always reference the actual numbers.`;
 
   try {
     const model = getClient().getGenerativeModel({ model: 'gemini-2.0-flash' });

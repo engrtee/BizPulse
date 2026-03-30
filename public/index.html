@@ -275,13 +275,221 @@
     @keyframes spin { to { transform: rotate(360deg); } }
     .spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid rgba(255,255,255,.4); border-top-color: #fff; border-radius: 50%; animation: spin .7s linear infinite; vertical-align: middle; margin-right: 6px; }
 
-    /* ══ REGISTER (full screen, no sidebar) ══════════ */
-    #screen-register { min-height: 100vh; background: var(--bg); }
-    .reg-wrap { max-width: 480px; margin: 0 auto; padding: 0 0 40px; }
-    .reg-hero { background: linear-gradient(135deg, var(--navy) 0%, var(--blue) 100%); padding: 40px 28px 32px; color: #fff; }
-    .reg-hero h1 { font-size: 30px; line-height: 1.2; margin-bottom: 10px; }
-    .reg-hero p  { font-size: 14px; color: #BEE3F8; line-height: 1.6; }
-    .reg-form { padding: 28px 20px 0; }
+    /* ══ REGISTER — Full-Screen Two-Column ═══════════ */
+    #screen-register { min-height: 100vh; }
+    .reg-layout { display: flex; min-height: 100vh; }
+
+    /* Left column */
+    .reg-left {
+      width: 58%; flex-shrink: 0;
+      background: linear-gradient(145deg, #0A1F3D 0%, #0F2744 40%, #1A3A6B 100%);
+      padding: 64px 56px;
+      display: flex; flex-direction: column; justify-content: center;
+      position: relative; overflow: hidden;
+    }
+    .reg-deco-1, .reg-deco-2, .reg-deco-3 { position: absolute; border-radius: 50%; pointer-events: none; }
+    .reg-deco-1 { top: -100px; right: -100px; width: 400px; height: 400px; background: rgba(255,255,255,0.03); }
+    .reg-deco-2 { bottom: -150px; left: -80px; width: 350px; height: 350px; background: rgba(42,107,176,0.15); }
+    .reg-deco-3 { top: 40%; right: -60px; width: 200px; height: 200px; background: rgba(26,122,74,0.1); }
+    .reg-left-inner { position: relative; z-index: 1; display: flex; flex-direction: column; height: 100%; }
+    .reg-logo-block { margin-bottom: 52px; }
+    .reg-logo-name { font-family: 'DM Serif Display', serif; font-size: 28px; color: #fff; }
+    .reg-logo-tagline { font-size: 13px; color: rgba(255,255,255,0.55); letter-spacing: 0.5px; margin-top: 3px; }
+    .reg-hook-pill {
+      display: inline-block;
+      background: rgba(26,122,74,0.25); border: 1px solid rgba(26,122,74,0.5);
+      padding: 6px 14px; border-radius: 20px;
+      font-size: 12px; color: #68D391; font-weight: 600; letter-spacing: 0.5px;
+      margin-bottom: 16px;
+    }
+    .reg-headline { font-family: 'DM Serif Display', serif; font-size: 42px; color: #fff; line-height: 1.15; margin-bottom: 20px; }
+    .reg-subcopy { font-size: 17px; color: rgba(255,255,255,0.72); line-height: 1.7; margin-bottom: 44px; }
+    .reg-demo-card {
+      background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 16px; padding: 24px 28px; margin-bottom: 36px;
+      backdrop-filter: blur(10px);
+    }
+    .reg-demo-header { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+    .reg-demo-wa-dot { width: 20px; height: 20px; border-radius: 50%; background: #25D366; flex-shrink: 0; display: inline-block; }
+    .reg-demo-label { font-size: 12px; color: rgba(255,255,255,0.6); text-transform: uppercase; letter-spacing: 0.8px; }
+    .reg-bubble-out {
+      display: inline-block;
+      background: #1A7A4A; border-radius: 18px 18px 4px 18px;
+      padding: 14px 18px; font-size: 15px; color: #fff;
+      font-family: 'Courier New', Courier, monospace;
+      margin-bottom: 8px;
+    }
+    .reg-bubble-in {
+      background: rgba(255,255,255,0.1); border-radius: 4px 18px 18px 18px;
+      padding: 14px 18px; font-size: 14px; color: #fff; margin-bottom: 16px;
+    }
+    .reg-demo-number { font-size: 18px; font-weight: 700; color: #fff; margin-bottom: 4px; }
+    .reg-demo-hint { font-size: 13px; color: rgba(255,255,255,0.5); }
+    .reg-proof-list { margin-bottom: 44px; }
+    .reg-proof-row { display: flex; align-items: flex-start; gap: 14px; margin-bottom: 16px; font-size: 15px; color: rgba(255,255,255,0.8); line-height: 1.4; }
+    .reg-proof-icon {
+      width: 36px; height: 36px; border-radius: 50%;
+      background: rgba(255,255,255,0.08);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px; flex-shrink: 0;
+    }
+    .reg-social-proof {
+      margin-top: auto; padding-top: 32px;
+      border-top: 1px solid rgba(255,255,255,0.1);
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .reg-social-left { display: flex; align-items: center; gap: 12px; }
+    .reg-avatars { display: flex; }
+    .reg-avatar {
+      width: 34px; height: 34px; border-radius: 50%;
+      background: #0F2744; border: 2px solid rgba(255,255,255,0.3);
+      color: #fff; font-size: 12px; font-weight: 700;
+      display: flex; align-items: center; justify-content: center;
+      margin-left: -10px;
+    }
+    .reg-avatars .reg-avatar:first-child { margin-left: 0; }
+    .reg-social-left > span { font-size: 14px; color: rgba(255,255,255,0.65); max-width: 200px; line-height: 1.4; }
+    .reg-stars { font-size: 14px; color: #B7791F; letter-spacing: 2px; }
+
+    /* Right column */
+    .reg-right {
+      flex: 1; background: #fff; overflow-y: auto;
+      display: flex; flex-direction: column; justify-content: center;
+      min-height: 100vh;
+      box-shadow: -20px 0 60px rgba(0,0,0,0.15);
+    }
+    .reg-mobile-hdr { display: none; }
+    .reg-form-wrap { padding: 64px 52px; }
+    .reg-form-title { font-family: 'DM Serif Display', serif; font-size: 32px; color: #0F2744; margin-bottom: 6px; }
+    .reg-form-sub { font-size: 14px; color: #718096; margin-bottom: 32px; }
+    .reg-tabs-outer { margin-bottom: 32px; }
+    .reg-tabs-inner { display: inline-flex; background: #F0F4FA; border-radius: 10px; padding: 4px; }
+    .reg-tab {
+      border: none; border-radius: 8px;
+      padding: 10px 28px; font-size: 14px; font-weight: 600;
+      cursor: pointer; transition: all 0.2s; font-family: 'DM Sans', sans-serif;
+    }
+    .reg-step-dots { display: flex; gap: 8px; margin-bottom: 28px; }
+    .reg-dot { width: 8px; height: 8px; border-radius: 50%; background: #E2E8F0; }
+    .reg-dot.active { background: #0F2744; }
+    .reg-section-lbl { font-size: 12px; color: #718096; text-transform: uppercase; letter-spacing: 0.8px; font-weight: 600; margin-bottom: 20px; }
+    .reg-label { display: block; font-size: 13px; font-weight: 600; color: #4A5568; margin-bottom: 6px; }
+    .reg-input {
+      width: 100%; padding: 13px 16px;
+      border: 1.5px solid #E2E8F0; border-radius: 10px;
+      font-size: 15px; color: #1A202C; background: #FAFBFC;
+      font-family: 'DM Sans', sans-serif; transition: all 0.2s; outline: none; display: block;
+    }
+    .reg-input:focus { border-color: #0F2744; background: #fff; box-shadow: 0 0 0 3px rgba(15,39,68,0.08); }
+    select.reg-input {
+      appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23718096' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+      background-repeat: no-repeat; background-position: right 14px center; padding-right: 40px;
+    }
+    .reg-field-hint { font-size: 13px; color: #718096; margin-top: 6px; }
+    .reg-field-secure { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #718096; margin-top: 4px; }
+    .reg-secure-dot { width: 8px; height: 8px; border-radius: 50%; background: #25D366; flex-shrink: 0; }
+    .reg-btn-primary {
+      width: 100%; padding: 15px; background: #0F2744; color: #fff;
+      border: none; border-radius: 10px; font-size: 16px; font-weight: 600;
+      font-family: 'DM Sans', sans-serif; cursor: pointer; margin-top: 24px;
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+      transition: all 0.2s;
+    }
+    .reg-btn-primary:hover { background: #1A3A6B; transform: translateY(-1px); box-shadow: 0 4px 16px rgba(15,39,68,0.3); }
+    .reg-btn-primary:active { transform: translateY(0); box-shadow: none; }
+    .reg-btn-primary:disabled { opacity: 0.5; pointer-events: none; }
+    .reg-btn-activate {
+      width: 100%; padding: 15px; background: #1A7A4A; color: #fff;
+      border: none; border-radius: 10px; font-size: 16px; font-weight: 600;
+      font-family: 'DM Sans', sans-serif; cursor: pointer; margin-top: 24px;
+      display: flex; align-items: center; justify-content: center;
+      transition: all 0.2s;
+    }
+    .reg-btn-activate:hover { background: #155F3A; transform: translateY(-1px); box-shadow: 0 4px 16px rgba(26,122,74,0.3); }
+    .reg-btn-activate:active { transform: translateY(0); box-shadow: none; }
+    .reg-btn-activate:disabled { opacity: 0.5; pointer-events: none; }
+    .reg-free-lbl { text-align: center; font-size: 13px; color: #718096; margin-top: 12px; }
+    .reg-btn-back {
+      width: 100%; padding: 10px; background: transparent; color: #718096;
+      border: none; font-size: 14px; font-weight: 600;
+      font-family: 'DM Sans', sans-serif; cursor: pointer; margin-top: 8px; transition: color 0.2s;
+    }
+    .reg-btn-back:hover { color: #0F2744; }
+    .reg-login-desc { font-size: 15px; color: #718096; margin-bottom: 18px; margin-top: 8px; }
+    .reg-trust { display: flex; align-items: center; gap: 8px; font-size: 12px; color: #718096; margin-top: 24px; flex-wrap: wrap; }
+    .reg-trust-sep { color: #CBD5E0; }
+
+    /* Success — fixed full-screen overlay */
+    #reg-success {
+      position: fixed; inset: 0; z-index: 999;
+      background: linear-gradient(145deg, #0A1F3D 0%, #0F2744 40%, #1A3A6B 100%);
+      padding: 60px 20px 40px; overflow-y: auto;
+      text-align: center;
+    }
+    .reg-success-body { max-width: 520px; width: 100%; text-align: center; margin: 0 auto; }
+    .reg-check-wrap { width: 80px; height: 80px; margin: 0 auto 24px; }
+    .reg-check-svg { width: 80px; height: 80px; }
+    .reg-check-circle {
+      stroke: #25D366; stroke-width: 2;
+      stroke-dasharray: 166; stroke-dashoffset: 166;
+      animation: reg-draw-circle 0.6s ease-out forwards;
+    }
+    .reg-check-tick {
+      stroke: #25D366; stroke-width: 3.5;
+      stroke-linecap: round; stroke-linejoin: round;
+      stroke-dasharray: 48; stroke-dashoffset: 48;
+      animation: reg-draw-tick 0.4s 0.65s ease-out forwards;
+    }
+    @keyframes reg-draw-circle { to { stroke-dashoffset: 0; } }
+    @keyframes reg-draw-tick   { to { stroke-dashoffset: 0; } }
+    .reg-success-headline { font-family: 'DM Serif Display', serif; font-size: 36px; color: #fff; margin-bottom: 14px; }
+    .reg-success-sub { font-size: 18px; color: rgba(255,255,255,0.75); line-height: 1.6; margin-bottom: 32px; max-width: 480px; margin-left: auto; margin-right: auto; }
+    .reg-success-card {
+      background: #fff; border-radius: 16px; padding: 28px 36px;
+      max-width: 420px; margin: 0 auto 20px; text-align: center;
+    }
+    .reg-success-save-lbl { font-size: 13px; color: #718096; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }
+    .reg-success-num { font-size: 28px; font-weight: 700; color: #0F2744; margin-bottom: 20px; font-family: 'DM Serif Display', serif; }
+    .reg-success-wa-btn {
+      display: inline-flex; align-items: center; gap: 8px;
+      background: #1A7A4A; color: #fff; border-radius: 10px; padding: 14px 32px;
+      font-size: 16px; font-weight: 600; text-decoration: none;
+      margin-bottom: 20px; transition: background 0.2s; font-family: 'DM Sans', sans-serif;
+    }
+    .reg-success-wa-btn:hover { background: #155F3A; }
+    .reg-success-sample {
+      background: #F0F4FA; border-radius: 10px; padding: 16px 20px;
+      text-align: left; border-left: 3px solid #25D366;
+    }
+    .reg-success-sample-lbl { font-size: 12px; color: #718096; margin-bottom: 6px; }
+    .reg-success-sample-msg { font-size: 15px; color: #0F2744; font-family: 'Courier New', Courier, monospace; }
+    .reg-success-dash-link {
+      display: inline-block; background: transparent; color: #63B3ED;
+      font-size: 14px; font-weight: 600; border: none; cursor: pointer;
+      padding: 8px; font-family: 'DM Sans', sans-serif;
+    }
+    .reg-success-dash-link:hover { color: #90CDF4; }
+
+    /* Mobile overrides for register */
+    @media (max-width: 767px) {
+      .reg-layout { flex-direction: column; }
+      .reg-left { display: none; }
+      .reg-right { flex: 1; min-height: 100vh; box-shadow: none; justify-content: flex-start; }
+      .reg-mobile-hdr {
+        display: flex; height: 80px; flex-shrink: 0;
+        background: linear-gradient(145deg, #0A1F3D 0%, #0F2744 40%, #1A3A6B 100%);
+        padding: 0 20px; align-items: center; justify-content: space-between;
+      }
+      .reg-mobile-logo { font-family: 'DM Serif Display', serif; font-size: 22px; color: #fff; }
+      .reg-mobile-wa { font-size: 13px; color: #fff; text-decoration: none; font-weight: 500; }
+      .reg-form-wrap { padding: 24px 20px 40px; }
+      .reg-form-title { font-size: 26px; }
+      .reg-success-card { padding: 20px; }
+      .reg-success-headline { font-size: 28px; }
+      .reg-success-sub { font-size: 16px; }
+      .reg-success-num { font-size: 22px; }
+    }
 
     /* ══ HOME DESKTOP ════════════════════════════════ */
     .home-stats-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 20px; }
@@ -352,98 +560,221 @@
 
       <!-- ══════════════ REGISTER ══════════════ -->
       <div id="screen-register" class="screen active">
-        <div class="reg-wrap">
-          <div class="reg-hero">
-            <h1>Your Daily<br>Business Pulse</h1>
-            <p style="margin-top:8px">Track sales and expenses in 2 minutes.<br>Get AI-powered insights every evening automatically.</p>
-          </div>
+        <div class="reg-layout">
 
-          <!-- Tab switcher -->
-          <div style="display:flex;gap:0;margin-bottom:4px;border-radius:10px;overflow:hidden;border:1px solid var(--border)">
-            <button id="tab-register" onclick="switchAuthTab('register')"
-              style="flex:1;padding:10px;font-size:14px;font-weight:600;background:var(--navy);color:#fff;border:none;cursor:pointer;transition:background 0.15s">
-              New Account
-            </button>
-            <button id="tab-login" onclick="switchAuthTab('login')"
-              style="flex:1;padding:10px;font-size:14px;font-weight:600;background:#fff;color:var(--navy);border:none;cursor:pointer;transition:background 0.15s">
-              Login
-            </button>
-          </div>
+          <!-- LEFT COLUMN — Story / Branding -->
+          <div class="reg-left">
+            <div class="reg-deco-1"></div>
+            <div class="reg-deco-2"></div>
+            <div class="reg-deco-3"></div>
+            <div class="reg-left-inner">
 
-          <!-- Login form -->
-          <div id="reg-login" class="reg-form" style="display:none">
-            <p style="font-size:15px;color:var(--muted);margin-bottom:18px;margin-top:8px">Enter your email to access your account.</p>
-            <div class="form-group">
-              <label class="form-label">Email Address</label>
-              <input id="login-email" class="form-input" type="email" placeholder="you@gmail.com" />
-            </div>
-            <div id="login-msg" class="msg"></div>
-            <button class="btn btn-navy btn-block" style="margin-top:8px" onclick="loginWithEmail()">Access My Account →</button>
-          </div>
+              <div class="reg-logo-block">
+                <div class="reg-logo-name">BizPulse</div>
+                <div class="reg-logo-tagline">NIGERIA'S SME FINANCIAL OS</div>
+              </div>
 
-          <!-- Step 1 -->
-          <div id="reg-step-1" class="reg-form">
-            <div class="step-indicator" style="margin-top:24px">
-              <div class="step-dot active"></div><div class="step-dot"></div>
-            </div>
-            <p style="font-size:17px;font-weight:700;color:var(--navy);margin-bottom:18px">About You</p>
-            <div class="form-group"><label class="form-label">Your Name</label>
-              <input id="reg-name" class="form-input" type="text" placeholder="e.g. Amaka Obi" /></div>
-            <div class="form-group"><label class="form-label">Email Address</label>
-              <input id="reg-email" class="form-input" type="email" placeholder="you@gmail.com" /></div>
-            <div class="form-group">
-              <label class="form-label">WhatsApp Number <span style="color:var(--muted);font-weight:400">(optional)</span></label>
-              <input id="reg-phone" class="form-input" type="tel" placeholder="+234 801 234 5678" />
-            </div>
-            <div id="reg-step1-msg" class="msg"></div>
-            <button class="btn btn-navy btn-block" style="margin-top:8px" onclick="goToStep2()">Continue →</button>
-          </div>
+              <div class="reg-hook-pill">🇳🇬 Built for Nigerian businesses</div>
+              <h2 class="reg-headline">Your business numbers,<br>finally working<br>for you.</h2>
+              <p class="reg-subcopy">Send one WhatsApp message at the end of the day. BizPulse does the rest — tracking, analysis, and AI-powered insights delivered to your inbox every evening.</p>
 
-          <!-- Step 2 -->
-          <div id="reg-step-2" class="reg-form" style="display:none">
-            <div class="step-indicator" style="margin-top:24px">
-              <div class="step-dot active"></div><div class="step-dot active"></div>
-            </div>
-            <p style="font-size:17px;font-weight:700;color:var(--navy);margin-bottom:18px">Your Business</p>
-            <div class="form-group"><label class="form-label">Business Name</label>
-              <input id="reg-biz-name" class="form-input" type="text" placeholder="e.g. Amaka Fashion Store" /></div>
-            <div class="form-group"><label class="form-label">Business Type</label>
-              <select id="reg-biz-type" class="form-input">
-                <option value="">Select your business type</option>
-                <option>Food & Beverages</option><option>Retail / Trading</option>
-                <option>Fashion & Clothing</option><option>Beauty & Personal Care</option>
-                <option>Agriculture</option><option>Bakery / Food Production</option>
-                <option>Transport & Logistics</option><option>Professional Services</option>
-                <option>Technology</option><option>Education & Training</option>
-                <option>Furnishings & Supplies</option><option>Production / Manufacturing</option>
-                <option>Advertising / Marketing</option><option>WhatsApp Business</option>
-                <option>FMCG</option><option>Online Business / E-commerce</option><option>Other</option>
-              </select></div>
-            <div class="form-group"><label class="form-label">State / Location</label>
-              <input id="reg-state" class="form-input" type="text" placeholder="e.g. Lagos, Kano, Abuja" /></div>
-            <div id="reg-step2-msg" class="msg"></div>
-            <button class="btn btn-green btn-block" style="margin-top:8px" onclick="registerAndEnter()" id="connect-btn">
-              Create Account &amp; Enter Dashboard
-            </button>
-            <button class="btn btn-outline-blue btn-block" style="margin-top:10px" onclick="goToStep1()">← Back</button>
-          </div>
+              <!-- WhatsApp demo card -->
+              <div class="reg-demo-card">
+                <div class="reg-demo-header">
+                  <span class="reg-demo-wa-dot"></span>
+                  <span class="reg-demo-label">LIVE WhatsApp Example</span>
+                </div>
+                <div class="reg-bubble-out">sales 45k rent 5k stock 12k</div>
+                <div class="reg-bubble-in">
+                  ✅ Logged Amaka! 🔥 Day 14 streak<br><br>
+                  Revenue: &nbsp;&nbsp;₦45,000<br>
+                  Expenses: ₦17,000<br>
+                  Profit: &nbsp;&nbsp;&nbsp;₦28,000<br>
+                  Margin: &nbsp;&nbsp;&nbsp;62.2%<br><br>
+                  Top expense: Stock / Inventory<br>
+                  Full summary hits your inbox at 7pm 🎯
+                </div>
+                <div class="reg-demo-number">+234 803 527 3030</div>
+                <div class="reg-demo-hint">Your BizPulse WhatsApp number</div>
+              </div>
 
-          <!-- Success -->
-          <div id="reg-success" class="reg-form" style="display:none;padding-top:32px;text-align:center">
-            <div style="font-size:52px;margin-bottom:12px">✅</div>
-            <h2 style="font-size:22px;color:var(--navy);margin-bottom:8px" id="reg-success-title">You're all set!</h2>
-            <p style="color:var(--muted);margin-bottom:24px;font-size:14px">Your BizPulse account is active.</p>
-            <div class="card" style="text-align:left;margin:0 0 20px">
-              <div class="card-title">WhatsApp Activation</div>
-              <p style="font-size:14px;color:var(--text-sm);margin-bottom:10px">Save this number as a contact on WhatsApp:</p>
-              <div style="background:var(--bg);padding:12px 16px;border-radius:8px;font-weight:700;color:var(--navy);font-size:16px;margin-bottom:14px" id="bizpulse-number-display">+15551676111</div>
-              <p style="font-size:14px;color:var(--text-sm);margin-bottom:8px">Then send this message:</p>
-              <div style="background:var(--bg);padding:12px 16px;border-radius:8px;font-weight:600;color:var(--navy)">Hello BizPulse</div>
-              <p style="font-size:13px;color:var(--muted);margin-top:12px">We'll do the rest 🚀</p>
+              <!-- Proof points -->
+              <div class="reg-proof-list">
+                <div class="reg-proof-row">
+                  <div class="reg-proof-icon">💬</div>
+                  <div>Log revenue and expenses with a single WhatsApp message in natural Nigerian language</div>
+                </div>
+                <div class="reg-proof-row">
+                  <div class="reg-proof-icon">📊</div>
+                  <div>Receive an AI-powered daily summary with specific recommendations for your business type</div>
+                </div>
+                <div class="reg-proof-row">
+                  <div class="reg-proof-icon">🔥</div>
+                  <div>Build a streak and watch your business data tell the story of your growth</div>
+                </div>
+              </div>
+
+              <!-- Social proof -->
+              <div class="reg-social-proof">
+                <div class="reg-social-left">
+                  <div class="reg-avatars">
+                    <div class="reg-avatar">AM</div>
+                    <div class="reg-avatar">TK</div>
+                    <div class="reg-avatar">BC</div>
+                    <div class="reg-avatar">FO</div>
+                  </div>
+                  <span>Nigerian SME owners tracking their growth</span>
+                </div>
+                <div class="reg-stars">★★★★★</div>
+              </div>
+
+            </div><!-- /.reg-left-inner -->
+          </div><!-- /.reg-left -->
+
+          <!-- RIGHT COLUMN — Form -->
+          <div class="reg-right">
+
+            <!-- Mobile header (hidden on desktop) -->
+            <div class="reg-mobile-hdr">
+              <div class="reg-mobile-logo">BizPulse</div>
+              <a href="https://wa.me/2348035273030" class="reg-mobile-wa" target="_blank" rel="noopener">WhatsApp →</a>
             </div>
-            <button class="btn btn-navy btn-block" onclick="enterApp()">Go to Dashboard →</button>
+
+            <div class="reg-form-wrap">
+              <h1 class="reg-form-title">Get Started Free</h1>
+              <p class="reg-form-sub">Join Nigerian business owners who know their numbers.</p>
+
+              <!-- Tab switcher -->
+              <div class="reg-tabs-outer">
+                <div class="reg-tabs-inner">
+                  <button id="tab-register" class="reg-tab" onclick="switchAuthTab('register')"
+                    style="background:#0F2744;color:#fff;box-shadow:0 2px 8px rgba(0,0,0,0.15)">
+                    New Account
+                  </button>
+                  <button id="tab-login" class="reg-tab" onclick="switchAuthTab('login')"
+                    style="background:transparent;color:#718096">
+                    Login
+                  </button>
+                </div>
+              </div>
+
+              <!-- Login form -->
+              <div id="reg-login" style="display:none">
+                <p class="reg-login-desc">Enter your email to access your account.</p>
+                <div style="margin-bottom:20px">
+                  <label class="reg-label" for="login-email">Email Address</label>
+                  <input id="login-email" class="reg-input" type="email" placeholder="you@gmail.com" />
+                </div>
+                <div id="login-msg" class="msg"></div>
+                <button class="reg-btn-primary btn-navy" onclick="loginWithEmail()">Access My Account →</button>
+              </div>
+
+              <!-- Step 1 -->
+              <div id="reg-step-1">
+                <div class="reg-step-dots">
+                  <div class="reg-dot active"></div>
+                  <div class="reg-dot"></div>
+                </div>
+                <div class="reg-section-lbl">Step 1 of 2 — About You</div>
+
+                <div style="margin-bottom:20px">
+                  <label class="reg-label" for="reg-name">Your Name</label>
+                  <input id="reg-name" class="reg-input" type="text" placeholder="e.g. Amaka Obi" />
+                </div>
+                <div style="margin-bottom:20px">
+                  <label class="reg-label" for="reg-email">Email Address</label>
+                  <input id="reg-email" class="reg-input" type="email" placeholder="you@gmail.com" />
+                </div>
+                <div style="margin-bottom:20px">
+                  <label class="reg-label" for="reg-phone">WhatsApp Number <span style="font-weight:400;color:#A0AEC0">(optional)</span></label>
+                  <input id="reg-phone" class="reg-input" type="tel" placeholder="+234 801 234 5678" />
+                  <div class="reg-field-secure"><span class="reg-secure-dot"></span>We'll never share your number</div>
+                </div>
+
+                <div id="reg-step1-msg" class="msg"></div>
+                <button class="reg-btn-primary" onclick="goToStep2()">Continue →</button>
+                <div class="reg-free-lbl">Free forever · No credit card needed</div>
+              </div>
+
+              <!-- Step 2 -->
+              <div id="reg-step-2" style="display:none">
+                <div class="reg-step-dots">
+                  <div class="reg-dot active"></div>
+                  <div class="reg-dot active"></div>
+                </div>
+                <div class="reg-section-lbl">Step 2 of 2 — Your Business</div>
+
+                <div style="margin-bottom:20px">
+                  <label class="reg-label" for="reg-biz-name">Business Name</label>
+                  <input id="reg-biz-name" class="reg-input" type="text" placeholder="e.g. Amaka Fashion Store" />
+                </div>
+                <div style="margin-bottom:20px">
+                  <label class="reg-label" for="reg-biz-type">Business Type</label>
+                  <select id="reg-biz-type" class="reg-input">
+                    <option value="">Select your business type</option>
+                    <option>Food &amp; Beverages</option><option>Retail / Trading</option>
+                    <option>Fashion &amp; Clothing</option><option>Beauty &amp; Personal Care</option>
+                    <option>Agriculture</option><option>Bakery / Food Production</option>
+                    <option>Transport &amp; Logistics</option><option>Professional Services</option>
+                    <option>Photography</option><option>Gifts &amp; Souvenirs</option>
+                    <option>Projects &amp; Services</option><option>Catering &amp; Events</option>
+                    <option>Technology</option><option>Education &amp; Training</option>
+                    <option>Furnishings &amp; Supplies</option><option>Production / Manufacturing</option>
+                    <option>Premium Manufacturing / Cabinet Making</option>
+                    <option>Advertising / Marketing</option><option>WhatsApp Business</option>
+                    <option>FMCG</option><option>Online Business / E-commerce</option><option>Other</option>
+                  </select>
+                </div>
+                <div style="margin-bottom:20px">
+                  <label class="reg-label" for="reg-state">State / Location</label>
+                  <input id="reg-state" class="reg-input" type="text" placeholder="e.g. Lagos, Kano, Abuja" />
+                </div>
+
+                <div id="reg-step2-msg" class="msg"></div>
+                <button class="reg-btn-activate" onclick="registerAndEnter()" id="connect-btn">Activate BizPulse →</button>
+                <button class="reg-btn-back" onclick="goToStep1()">← Back</button>
+                <div class="reg-trust">
+                  <span>🔒 Secure &amp; private</span>
+                  <span class="reg-trust-sep">·</span>
+                  <span>No credit card</span>
+                  <span class="reg-trust-sep">·</span>
+                  <span>Free to start</span>
+                </div>
+              </div>
+
+            </div><!-- /.reg-form-wrap -->
+          </div><!-- /.reg-right -->
+        </div><!-- /.reg-layout -->
+
+        <!-- SUCCESS OVERLAY — fixed full-screen, outside layout columns -->
+        <div id="reg-success" style="display:none">
+          <div class="reg-success-body">
+            <div class="reg-check-wrap">
+              <svg class="reg-check-svg" viewBox="0 0 52 52" fill="none">
+                <circle class="reg-check-circle" cx="26" cy="26" r="25"/>
+                <path class="reg-check-tick" d="M14 27 l8 8 l16-16"/>
+              </svg>
+            </div>
+            <h2 class="reg-success-headline" id="reg-success-title">You're all set!</h2>
+            <p class="reg-success-sub">Your BizPulse account is active. Send your first WhatsApp message to start tracking your business.</p>
+
+            <div class="reg-success-card">
+              <div class="reg-success-save-lbl">SAVE THIS NUMBER ON WHATSAPP</div>
+              <div class="reg-success-num" id="bizpulse-number-display">+234 803 527 3030</div>
+              <a href="https://wa.me/2348035273030" class="reg-success-wa-btn" target="_blank" rel="noopener">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M12 0C5.373 0 0 5.373 0 12c0 2.122.558 4.116 1.533 5.842L.057 23.625c-.078.26.015.54.23.695.138.099.298.148.459.148.091 0 .183-.018.269-.055l6.05-2.553C8.517 22.876 10.218 23.5 12 23.5c6.627 0 12-5.373 12-12S18.627 0 12 0z"/></svg>
+                Open WhatsApp
+              </a>
+              <div class="reg-success-sample">
+                <div class="reg-success-sample-lbl">SEND YOUR FIRST MESSAGE</div>
+                <div class="reg-success-sample-msg">sales 30k expenses 8k</div>
+              </div>
+            </div>
+
+            <button class="reg-success-dash-link" onclick="enterApp()">Skip to Dashboard →</button>
           </div>
         </div>
+
       </div>
 
       <!-- ══════════════ HOME ══════════════ -->
@@ -453,6 +784,32 @@
           <p id="home-subtitle">Start fresh — log today's numbers early.</p>
         </div>
         <div class="content">
+
+          <!-- WhatsApp Hero — shown when user hasn't logged today -->
+          <div id="wa-hero" style="display:none;background:linear-gradient(135deg,#0F2744 0%,#1a3a5c 100%);border-radius:14px;padding:20px;margin-bottom:20px;color:#fff">
+            <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.1em;color:rgba(255,255,255,0.55);margin-bottom:6px">BIZPULSE · NIGERIA</div>
+            <h2 style="font-family:'DM Serif Display',serif;font-size:19px;line-height:1.3;margin-bottom:6px">Nigeria's First WhatsApp-Native Business Tracker</h2>
+            <p style="font-size:13px;color:rgba(255,255,255,0.75);margin-bottom:16px;line-height:1.5">Log your sales and expenses by sending a WhatsApp message — get AI insights every evening automatically.</p>
+            <div style="background:rgba(255,255,255,0.1);border-radius:8px;padding:10px 14px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center">
+              <div>
+                <div style="font-size:11px;color:rgba(255,255,255,0.6);margin-bottom:2px">Your BizPulse WhatsApp number</div>
+                <div style="font-size:17px;font-weight:700;letter-spacing:0.02em">+1 555 167 6111</div>
+              </div>
+            </div>
+            <a href="https://wa.me/15551676111" target="_blank" rel="noopener noreferrer"
+               style="display:flex;align-items:center;justify-content:center;gap:8px;background:#25D366;color:#fff;border-radius:10px;padding:13px 16px;font-weight:700;font-size:15px;text-decoration:none;margin-bottom:8px">
+              <span>💬</span> Open WhatsApp Chat
+            </a>
+            <div style="font-size:12px;color:rgba(255,255,255,0.5);text-align:center">Send "Hello BizPulse" to log today's numbers</div>
+          </div>
+
+          <!-- WhatsApp Pill — shown when user HAS logged today -->
+          <div id="wa-pill" style="display:none;margin-bottom:12px;text-align:right">
+            <a href="https://wa.me/15551676111" target="_blank" rel="noopener noreferrer"
+               style="display:inline-flex;align-items:center;gap:6px;background:#25D366;color:#fff;border-radius:20px;padding:7px 14px;font-size:12px;font-weight:700;text-decoration:none">
+              💬 WhatsApp Chat
+            </a>
+          </div>
 
           <!-- Streak banner -->
           <div id="streak-banner" style="display:none;background:var(--navy);color:#fff;border-radius:12px;padding:14px 20px;margin-bottom:20px;align-items:center;gap:14px">
@@ -471,12 +828,13 @@
               <div class="stat-sub">Daily total</div>
             </div>
             <div class="stat-card">
-              <div class="stat-label">Net Profit</div>
+              <div class="stat-label">Your Profit Today</div>
               <div class="stat-value" id="ds-profit">—</div>
               <div class="stat-sub" id="ds-margin">—</div>
+              <div id="ds-margin-explain" style="display:none;font-size:11px;color:var(--muted);margin-top:4px;line-height:1.4"></div>
             </div>
             <div class="stat-card">
-              <div class="stat-label">Top Expense</div>
+              <div class="stat-label">Biggest Cost</div>
               <div class="stat-value c-muted" style="font-size:20px" id="ds-expense">—</div>
               <div class="stat-sub">Highest category</div>
             </div>
@@ -561,7 +919,7 @@
                   <input id="entry-revenue" class="form-input" type="number" min="0" placeholder="e.g. 45000" />
                 </div>
                 <div class="form-group" style="margin-bottom:0">
-                  <label class="form-label">Number of Customers</label>
+                  <label class="form-label" id="entry-customers-label">Number of Customers</label>
                   <input id="entry-customers" class="form-input" type="number" min="0" placeholder="e.g. 12" />
                 </div>
               </div>
@@ -572,14 +930,16 @@
               <button class="btn-dashed" onclick="addExpenseRow()">+ Add Expense</button>
 
               <!-- Stock -->
-              <div class="section-divider"><span class="section-divider-label">Stock Movement</span></div>
-              <div id="stock-rows"></div>
-              <button class="btn-dashed" onclick="addStockRow()">+ Add Stock Entry</button>
+              <div id="entry-stock-section">
+                <div class="section-divider"><span class="section-divider-label" id="entry-stock-label">Stock Movement</span></div>
+                <div id="stock-rows"></div>
+                <button class="btn-dashed" onclick="addStockRow()">+ Add Stock Entry</button>
+              </div>
 
               <!-- Top product -->
-              <div class="section-divider"><span class="section-divider-label">Today's Top Seller</span></div>
+              <div class="section-divider"><span class="section-divider-label" id="entry-top-seller-label">Today's Top Seller</span></div>
               <div class="form-group" style="margin-bottom:0">
-                <label class="form-label">What sold best today? <span style="color:var(--muted);font-weight:400">(optional)</span></label>
+                <label class="form-label" id="entry-top-product-label">What sold best today? <span style="color:var(--muted);font-weight:400">(optional)</span></label>
                 <input id="entry-top-product" class="form-input" type="text" placeholder='e.g. "ankara fabric" or "jollof rice"' />
               </div>
 
@@ -632,12 +992,12 @@
               <div class="grid-3" style="gap:10px;margin-bottom:10px">
                 <div class="stat-card" style="padding:14px"><div class="stat-label">Revenue</div><div class="stat-value c-blue" id="sum-revenue" style="font-size:20px">—</div></div>
                 <div class="stat-card" style="padding:14px"><div class="stat-label">Expenses</div><div class="stat-value c-red" id="sum-expenses" style="font-size:20px">—</div></div>
-                <div class="stat-card" style="padding:14px"><div class="stat-label">Net Profit</div><div class="stat-value" id="sum-profit" style="font-size:20px">—</div></div>
+                <div class="stat-card" style="padding:14px"><div class="stat-label">Your Profit Today</div><div class="stat-value" id="sum-profit" style="font-size:20px">—</div></div>
               </div>
               <div class="grid-3" style="gap:10px;margin-bottom:14px">
-                <div class="stat-card" style="padding:14px"><div class="stat-label">Margin</div><div class="stat-value c-gold" id="sum-margin" style="font-size:20px">—</div></div>
-                <div class="stat-card" style="padding:14px"><div class="stat-label">Customers</div><div class="stat-value c-navy" id="sum-customers" style="font-size:20px">—</div></div>
-                <div class="stat-card" style="padding:14px"><div class="stat-label">Top Expense</div><div class="stat-value c-muted" id="sum-top-expense" style="font-size:16px">—</div></div>
+                <div class="stat-card" style="padding:14px"><div class="stat-label">Margin</div><div class="stat-value c-gold" id="sum-margin" style="font-size:20px">—</div><div id="sum-margin-explain" style="display:none;font-size:11px;color:var(--muted);margin-top:4px;line-height:1.4"></div></div>
+                <div class="stat-card" style="padding:14px"><div class="stat-label" id="sum-customers-label">Customers</div><div class="stat-value c-navy" id="sum-customers" style="font-size:20px">—</div></div>
+                <div class="stat-card" style="padding:14px"><div class="stat-label">Biggest Cost</div><div class="stat-value c-muted" id="sum-top-expense" style="font-size:16px">—</div></div>
               </div>
               <div id="sum-profit-explain" style="display:none;font-size:13px;color:var(--text-sm);margin-bottom:12px;padding:10px 14px;background:var(--bg);border-radius:8px;line-height:1.5"></div>
               <div style="margin-bottom:8px"><span class="health-pill" id="sum-health-pill">—</span></div>
@@ -645,9 +1005,9 @@
             </div>
           </div>
 
-          <!-- GROUP 2 — AI Recommendation -->
+          <!-- GROUP 2 — What To Do Next -->
           <div class="card" style="margin-bottom:20px">
-            <div class="card-title">💡 AI Recommendation</div>
+            <div class="card-title">💡 What To Do Next</div>
             <div id="sum-ai-empty" style="color:var(--muted);font-size:14px">Submit an entry to receive your AI recommendation.</div>
             <div id="sum-ai-box" style="display:none">
               <div class="ai-risk">
@@ -673,15 +1033,15 @@
             <div id="sum-monthly-content"></div>
           </div>
 
-          <!-- GROUP 5 — Stock Levels (hidden if no inventory) -->
+          <!-- GROUP 5 — Your Stock (hidden if no inventory) -->
           <div class="card" id="sum-inventory-card" style="display:none;margin-bottom:20px">
-            <div class="card-title">Stock Levels</div>
+            <div class="card-title">Your Stock</div>
             <div id="sum-inventory-list"></div>
           </div>
 
-          <!-- GROUP 6 — Entry History -->
+          <!-- GROUP 6 — Your History -->
           <div class="card">
-            <div class="card-title">Entry History</div>
+            <div class="card-title">Your History</div>
             <div id="history-empty" style="color:var(--muted);font-size:14px">No entries yet.</div>
             <div id="history-list" style="display:none"></div>
           </div>
@@ -713,8 +1073,11 @@
                   <option>Fashion & Clothing</option><option>Beauty & Personal Care</option>
                   <option>Agriculture</option><option>Bakery / Food Production</option>
                   <option>Transport & Logistics</option><option>Professional Services</option>
+                  <option>Photography</option><option>Gifts & Souvenirs</option>
+                  <option>Projects & Services</option><option>Catering & Events</option>
                   <option>Technology</option><option>Education & Training</option>
                   <option>Furnishings & Supplies</option><option>Production / Manufacturing</option>
+                  <option>Premium Manufacturing / Cabinet Making</option>
                   <option>Advertising / Marketing</option><option>WhatsApp Business</option>
                   <option>FMCG</option><option>Online Business / E-commerce</option><option>Other</option>
                 </select></div>
@@ -760,7 +1123,7 @@
 
             <!-- Data quality -->
             <div class="card">
-              <div class="card-title">Data Quality</div>
+              <div class="card-title">How Complete Is Your Data</div>
               <div id="set-completeness-content" style="font-size:14px;color:var(--muted)">Loading…</div>
             </div>
 
@@ -798,7 +1161,7 @@ let expenseCount = 0;
 let stockCount   = 0;
 const isDesktop  = () => window.innerWidth >= 768;
 
-const EXPENSE_CATEGORIES = ['Stock / Inventory','Rent','Staff Wages','Transport','Utilities','Marketing','Packaging','Equipment','Food & Supplies','Professional Fees','Data / Internet','Client Entertainment','Equipment Maintenance','Other'];
+const EXPENSE_CATEGORIES = ['Stock / Inventory','Rent','Staff Wages','Transport','Utilities','Marketing','Packaging','Equipment','Food & Supplies','Professional Fees','Data / Internet','Client Entertainment','Equipment Maintenance','Uncategorised'];
 
 // ── Init ────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
@@ -987,6 +1350,14 @@ async function loadHomeSnapshot() {
     const data = await res.json();
     const s    = data.summary;
 
+    // WhatsApp hero / pill toggle — based on whether user logged today
+    const todayWAT = new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Lagos' });
+    const hasLoggedToday = s && s.date === todayWAT;
+    const waHero = document.getElementById('wa-hero');
+    const waPill = document.getElementById('wa-pill');
+    if (waHero) waHero.style.display = hasLoggedToday ? 'none' : 'block';
+    if (waPill) waPill.style.display = hasLoggedToday ? 'block' : 'none';
+
     // Desktop stat cards
     if (s) {
       const pColor = parseFloat(s.profit) >= 0 ? 'var(--green)' : 'var(--red)';
@@ -998,6 +1369,16 @@ async function loadHomeSnapshot() {
       const topCat = s.topExpense ? s.topExpense.category + ' (' + fmtNaira(s.topExpense.amount) + ')' : '—';
       document.getElementById('ds-expense').textContent   = topCat;
       document.getElementById('ds-customers').textContent = s.customers || 0;
+
+      // Margin plain-English explanation
+      const mExpl = document.getElementById('ds-margin-explain');
+      if (mExpl) {
+        const mVal = parseFloat(s.margin) || 0;
+        mExpl.textContent = mVal >= 0
+          ? 'For every ₦100 earned, you kept ₦' + Math.round(mVal) + ' as profit'
+          : 'You spent ₦' + Math.round(Math.abs(mVal)) + ' more than you earned per ₦100';
+        mExpl.style.display = 'block';
+      }
 
       // Plain English profit sentence
       const plainEl = document.getElementById('home-plain-english');
@@ -1179,6 +1560,41 @@ function showRegisterSuccess(name) {
 // ── Daily Entry ────────────────────────────────────────
 function initEntryForm() {
   if (document.getElementById('expense-rows').children.length === 0) addExpenseRow();
+  adaptEntryFormToBizType();
+}
+
+function adaptEntryFormToBizType() {
+  const biz = (currentUser?.biz_type || '').toLowerCase();
+  const isServices = /service|consult|technology|advertising|education|photography|project/i.test(biz);
+  const isFood = /food|restaurant|bakery|beverage|catering/i.test(biz);
+  const custLabel    = document.getElementById('entry-customers-label');
+  const custInput    = document.getElementById('entry-customers');
+  const stockSection = document.getElementById('entry-stock-section');
+  const stockLabel   = document.getElementById('entry-stock-label');
+  const topLabel     = document.getElementById('entry-top-seller-label');
+  const topProdLabel = document.getElementById('entry-top-product-label');
+
+  if (isServices) {
+    if (custLabel) custLabel.textContent = 'Number of Clients';
+    if (custInput) custInput.placeholder = 'e.g. 5';
+    if (stockSection) stockSection.style.display = 'none';
+    if (topLabel) topLabel.textContent = "Today's Top Service";
+    if (topProdLabel) topProdLabel.innerHTML = 'What service did you deliver most today? <span style="color:var(--muted);font-weight:400">(optional)</span>';
+  } else if (isFood) {
+    if (custLabel) custLabel.textContent = 'Covers / Tables Served';
+    if (custInput) custInput.placeholder = 'e.g. 40';
+    if (stockSection) stockSection.style.display = '';
+    if (stockLabel) stockLabel.textContent = 'Ingredients / Supplies';
+    if (topLabel) topLabel.textContent = "Top Dish Today";
+    if (topProdLabel) topProdLabel.innerHTML = 'What dish sold best today? <span style="color:var(--muted);font-weight:400">(optional)</span>';
+  } else {
+    if (custLabel) custLabel.textContent = 'Number of Customers';
+    if (custInput) custInput.placeholder = 'e.g. 12';
+    if (stockSection) stockSection.style.display = '';
+    if (stockLabel) stockLabel.textContent = 'Stock Movement';
+    if (topLabel) topLabel.textContent = "Today's Top Seller";
+    if (topProdLabel) topProdLabel.innerHTML = 'What sold best today? <span style="color:var(--muted);font-weight:400">(optional)</span>';
+  }
 }
 function addExpenseRow() {
   expenseCount++;
@@ -1292,16 +1708,39 @@ async function loadSummary() {
     const sp = document.getElementById('sum-profit');
     sp.textContent = fmtNaira(s.profit);
     sp.className   = 'stat-value ' + (parseFloat(s.profit) >= 0 ? 'c-green' : 'c-red');
-    document.getElementById('sum-margin').textContent      = parseFloat(s.margin).toFixed(1) + '%';
+    const marginNum = parseFloat(s.margin) || 0;
+    document.getElementById('sum-margin').textContent      = marginNum.toFixed(1) + '%';
+    // Margin plain-English explanation
+    const sumMExpl = document.getElementById('sum-margin-explain');
+    if (sumMExpl) {
+      sumMExpl.textContent = marginNum >= 0
+        ? 'For every ₦100 earned, you kept ₦' + Math.round(marginNum) + ' as profit'
+        : 'You spent ₦' + Math.round(Math.abs(marginNum)) + ' more than you earned per ₦100';
+      sumMExpl.style.display = 'block';
+    }
+    // Customer label adapts to biz type
+    const isServBiz = /service|consult|technology|advertising|education|photography|project/i.test(currentUser?.biz_type || '');
+    const sumCustLbl = document.getElementById('sum-customers-label');
+    if (sumCustLbl) sumCustLbl.textContent = isServBiz ? 'Clients' : 'Customers';
     document.getElementById('sum-customers').textContent   = s.customers || 0;
     document.getElementById('sum-top-expense').textContent = s.topExpense?.category || '\u2014';
     const pill = document.getElementById('sum-health-pill');
     pill.textContent = s.healthEmoji + ' ' + s.healthLabel;
     pill.className   = 'health-pill health-' + s.healthKey;
     const ls = document.getElementById('sum-low-stock');
-    ls.innerHTML = data.lowStock?.length > 0
-      ? '<div class="low-stock-box"><div class="low-stock-title">\u26A0\uFE0F Low Stock Alert</div>' + data.lowStock.map(i => '<div class="low-stock-item">\u2022 ' + i.item_name + ': <strong>' + parseFloat(i.current_balance).toLocaleString('en-NG') + ' units</strong></div>').join('') + '</div>'
-      : '';
+    if (data.lowStock?.length > 0) {
+      const lsItems = data.lowStock.map(i => {
+        const bal = parseFloat(i.current_balance);
+        const isOOS = bal === 0;
+        const icon  = isOOS ? '🔴' : '🟡';
+        const label = isOOS ? 'Out of Stock' : bal.toLocaleString('en-NG') + ' units remaining';
+        return '<div class="low-stock-item">' + icon + ' ' + i.item_name + ': <strong>' + label + '</strong></div>';
+      }).join('');
+      const hasOOS = data.lowStock.some(i => parseFloat(i.current_balance) === 0);
+      ls.innerHTML = '<div class="low-stock-box"><div class="low-stock-title">' + (hasOOS ? '🔴 Stock Alert' : '⚠️ Low Stock Alert') + '</div>' + lsItems + '</div>';
+    } else {
+      ls.innerHTML = '';
+    }
 
     // Profit plain-English explanation
     const profExplain = document.getElementById('sum-profit-explain');
@@ -1379,7 +1818,7 @@ async function loadSummary() {
       }
     }
 
-    // Stock Levels — with 🟢🟡🔴 indicators
+    // Your Stock — with 🟢🟡🔴 indicators and plain-English labels
     const invCard = document.getElementById('sum-inventory-card');
     const invList = document.getElementById('sum-inventory-list');
     if (data.stock?.length > 0 && invCard) {
@@ -1387,13 +1826,23 @@ async function loadSummary() {
       invList.innerHTML = data.stock.map(i => {
         const bal = parseFloat(i.current_balance);
         const tot = parseFloat(i.total_received) || 0;
-        let icon = '\uD83D\uDFE2'; let status = 'healthy';
-        if (bal === 0)                              { icon = '\uD83D\uDD34'; status = 'out of stock'; }
-        else if (tot > 0 && bal < tot * 0.20)       { icon = '\uD83D\uDFE1'; status = 'low stock'; }
-        else if (tot === 0 && bal <= parseFloat(i.low_stock_threshold || 20)) { icon = '\uD83D\uDFE1'; status = 'low stock'; }
+        let icon, statusHtml;
+        if (bal === 0) {
+          icon = '🔴';
+          statusHtml = '<span style="color:var(--red);font-weight:700">Out of Stock</span>';
+        } else if (tot > 0 && bal < tot * 0.20) {
+          icon = '🟡';
+          statusHtml = '<span style="color:var(--gold);font-weight:600">Low Stock — ' + bal.toLocaleString('en-NG') + ' units remaining</span>';
+        } else if (tot === 0 && bal <= parseFloat(i.low_stock_threshold || 20)) {
+          icon = '🟡';
+          statusHtml = '<span style="color:var(--gold);font-weight:600">Low Stock — ' + bal.toLocaleString('en-NG') + ' units remaining</span>';
+        } else {
+          icon = '🟢';
+          statusHtml = '<span style="font-weight:600">' + bal.toLocaleString('en-NG') + ' units</span>';
+        }
         return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);font-size:14px">' +
           '<span>' + icon + ' ' + i.item_name + '</span>' +
-          '<span style="font-weight:600">' + bal.toLocaleString('en-NG') + ' units <span style="color:var(--muted);font-weight:400;font-size:12px">(' + status + ')</span></span>' +
+          statusHtml +
           '</div>';
       }).join('');
     } else if (invCard) {

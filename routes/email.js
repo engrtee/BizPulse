@@ -62,10 +62,21 @@ router.post('/send', async (req, res) => {
     const hl            = healthLabel(score);
     const topExpense    = topExpenseCategory(breakdowns);
 
+    // Build expenseBreakdown object from breakdown rows for AI context
+    const expenseBreakdown = {};
+    for (const row of (breakdowns || [])) {
+      const eb = (typeof row.expense_breakdown === 'string')
+        ? JSON.parse(row.expense_breakdown)
+        : (row.expense_breakdown || {});
+      for (const [cat, amt] of Object.entries(eb)) {
+        expenseBreakdown[cat] = (expenseBreakdown[cat] || 0) + parseFloat(amt);
+      }
+    }
+
     const summaryData = {
       revenue, totalExpenses, profit, margin,
       healthScore: score, healthKey: hl.key,
-      topExpense, customers, date: effectiveDate,
+      topExpense, expenseBreakdown, customers, date: effectiveDate,
     };
 
     const aiRec  = await GeminiService.generateRecommendation(summaryData, user);

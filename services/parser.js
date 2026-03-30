@@ -49,7 +49,7 @@ const EXPENSE_KEYWORDS = {
   'Packaging':         /\b(packaging|bags?|nylons?|wraps?|boxes?|cartons?)\b/i,
   'Equipment':         /\b(equipment|machine|tools?|repair|fix|maintenance)\b/i,
   'Food & Supplies':   /\b(food|lunch|meals?|chop|eating|water|drinks?)\b/i,
-  'Other':             /.*/,
+  'Uncategorised':     /.*/,
 };
 
 /**
@@ -71,7 +71,7 @@ function extractExpenses(text) {
     if (/^(made|sales?|revenue|income|earned|collected|received|profit|turnover)/.test(label)) continue;
 
     // Map to canonical category
-    let category = 'Other';
+    let category = 'Uncategorised';
     for (const [cat, re] of Object.entries(EXPENSE_KEYWORDS)) {
       if (re.test(label)) { category = cat; break; }
     }

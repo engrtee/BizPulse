@@ -167,9 +167,20 @@ router.post('/entry', async (req, res) => {
       const aiHl         = healthLabel(aiScore);
       const aiBreakdowns = await TransactionModel.getExpenseBreakdowns(user.id, todayWAT());
       const aiTopExp     = topExpenseCategory(aiBreakdowns);
+      // Build expenseBreakdown from today's breakdowns for the AI prompt
+      const aiExpBreakdown = {};
+      for (const row of (aiBreakdowns || [])) {
+        const eb = (typeof row.expense_breakdown === 'string')
+          ? JSON.parse(row.expense_breakdown)
+          : (row.expense_breakdown || {});
+        for (const [cat, amt] of Object.entries(eb)) {
+          aiExpBreakdown[cat] = (aiExpBreakdown[cat] || 0) + parseFloat(amt);
+        }
+      }
       aiRec = await GeminiService.generateRecommendation({
         revenue: aiRev, totalExpenses: aiExp, profit: aiProfit, margin: aiMargin,
         healthScore: aiScore, healthKey: aiHl.key, topExpense: aiTopExp,
+        expenseBreakdown: aiExpBreakdown,
         customers: aiCust, date: todayWAT(),
       }, user);
     } catch (e) {
