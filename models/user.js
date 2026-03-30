@@ -50,7 +50,7 @@ const UserModel = {
       `INSERT INTO users (name, email, biz_name, biz_type, state, whatsapp_number)
        VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING *`,
-      [name, email.toLowerCase().trim(), bizName, bizType, state, whatsappNumber]
+      [name, email.toLowerCase().trim(), bizName, bizType, state, whatsappNumber || null]
     );
     return res.rows[0];
   },
