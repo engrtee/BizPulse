@@ -1488,10 +1488,21 @@ async function registerAndEnter() {
       }),
     });
     const data = await res.json();
-    if (!res.ok && res.status !== 409) {
+    if (res.status === 409) {
+      // Email already registered — don't silently log in, show a clear message
+      btn.disabled  = false;
+      btn.innerHTML = 'Activate BizPulse →';
+      goToStep1();
+      const step1Msg = document.getElementById('reg-step1-msg');
+      showMsg(step1Msg, 'error', 'This email is already registered. Use the Login tab to access your account.');
+      switchAuthTab('login');
+      document.getElementById('login-email').value = document.getElementById('reg-email').value;
+      return;
+    }
+    if (!res.ok) {
       showMsg(msg, 'error', data.error || 'Registration failed. Please try again.');
       btn.disabled  = false;
-      btn.innerHTML = 'Create Account & Enter Dashboard';
+      btn.innerHTML = 'Activate BizPulse →';
       return;
     }
     localStorage.setItem('bizpulse_user_id',   data.userId);
