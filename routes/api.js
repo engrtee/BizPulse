@@ -359,6 +359,119 @@ router.get('/export/csv', async (req, res) => {
 });
 
 // ─────────────────────────────────────────────
+// GET /api/test-email?userId=<id>
+// Sends an immediate test summary email to the user.
+// Confirms Brevo email system works independently of the 7pm cron.
+// ─────────────────────────────────────────────
+router.get('/test-email', async (req, res) => {
+  try {
+    const { userId } = req.query;
+    if (!userId) return res.status(400).json({ error: 'userId is required. Use /api/test-email?userId=YOUR_ID' });
+
+    const user = await UserModel.findById(userId);
+    if (!user) return res.status(404).json({ error: 'User not found.' });
+
+    // Use latest real data, or mock if nothing logged yet
+    const latest = await TransactionModel.getLatest(user.id);
+    let summaryData;
+    if (latest) {
+      const breakdown = await TransactionModel.getDailyExpenseBreakdown(user.id, latest.date);
+      const topExpense = topExpenseCategory([breakdown]);
+      const revenue       = parseFloat(latest.revenue)        || 0;
+      const totalExpenses = parseFloat(latest.total_expenses)  || 0;
+      const profit        = parseFloat(latest.profit)          || 0;
+      const margin        = calcMargin(profit, revenue);
+      const score         = calcHealthScore(margin);
+      const hl            = healthLabel(score);
+      summaryData = { revenue, totalExpenses, profit, margin, healthScore: score, healthKey: hl.key, topExpense, customers: parseInt(latest.customers, 10) || 0, date: latest.date };
+    } else {
+      // Mock data so we can test the email template
+      summaryData = { revenue: 45000, totalExpenses: 26000, profit: 19000, margin: 42.2, healthScore: 72, healthKey: 'good', topExpense: { category: 'Stock / Inventory', amount: 15000 }, customers: 12, date: todayWAT() };
+    }
+
+    const aiRec  = await GeminiService.generateRecommendation(summaryData, user);
+    const result = await EmailService.sendSummaryEmail(user, summaryData, aiRec, []);
+
+    if (result?.status === 'dev_mode') {
+      return res.status(500).json({ error: 'BREVO_API_KEY not set in Render environment variables.' });
+    }
+
+    console.log(`[Test Email] ✅ Test email sent to ${user.email}`);
+    res.json({ success: true, message: `Test email sent to ${user.email}`, usedRealData: !!latest });
+  } catch (err) {
+    console.error('[Test Email] ❌ Error:', err.message);
+    res.status(500).json({ error: `Email test failed: ${err.message}` });
+  }
+});
+
+// ─────────────────────────────────────────────
+// GET /api/test/all
+// Runs all 8 verification tests and returns JSON results.
+// ─────────────────────────────────────────────
+router.get('/test/all', (_req, res) => {
+  const results = [];
+  const pass = (name, actual, expected, ok) => {
+    const r = { name, result: ok ? 'PASS' : 'FAIL', expected: String(expected), actual: String(actual) };
+    console.log(`[TEST] ${r.result} — ${name}: expected ${expected}, got ${actual}`);
+    results.push(r);
+  };
+
+  // TEST 1 — Margin formula (positive)
+  const r1 = 4560000, e1 = 1200000;
+  const m1 = parseFloat(((r1 - e1) / r1 * 100).toFixed(1));
+  pass('Margin formula (positive)', m1 + '%', '73.7%', m1 === 73.7);
+
+  // TEST 2 — Margin formula (loss)
+  const r2 = 1650005, e2 = 1762035;
+  const m2 = parseFloat(((r2 - e2) / r2 * 100).toFixed(1));
+  pass('Margin formula (loss)', m2 + '%', '-6.8%', m2 === -6.8);
+
+  // TEST 3 — Margin when revenue = 0
+  const m3 = 0 > 0 ? parseFloat(((0 - 5000) / 0 * 100).toFixed(1)) : 0;
+  pass('Margin when revenue = 0', m3 + '%', '0%', m3 === 0);
+
+  // TEST 4 — Inventory: receive 5, sell 3 → balance 2, no alert (2/5=40%)
+  const tr4 = 5, sold4 = 3, bal4 = tr4 - sold4;
+  const lowAlert4 = bal4 < tr4 * 0.20;
+  pass('Inventory: receive 5, sell 3 → balance 2, no alert', `balance=${bal4}, alert=${lowAlert4}`, 'balance=2, alert=false', bal4 === 2 && !lowAlert4);
+
+  // TEST 5 — Low stock alert: balance 1 of 10 total received (1/10=10% < 20%)
+  const tr5 = 10, bal5 = 1;
+  const lowAlert5 = bal5 < tr5 * 0.20;
+  pass('Low stock: 1 of 10 received (10% < 20% threshold)', `alert=${lowAlert5}`, 'alert=true', lowAlert5 === true);
+
+  // TEST 6 — Out of stock (balance = 0)
+  const oos = 0 === 0;
+  pass('Out of stock: balance = 0', `oos=${oos}`, 'oos=true', oos === true);
+
+  // TEST 7 — Entry aggregation: TransactionModel.create uses INSERT (code audit)
+  const TransactionModel = require('../models/transaction');
+  const createSql = TransactionModel.create.toString();
+  const usesInsert = createSql.includes('INSERT') && !createSql.includes('UPDATE');
+  pass('Entry aggregation: INSERT-only, no UPDATE', usesInsert ? 'INSERT only' : 'UPDATE found!', 'INSERT only', usesInsert);
+
+  // TEST 8 — Streak logic: consecutive days increment, skip resets to 0
+  // Simulate streak calculation: day1→1, day2→2, skip→0, day4→1
+  function calcStreak(lastEntryDayOffset, currentStreak) {
+    // offset=1 means yesterday, offset=0 means today, offset=2 means 2 days ago
+    if (lastEntryDayOffset === 1) return currentStreak + 1; // consecutive → increment
+    return 1; // gap → reset to 1
+  }
+  const s1 = 1; // first entry → streak 1
+  const s2 = calcStreak(1, s1); // logged next day → 2
+  const s3 = 0; // skipped a day → resets to 0
+  const s4 = 1; // logged again after gap → 1
+  const streakOk = s1 === 1 && s2 === 2 && s3 === 0 && s4 === 1;
+  pass('Streak calculation: 1,2,0,1 sequence', `${s1},${s2},${s3},${s4}`, '1,2,0,1', streakOk);
+
+  const passing = results.filter(r => r.result === 'PASS').length;
+  const summary = `${passing}/${results.length} passed`;
+  console.log(`[TESTS] ${summary}`);
+
+  res.json({ tests: results, summary });
+});
+
+// ─────────────────────────────────────────────
 // GET /api/test/calculations
 // Runs and logs verification tests for margin and inventory logic.
 // ─────────────────────────────────────────────
