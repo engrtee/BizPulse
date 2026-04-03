@@ -528,6 +528,18 @@ router.get('/test/calculations', (_req, res) => {
 });
 
 // ─────────────────────────────────────────────
+// GET /api/test/whatsapp-config
+// Shows whether WhatsApp credentials are set (no secrets exposed).
+// ─────────────────────────────────────────────
+router.get('/test/whatsapp-config', (_req, res) => {
+  res.json({
+    phoneNumberId: process.env.WHATSAPP_PHONE_NUMBER_ID ? '✅ set (' + process.env.WHATSAPP_PHONE_NUMBER_ID + ')' : '❌ NOT SET',
+    token: process.env.WHATSAPP_TOKEN ? '✅ set (length: ' + process.env.WHATSAPP_TOKEN.length + ')' : '❌ NOT SET',
+    mode: (process.env.WHATSAPP_PHONE_NUMBER_ID && process.env.WHATSAPP_TOKEN) ? 'LIVE' : 'DEV (messages not sent)',
+  });
+});
+
+// ─────────────────────────────────────────────
 // GET /api/test/morning-broadcast?number=2348035273030
 // Send a test morning broadcast to a specific number.
 // ─────────────────────────────────────────────
@@ -538,11 +550,11 @@ router.get('/test/morning-broadcast', async (req, res) => {
 
     const WhatsAppService = require('../services/whatsapp');
     const quote = 'Know your numbers, own your future. Every naira tracked is a step toward the business you deserve.';
-    await WhatsAppService.sendMorningBroadcast(number, name, bizName, quote);
-    res.json({ success: true, message: `Morning broadcast sent to ${number}` });
+    const result = await WhatsAppService.sendMorningBroadcast(number, name, bizName, quote);
+    res.json({ success: true, message: `Morning broadcast sent to ${number}`, result });
   } catch (err) {
     console.error('[Test] morning-broadcast error:', err.message);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: err.message, detail: err?.response?.data });
   }
 });
 
@@ -556,11 +568,11 @@ router.get('/test/evening-reminder', async (req, res) => {
     if (!number) return res.status(400).json({ error: 'number is required' });
 
     const WhatsAppService = require('../services/whatsapp');
-    await WhatsAppService.sendEveningReminder(number, name, parseInt(streak, 10));
-    res.json({ success: true, message: `Evening reminder sent to ${number}` });
+    const result = await WhatsAppService.sendEveningReminder(number, name, parseInt(streak, 10));
+    res.json({ success: true, message: `Evening reminder sent to ${number}`, result });
   } catch (err) {
     console.error('[Test] evening-reminder error:', err.message);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: err.message, detail: err?.response?.data });
   }
 });
 
