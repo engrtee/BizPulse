@@ -483,6 +483,30 @@ router.get('/test/all', (_req, res) => {
 });
 
 // ─────────────────────────────────────────────
+// GET /api/test/parse?message=...&userId=...
+// Show exactly what Gemini parses from a natural language message.
+// Useful for debugging WhatsApp natural language understanding.
+// ─────────────────────────────────────────────
+router.get('/test/parse', async (req, res) => {
+  try {
+    const { message, userId } = req.query;
+    if (!message) return res.status(400).json({ error: 'message is required' });
+
+    const GeminiService = require('../services/gemini');
+    let user = { name: 'Test User', biz_type: 'Retail' };
+    if (userId) {
+      const found = await UserModel.findById(userId);
+      if (found) user = found;
+    }
+
+    const result = await GeminiService.parseWithAI(message, user);
+    res.json({ input: message, parsed: result });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─────────────────────────────────────────────
 // GET /api/test/calculations
 // Runs and logs verification tests for margin and inventory logic.
 // ─────────────────────────────────────────────
