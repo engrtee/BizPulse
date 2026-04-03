@@ -153,9 +153,21 @@ router.post('/', async (req, res) => {
         break;
       }
 
+      case 'greeting':
+      case 'question': {
+        // Gemini already composed a warm reply — send it directly
+        if (data.message) {
+          await WhatsAppService.sendMessage(from, data.message);
+        } else {
+          await WhatsAppService.sendMessage(from,
+            `Hey ${user.name.split(' ')[0]}! 👋 I'm your BizPulse data assistant. Send me your sales and expenses anytime — or type "help" to see what I can do.`);
+        }
+        break;
+      }
+
       default: {
         await WhatsAppService.sendMessage(from,
-          `I didn't quite get that, ${user.name.split(' ')[0]}.\n\nSend "help" to see what I can do. 😊`);
+          `I didn't quite get that, ${user.name.split(' ')[0]}.\n\nJust tell me how your business went today — like:\n"Made 45k today, spent 10k on stock and 3k transport"\n\nOr type "help" for commands. 😊`);
         break;
       }
     }

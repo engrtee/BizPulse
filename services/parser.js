@@ -99,58 +99,26 @@ function extractRevenue(text) {
 
 /**
  * Main parser — determines message type and extracts structured data.
+ *
+ * Only exact shortcut commands (help, stock?, summary) are handled rule-based.
+ * Everything else — including all financial entries, natural language, greetings,
+ * and questions — goes directly to Gemini for AI parsing. This ensures any
+ * phrasing a Nigerian business owner uses is understood correctly.
+ *
  * @param {string} message Raw WhatsApp message text
  * @returns {{ type: string, data: object, needsAI: boolean }}
  */
 function parseMessage(message) {
   if (!message) return { type: 'unknown', data: {}, needsAI: true };
 
-  const text = message.trim();
-  const lower = text.toLowerCase();
+  const lower = message.trim().toLowerCase();
 
-  // --- Exact intent matches ---
+  // Exact shortcut commands — no AI cost needed
   if (INTENT_PATTERNS.help.test(lower))        return { type: 'help',        data: {}, needsAI: false };
   if (INTENT_PATTERNS.stock_check.test(lower)) return { type: 'stock_check', data: {}, needsAI: false };
   if (INTENT_PATTERNS.summary.test(lower))     return { type: 'summary',     data: {}, needsAI: false };
 
-  // --- Inventory received ---
-  if (INTENT_PATTERNS.inventory_in.test(text)) {
-    return { type: 'inventory_in', data: {}, needsAI: true }; // Gemini extracts item/qty/price
-  }
-
-  // --- Inventory sold ---
-  if (INTENT_PATTERNS.inventory_out.test(text)) {
-    return { type: 'inventory_out', data: {}, needsAI: true }; // Gemini extracts item/qty
-  }
-
-  // --- Customer count only ---
-  if (INTENT_PATTERNS.customer_log.test(text)) {
-    // Try to grab a number: "customers 15", "served 20 people"
-    const numMatch = text.match(/\b(\d+)\b/);
-    const count = numMatch ? parseInt(numMatch[1], 10) : 0;
-    return { type: 'customer_log', data: { count }, needsAI: false };
-  }
-
-  // --- Daily entry: try rule-based first ---
-  const revenue = extractRevenue(text);
-  if (revenue > 0) {
-    const breakdown = extractExpenses(text);
-    const totalExpenses = Object.values(breakdown).reduce((s, v) => s + v, 0);
-    const profit = revenue - totalExpenses;
-    const margin = revenue > 0 ? parseFloat(((profit / revenue) * 100).toFixed(2)) : 0;
-
-    // Extract customer count if mentioned inline
-    const custMatch = text.match(/(\d+)\s*(?:customers?|clients?|people|transactions?)/i);
-    const customers = custMatch ? parseInt(custMatch[1], 10) : 0;
-
-    return {
-      type: 'daily_entry',
-      data: { revenue, totalExpenses, expenseBreakdown: breakdown, profit, margin, customers },
-      needsAI: false,
-    };
-  }
-
-  // --- Ambiguous / complex — pass to Gemini ---
+  // Everything else goes to Gemini — handles any natural language
   return { type: 'unknown', data: {}, needsAI: true };
 }
 

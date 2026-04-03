@@ -56,25 +56,44 @@ async function parseWithAI(message, user) {
   const prompt = `
 ${NIGERIA_CONTEXT}
 
-The user runs a "${user.biz_type || 'retail'}" business in Nigeria.
+You are BizPulse — a personal business data assistant for Nigerian SMEs.
+The user runs a "${user.biz_type || 'retail'}" business.
 Their name is ${user.name}.
 
-Parse this WhatsApp business message and return a JSON object.
-
+Read this WhatsApp message and return a JSON object.
 Message: "${message}"
 
-Classify as ONE of these types and extract the listed fields:
+Classify as EXACTLY ONE of these types:
 
-1. daily_entry → { type, revenue, totalExpenses, expenseBreakdown (object: category→amount), customers, notes }
-2. inventory_in → { type, item, quantity, unitPrice, totalValue }
-3. inventory_out → { type, item, quantity }
-4. customer_log → { type, count, notes }
-5. unknown → { type }
+1. daily_entry — they are logging sales, revenue, income, or expenses for the day
+   Return: { "type": "daily_entry", "revenue": number, "totalExpenses": number, "expenseBreakdown": {category: amount}, "customers": number, "notes": string }
 
-Expense categories to use: Stock / Inventory, Rent, Staff Wages, Transport, Utilities, Marketing, Packaging, Equipment, Food & Supplies, Other
+2. inventory_in — they received, bought, or restocked physical goods
+   Return: { "type": "inventory_in", "item": string, "quantity": number, "unitPrice": number, "totalValue": number }
+
+3. inventory_out — they sold specific inventory items (not revenue logging)
+   Return: { "type": "inventory_out", "item": string, "quantity": number }
+
+4. customer_log — they are only reporting a customer count, with no financial figures
+   Return: { "type": "customer_log", "count": number, "notes": string }
+
+5. greeting — hello, good morning, how are you, general pleasantries
+   Return: { "type": "greeting", "message": string }
+   The message must be a warm, encouraging reply (2-3 sentences max) as their personal business assistant. Reference their business type or name naturally.
+
+6. question — asking for advice, explanation, or help about their business, BizPulse features, or finances
+   Return: { "type": "question", "message": string }
+   The message must be a helpful, specific answer (2-3 sentences max) grounded in Nigerian business context.
+
+7. unknown — completely off-topic, cannot be classified
+   Return: { "type": "unknown" }
+
+Expense categories to use: Stock / Inventory, Rent, Staff Wages, Transport, Utilities, Marketing, Packaging, Equipment, Food & Supplies, Professional Fees, Data / Internet, Uncategorised
 
 Rules:
-- All amounts must be numbers (not strings). Convert "k" shorthand.
+- All amounts must be numbers. "k" = thousands (30k = 30000). "m" = millions.
+- Natural language is normal: "Today was good, made 45k from customers, paid 10k stock and 3k transport" → daily_entry
+- If revenue AND expenses are mentioned together, it is ALWAYS daily_entry, never customer_log.
 - If revenue is not mentioned, set revenue to 0.
 - If no expenses, set totalExpenses to 0 and expenseBreakdown to {}.
 - Return ONLY valid JSON. No markdown, no explanation, no code blocks.

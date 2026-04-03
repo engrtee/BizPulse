@@ -178,6 +178,43 @@ async function sendHelp(to) {
 }
 
 /**
+ * Send the 7am morning broadcast — personalized quote + encouragement.
+ * @param {string} to        WhatsApp number
+ * @param {string} firstName User's first name
+ * @param {string} bizName   Their business name
+ * @param {string} quote     The business quote for today
+ */
+async function sendMorningBroadcast(to, firstName, bizName, quote) {
+  const body =
+    `Good morning ${firstName}! ☀️\n\n` +
+    `"${quote}"\n\n` +
+    `Today is a new opportunity for ${bizName || 'your business'} to grow. ` +
+    `I'm here tracking every naira so you can focus on what you do best.\n\n` +
+    `Have an incredible day — I'll be here whenever you're ready to log your numbers. 💪\n\n` +
+    `— BizPulse, your personal data assistant`;
+  return sendMessage(to, body);
+}
+
+/**
+ * Send the 6pm reminder to users who haven't logged today.
+ * (Already exists as sendReminder — this is the broadcast version for mass sends)
+ */
+async function sendEveningReminder(to, firstName, streak) {
+  const s = parseInt(streak, 10) || 0;
+  let streakLine = '';
+  if (s >= 3) streakLine = `\n⚡ You're on a ${s}-day streak — don't break it now!`;
+
+  const body =
+    `Hey ${firstName} 👋\n\n` +
+    `Evening check-in! Have you logged today's business numbers yet?\n\n` +
+    `Just send me something like:\n` +
+    `"Made 50k today, spent 15k on stock"\n\n` +
+    `30 seconds now saves you hours of guesswork later. 📊` +
+    streakLine;
+  return sendMessage(to, body);
+}
+
+/**
  * Notify user their phone number is not registered.
  */
 async function sendNotRegistered(to) {
@@ -188,4 +225,4 @@ async function sendNotRegistered(to) {
   return sendMessage(to, body);
 }
 
-module.exports = { sendMessage, sendEntryAck, sendMilestone, sendStockReply, sendHelp, sendNotRegistered, sendReminder };
+module.exports = { sendMessage, sendEntryAck, sendMilestone, sendStockReply, sendHelp, sendNotRegistered, sendReminder, sendMorningBroadcast, sendEveningReminder };

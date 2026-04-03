@@ -83,6 +83,52 @@ async function processUser(user) {
   }
 }
 
+// Rotating business quotes for the morning broadcast
+const MORNING_QUOTES = [
+  'Success is not the key to happiness. Happiness is the key to success. If you love what you are doing, you will be successful.',
+  'The secret of getting ahead is getting started.',
+  'Do not watch the clock; do what it does. Keep going.',
+  'A big business starts small.',
+  'Opportunities do not happen. You create them.',
+  'The best time to plant a tree was 20 years ago. The second best time is now.',
+  'Chase the vision, not the money; the money will end up following you.',
+  'Work like someone is trying to take your place.',
+  'Your income is directly related to your hustle. Hustle harder.',
+  'Every day you are not tracking is a day you are guessing. Stop guessing.',
+  'Small daily improvements are the key to long-term results.',
+  'Know your numbers, own your future.',
+  'The difference between successful people and others is how long they spend time feeling sorry for themselves.',
+  'Discipline is the bridge between goals and accomplishment.',
+  'Great businesses are built one transaction at a time — make every one count.',
+];
+
+/**
+ * Send personalised 7am morning broadcast to all active users with a WhatsApp number.
+ */
+async function runMorningBroadcast() {
+  console.log(`[Cron] ☀️ Morning broadcast started at ${new Date().toISOString()}`);
+  try {
+    const users = await UserModel.findAllActive();
+    // Pick today's quote based on day-of-year so it's consistent across all users
+    const dayOfYear = Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 0)) / 86400000);
+    const quote = MORNING_QUOTES[dayOfYear % MORNING_QUOTES.length];
+
+    for (const user of users) {
+      if (!user.whatsapp_number) continue;
+      try {
+        const firstName = user.name.split(' ')[0];
+        await WhatsAppService.sendMorningBroadcast(user.whatsapp_number, firstName, user.biz_name, quote);
+        console.log(`[Cron] ☀️ Morning broadcast sent to ${user.name}`);
+      } catch (err) {
+        console.error(`[Cron] Morning broadcast failed for ${user.name}:`, err.message);
+      }
+    }
+    console.log('[Cron] ☀️ Morning broadcast complete.');
+  } catch (err) {
+    console.error('[Cron] Morning broadcast job error:', err.message);
+  }
+}
+
 /**
  * Main job function — exported so it can also be triggered on-demand in tests.
  */
@@ -140,6 +186,10 @@ async function runReminderJob() {
 }
 
 function scheduleDailySummary() {
+  // 7:00 AM WAT = 6:00 AM UTC — morning broadcast (quote + encouragement)
+  cron.schedule('0 6 * * *', runMorningBroadcast, { timezone: 'UTC' });
+  console.log('[Cron] Morning broadcast scheduled for 7:00 AM WAT (6:00 AM UTC).');
+
   // 7:00 PM WAT = 6:00 PM UTC — full summary email
   cron.schedule('0 18 * * *', runDailySummary, { timezone: 'UTC' });
   console.log('[Cron] Daily summary job scheduled for 7:00 PM WAT (6:00 PM UTC).');
@@ -149,4 +199,4 @@ function scheduleDailySummary() {
   console.log('[Cron] Reminder job scheduled for 6:00 PM WAT (5:00 PM UTC).');
 }
 
-module.exports = { scheduleDailySummary, runDailySummary, runReminderJob };
+module.exports = { scheduleDailySummary, runDailySummary, runReminderJob, runMorningBroadcast };

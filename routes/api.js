@@ -527,4 +527,41 @@ router.get('/test/calculations', (_req, res) => {
   res.json({ tests: results, summary: `${passing}/${results.length} tests passing` });
 });
 
+// ─────────────────────────────────────────────
+// GET /api/test/morning-broadcast?number=2348035273030
+// Send a test morning broadcast to a specific number.
+// ─────────────────────────────────────────────
+router.get('/test/morning-broadcast', async (req, res) => {
+  try {
+    const { number, name = 'Tosin', bizName = 'your business' } = req.query;
+    if (!number) return res.status(400).json({ error: 'number is required' });
+
+    const WhatsAppService = require('../services/whatsapp');
+    const quote = 'Know your numbers, own your future. Every naira tracked is a step toward the business you deserve.';
+    await WhatsAppService.sendMorningBroadcast(number, name, bizName, quote);
+    res.json({ success: true, message: `Morning broadcast sent to ${number}` });
+  } catch (err) {
+    console.error('[Test] morning-broadcast error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─────────────────────────────────────────────
+// GET /api/test/evening-reminder?number=2348035273030
+// Send a test 6pm reminder to a specific number.
+// ─────────────────────────────────────────────
+router.get('/test/evening-reminder', async (req, res) => {
+  try {
+    const { number, name = 'Tosin', streak = '0' } = req.query;
+    if (!number) return res.status(400).json({ error: 'number is required' });
+
+    const WhatsAppService = require('../services/whatsapp');
+    await WhatsAppService.sendEveningReminder(number, name, parseInt(streak, 10));
+    res.json({ success: true, message: `Evening reminder sent to ${number}` });
+  } catch (err) {
+    console.error('[Test] evening-reminder error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;
