@@ -492,17 +492,34 @@ router.get('/test/parse', async (req, res) => {
     const { message, userId } = req.query;
     if (!message) return res.status(400).json({ error: 'message is required' });
 
-    const GeminiService = require('../services/gemini');
+    if (!process.env.GEMINI_API_KEY) {
+      return res.status(500).json({ error: 'GEMINI_API_KEY not set on this server' });
+    }
+
+    const { GoogleGenerativeAI } = require('@google/generative-ai');
+    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
     let user = { name: 'Test User', biz_type: 'Retail' };
     if (userId) {
       const found = await UserModel.findById(userId);
       if (found) user = found;
     }
 
-    const result = await GeminiService.parseWithAI(message, user);
-    res.json({ input: message, parsed: result });
+    const prompt = `You are BizPulse. The user runs a "${user.biz_type}" business. Their name is ${user.name}.
+Parse this message and return JSON with type (daily_entry/inventory_in/inventory_out/customer_log/greeting/question/unknown).
+Message: "${message}"
+For daily_entry return: {type, revenue, totalExpenses, expenseBreakdown, customers, notes}
+Return ONLY valid JSON.`;
+
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+    const result = await model.generateContent(prompt);
+    const text = result.response.text().trim();
+    const clean = text.replace(/^```json\s*/i, '').replace(/```$/i, '').trim();
+    let parsed;
+    try { parsed = JSON.parse(clean); } catch(e) { parsed = { raw: text, parseError: e.message }; }
+
+    res.json({ input: message, parsed, geminiRaw: text });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: err.message, detail: err?.response?.data });
   }
 });
 
@@ -559,6 +576,9 @@ router.get('/test/whatsapp-config', (_req, res) => {
   res.json({
     phoneNumberId: process.env.WHATSAPP_PHONE_NUMBER_ID ? '✅ set (' + process.env.WHATSAPP_PHONE_NUMBER_ID + ')' : '❌ NOT SET',
     token: process.env.WHATSAPP_TOKEN ? '✅ set (length: ' + process.env.WHATSAPP_TOKEN.length + ')' : '❌ NOT SET',
+    geminiApiKey: process.env.GEMINI_API_KEY ? '✅ set (length: ' + process.env.GEMINI_API_KEY.length + ')' : '❌ NOT SET',
+    brevoApiKey: process.env.BREVO_API_KEY ? '✅ set' : '❌ NOT SET',
+    databaseUrl: process.env.DATABASE_URL ? '✅ set' : '❌ NOT SET',
     mode: (process.env.WHATSAPP_PHONE_NUMBER_ID && process.env.WHATSAPP_TOKEN) ? 'LIVE' : 'DEV (messages not sent)',
   });
 });
