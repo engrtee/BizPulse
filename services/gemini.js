@@ -100,7 +100,7 @@ Rules:
 `;
 
   try {
-    const model = getClient().getGenerativeModel({ model: 'gemini-1.5-flash' });
+    const model = getClient().getGenerativeModel({ model: 'gemini-2.0-flash-lite' });
     const result = await model.generateContent(prompt);
     const text = result.response.text().trim();
 
@@ -190,7 +190,7 @@ Rules:
 - Never give generic advice like "monitor your expenses" — always reference the actual numbers.`;
 
   try {
-    const model = getClient().getGenerativeModel({ model: 'gemini-1.5-flash' });
+    const model = getClient().getGenerativeModel({ model: 'gemini-2.0-flash-lite' });
     const result = await model.generateContent(prompt);
     const text = result.response.text().trim();
     const clean = text.replace(/^```json\s*/i, '').replace(/```$/i, '').trim();
