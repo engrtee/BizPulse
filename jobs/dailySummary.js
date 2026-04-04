@@ -85,21 +85,21 @@ async function processUser(user) {
 
 // Rotating business quotes for the morning broadcast
 const MORNING_QUOTES = [
-  'Success is not the key to happiness. Happiness is the key to success. If you love what you are doing, you will be successful.',
   'The secret of getting ahead is getting started.',
   'Do not watch the clock; do what it does. Keep going.',
   'A big business starts small.',
   'Opportunities do not happen. You create them.',
-  'The best time to plant a tree was 20 years ago. The second best time is now.',
-  'Chase the vision, not the money; the money will end up following you.',
+  'Chase the vision, not the money.',
   'Work like someone is trying to take your place.',
-  'Your income is directly related to your hustle. Hustle harder.',
-  'Every day you are not tracking is a day you are guessing. Stop guessing.',
+  'Your income is directly related to your hustle.',
+  'Every day you are not tracking is a day you are guessing.',
   'Small daily improvements are the key to long-term results.',
   'Know your numbers, own your future.',
-  'The difference between successful people and others is how long they spend time feeling sorry for themselves.',
   'Discipline is the bridge between goals and accomplishment.',
-  'Great businesses are built one transaction at a time — make every one count.',
+  'Great businesses are built one transaction at a time.',
+  'The hustle you put in today is the story you tell tomorrow.',
+  'Profit does not happen by accident. Track it.',
+  'Your next level starts with knowing where you are today.',
 ];
 
 /**

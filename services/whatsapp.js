@@ -188,10 +188,8 @@ async function sendMorningBroadcast(to, firstName, bizName, quote) {
   const body =
     `Good morning ${firstName}! ☀️\n\n` +
     `"${quote}"\n\n` +
-    `Today is a new opportunity for ${bizName || 'your business'} to grow. ` +
-    `I'm here tracking every naira so you can focus on what you do best.\n\n` +
-    `Have an incredible day — I'll be here whenever you're ready to log your numbers. 💪\n\n` +
-    `— BizPulse, your personal data assistant`;
+    `Ready to make today count? I'm here whenever you want to log your numbers.\n\n` +
+    `— BizPulse 📊`;
   return sendMessage(to, body);
 }
 
@@ -201,15 +199,12 @@ async function sendMorningBroadcast(to, firstName, bizName, quote) {
  */
 async function sendEveningReminder(to, firstName, streak) {
   const s = parseInt(streak, 10) || 0;
-  let streakLine = '';
-  if (s >= 3) streakLine = `\n⚡ You're on a ${s}-day streak — don't break it now!`;
+  const streakLine = s >= 3 ? `\n\n🔥 ${s}-day streak on the line — don't break it!` : '';
 
   const body =
-    `Hey ${firstName} 👋\n\n` +
-    `Evening check-in! Have you logged today's business numbers yet?\n\n` +
-    `Just send me something like:\n` +
-    `"Made 50k today, spent 15k on stock"\n\n` +
-    `30 seconds now saves you hours of guesswork later. 📊` +
+    `Hey ${firstName} 👋 Have you logged today's numbers?\n\n` +
+    `Just send something like:\n"Made 50k, spent 15k on stock"\n\n` +
+    `I'll handle the rest. 📊` +
     streakLine;
   return sendMessage(to, body);
 }
