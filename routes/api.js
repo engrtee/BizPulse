@@ -505,7 +505,7 @@ router.get('/test/parse', async (req, res) => {
     // Call Gemini directly (no error swallowing) so we can see the real error
     const { GoogleGenerativeAI } = require('@google/generative-ai');
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-lite' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
     const prompt = `You are BizPulse for Nigerian SMEs. User: ${user.name}, Business: ${user.biz_type}.
 Parse this WhatsApp message and return JSON. Message: "${message}"
 Types: daily_entry (revenue/expenses), inventory_in, inventory_out, customer_log, greeting, question, unknown.
@@ -516,7 +516,7 @@ For daily_entry: {type, revenue, totalExpenses, expenseBreakdown:{category:amoun
     const clean = text.replace(/^```json\s*/i, '').replace(/```$/i, '').trim();
     let parsed;
     try { parsed = JSON.parse(clean); } catch(e) { parsed = { raw: text, parseError: e.message }; }
-    res.json({ input: message, model: 'gemini-2.0-flash-lite', parsed });
+    res.json({ input: message, model: 'gemini-2.5-flash', parsed });
   } catch (err) {
     res.status(500).json({ error: err.message, detail: err?.response?.data });
   }
