@@ -496,28 +496,14 @@ router.get('/test/parse', async (req, res) => {
       return res.status(500).json({ error: 'GEMINI_API_KEY not set on this server' });
     }
 
-    const { GoogleGenerativeAI } = require('@google/generative-ai');
-    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
     let user = { name: 'Test User', biz_type: 'Retail' };
     if (userId) {
       const found = await UserModel.findById(userId);
       if (found) user = found;
     }
 
-    const prompt = `You are BizPulse. The user runs a "${user.biz_type}" business. Their name is ${user.name}.
-Parse this message and return JSON with type (daily_entry/inventory_in/inventory_out/customer_log/greeting/question/unknown).
-Message: "${message}"
-For daily_entry return: {type, revenue, totalExpenses, expenseBreakdown, customers, notes}
-Return ONLY valid JSON.`;
-
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
-    const result = await model.generateContent(prompt);
-    const text = result.response.text().trim();
-    const clean = text.replace(/^```json\s*/i, '').replace(/```$/i, '').trim();
-    let parsed;
-    try { parsed = JSON.parse(clean); } catch(e) { parsed = { raw: text, parseError: e.message }; }
-
-    res.json({ input: message, parsed, geminiRaw: text });
+    const parsed = await GeminiService.parseWithAI(message, user);
+    res.json({ input: message, parsed });
   } catch (err) {
     res.status(500).json({ error: err.message, detail: err?.response?.data });
   }
