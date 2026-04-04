@@ -122,15 +122,15 @@ async function sendMilestone(to, type, { firstName = '', streak = 0, profit = 0 
  */
 async function sendReminder(to, firstName, streak) {
   const s = parseInt(streak, 10) || 0;
-  let streakWarning = '';
-  if (s >= 3) streakWarning = `\n\n⚠️ Don't break your ${s}-day streak!`;
+  let streakLine = '';
+  if (s >= 3)      streakLine = `\n\n🔥 ${s}-day streak on the line — don't break it now!`;
+  else if (s >= 1) streakLine = `\n\n📈 Day ${s} — keep the habit going!`;
 
   const body =
-    `👋 Hey ${firstName}, you haven't logged today's numbers yet.\n\n` +
-    `Take 30 seconds now — just send:\n` +
-    `"sales 50k expenses 15k"\n\n` +
-    `Small habit, big results. 💪` +
-    streakWarning;
+    `Hey ${firstName} 👋 Have you logged today's numbers?\n\n` +
+    `Just send: "Made 50k, spent 15k on stock"\n` +
+    `I'll handle the rest. 📊` +
+    streakLine;
 
   return sendMessage(to, body);
 }
@@ -178,35 +178,34 @@ async function sendHelp(to) {
 }
 
 /**
- * Send the 7am morning broadcast — personalized quote + encouragement.
+ * Send the 7am morning broadcast — personalized with streak + quote.
  * @param {string} to        WhatsApp number
  * @param {string} firstName User's first name
  * @param {string} bizName   Their business name
  * @param {string} quote     The business quote for today
+ * @param {number} streak    User's current streak
  */
-async function sendMorningBroadcast(to, firstName, bizName, quote) {
+async function sendMorningBroadcast(to, firstName, bizName, quote, streak) {
+  const s = parseInt(streak, 10) || 0;
+  let streakLine = '';
+  if (s >= 2)       streakLine = `🔥 Day ${s} streak — keep it going!\n\n`;
+  else if (s === 1) streakLine = `🌱 Day 1 streak — let's build it!\n\n`;
+  else              streakLine = `📅 Today is a great day to start your streak.\n\n`;
+
   const body =
     `Good morning ${firstName}! ☀️\n\n` +
+    streakLine +
     `"${quote}"\n\n` +
-    `Ready to make today count? I'm here whenever you want to log your numbers.\n\n` +
-    `— BizPulse 📊`;
+    `I'm here when you're ready to log today. 📊`;
   return sendMessage(to, body);
 }
 
 /**
  * Send the 6pm reminder to users who haven't logged today.
- * (Already exists as sendReminder — this is the broadcast version for mass sends)
+ * (Alias kept for backward compatibility — sendReminder is the live version)
  */
 async function sendEveningReminder(to, firstName, streak) {
-  const s = parseInt(streak, 10) || 0;
-  const streakLine = s >= 3 ? `\n\n🔥 ${s}-day streak on the line — don't break it!` : '';
-
-  const body =
-    `Hey ${firstName} 👋 Have you logged today's numbers?\n\n` +
-    `Just send something like:\n"Made 50k, spent 15k on stock"\n\n` +
-    `I'll handle the rest. 📊` +
-    streakLine;
-  return sendMessage(to, body);
+  return sendReminder(to, firstName, streak);
 }
 
 /**

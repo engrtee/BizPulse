@@ -117,7 +117,7 @@ async function runMorningBroadcast() {
       if (!user.whatsapp_number) continue;
       try {
         const firstName = user.name.split(' ')[0];
-        await WhatsAppService.sendMorningBroadcast(user.whatsapp_number, firstName, user.biz_name, quote);
+        await WhatsAppService.sendMorningBroadcast(user.whatsapp_number, firstName, user.biz_name, quote, user.streak || 0);
         console.log(`[Cron] ☀️ Morning broadcast sent to ${user.name}`);
       } catch (err) {
         console.error(`[Cron] Morning broadcast failed for ${user.name}:`, err.message);
