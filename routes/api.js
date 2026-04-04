@@ -620,4 +620,65 @@ router.get('/test/evening-reminder', async (req, res) => {
   }
 });
 
+// ─────────────────────────────────────────────
+// POST /api/cron/morning-broadcast
+// POST /api/cron/evening-reminder
+// POST /api/cron/daily-summary
+// POST /api/cron/retention-nudge
+//
+// HTTP-triggered versions of every cron job.
+// Called by an external scheduler (cron-job.org) so they fire even
+// when Render's free tier has spun the server down.
+//
+// Protected by CRON_SECRET env var.
+// Header: x-cron-secret: <value>   OR  ?secret=<value>
+// ─────────────────────────────────────────────
+function cronAuth(req, res, next) {
+  const secret = process.env.CRON_SECRET;
+  if (!secret) return res.status(503).json({ error: 'CRON_SECRET not configured' });
+  const provided = req.headers['x-cron-secret'] || req.query.secret;
+  if (provided !== secret) return res.status(401).json({ error: 'Unauthorised' });
+  next();
+}
+
+router.post('/cron/morning-broadcast', cronAuth, async (_req, res) => {
+  try {
+    const { runMorningBroadcast } = require('../jobs/dailySummary');
+    res.json({ started: true, job: 'morning-broadcast', time: new Date().toISOString() });
+    runMorningBroadcast().catch(err => console.error('[Cron HTTP] morning-broadcast error:', err.message));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/cron/evening-reminder', cronAuth, async (_req, res) => {
+  try {
+    const { runReminderJob } = require('../jobs/dailySummary');
+    res.json({ started: true, job: 'evening-reminder', time: new Date().toISOString() });
+    runReminderJob().catch(err => console.error('[Cron HTTP] evening-reminder error:', err.message));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/cron/daily-summary', cronAuth, async (_req, res) => {
+  try {
+    const { runDailySummary } = require('../jobs/dailySummary');
+    res.json({ started: true, job: 'daily-summary', time: new Date().toISOString() });
+    runDailySummary().catch(err => console.error('[Cron HTTP] daily-summary error:', err.message));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/cron/retention-nudge', cronAuth, async (_req, res) => {
+  try {
+    const { runRetentionNudge } = require('../jobs/retentionNudge');
+    res.json({ started: true, job: 'retention-nudge', time: new Date().toISOString() });
+    runRetentionNudge().catch(err => console.error('[Cron HTTP] retention-nudge error:', err.message));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;

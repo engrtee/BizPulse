@@ -90,6 +90,21 @@ router.post('/', async (req, res) => {
       const aiResult = await GeminiService.parseWithAI(text, user);
       type = aiResult.type || 'unknown';
       data = aiResult;
+
+      // ── Fallback: if Gemini failed or returned unknown, try rule-based extraction ──
+      if (type === 'unknown') {
+        const revenue = ParserService.extractRevenue(text);
+        if (revenue > 0) {
+          const breakdown    = ParserService.extractExpenses(text);
+          const totalExpenses = Object.values(breakdown).reduce((s, v) => s + v, 0);
+          const profit       = revenue - totalExpenses;
+          const margin       = revenue > 0 ? parseFloat(((profit / revenue) * 100).toFixed(2)) : 0;
+          const custMatch    = text.match(/(\d+)\s*(?:customers?|clients?|people|transactions?)/i);
+          const customers    = custMatch ? parseInt(custMatch[1], 10) : 0;
+          type = 'daily_entry';
+          data = { revenue, totalExpenses, expenseBreakdown: breakdown, profit, margin, customers };
+        }
+      }
     }
 
     // ── Route to correct handler ──
