@@ -12,8 +12,8 @@ const TransactionModel = {
   async create({ userId, revenue, totalExpenses, expenseBreakdown, profit, margin, customers, notes, rawMessage }) {
     const res = await query(
       `INSERT INTO transactions
-         (user_id, revenue, total_expenses, expense_breakdown, profit, margin, customers, notes, raw_message)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+         (user_id, date, revenue, total_expenses, expense_breakdown, profit, margin, customers, notes, raw_message)
+       VALUES ($1, (CURRENT_TIMESTAMP AT TIME ZONE 'Africa/Lagos')::DATE, $2, $3, $4, $5, $6, $7, $8, $9)
        RETURNING *`,
       [
         userId,
@@ -50,7 +50,10 @@ const TransactionModel = {
          COALESCE(SUM(total_expenses), 0) AS total_expenses,
          COALESCE(SUM(profit), 0)         AS profit,
          COALESCE(SUM(customers), 0)      AS customers,
-         COALESCE(AVG(margin), 0)         AS margin
+         CASE WHEN SUM(revenue) > 0
+           THEN ROUND((SUM(profit) / SUM(revenue)) * 100, 2)
+           ELSE 0
+         END                              AS margin
        FROM transactions
        WHERE user_id = $1
        GROUP BY date
@@ -70,7 +73,10 @@ const TransactionModel = {
          COALESCE(SUM(total_expenses), 0) AS total_expenses,
          COALESCE(SUM(profit), 0)         AS profit,
          COALESCE(SUM(customers), 0)      AS customers,
-         COALESCE(AVG(margin), 0)         AS margin
+         CASE WHEN SUM(revenue) > 0
+           THEN ROUND((SUM(profit) / SUM(revenue)) * 100, 2)
+           ELSE 0
+         END                              AS margin
        FROM transactions
        WHERE user_id = $1
        GROUP BY date

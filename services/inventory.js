@@ -59,6 +59,20 @@ async function sellStock(user, { item, quantity }) {
   const date  = todayWAT();
   const qty   = parseFloat(quantity) || 0;
 
+  // Check for oversell BEFORE applying movement
+  const existing = await InventoryModel.getItem(user.id, item);
+  if (existing && qty > parseFloat(existing.current_balance) && parseFloat(existing.current_balance) > 0) {
+    const available = parseFloat(existing.current_balance);
+    if (user.whatsapp_number) {
+      WhatsAppService.sendMessage(
+        user.whatsapp_number,
+        `⚠️ You only have ${available} units of ${item} in stock — you tried to sell ${qty}.\n\n` +
+        `I've logged ${available} units sold (your full available stock).\n` +
+        `Was that correct? Reply with the right quantity if not.`
+      ).catch((err) => console.error('[Inventory] Oversell warning error:', err.message));
+    }
+  }
+
   const row = await InventoryModel.applyMovement(user.id, item, 'sold', qty, null);
 
   // Out-of-stock alert — different from low-stock, more urgent

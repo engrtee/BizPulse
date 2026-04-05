@@ -35,6 +35,9 @@ function parseAmount(str) {
   if (!str) return 0;
   // Strip ₦, spaces, commas
   let clean = String(str).replace(/[₦,\s]/g, '').toLowerCase().trim();
+  if (clean.endsWith('m')) {
+    return parseFloat(clean.slice(0, -1)) * 1000000;
+  }
   if (clean.endsWith('k')) {
     return parseFloat(clean.slice(0, -1)) * 1000;
   }

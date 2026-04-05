@@ -90,8 +90,67 @@ Classify as EXACTLY ONE of these types:
 
 Expense categories to use: Stock / Inventory, Rent, Staff Wages, Transport, Utilities, Marketing, Packaging, Equipment, Food & Supplies, Professional Fees, Data / Internet, Uncategorised
 
-Rules:
-- All amounts must be numbers. "k" = thousands (30k = 30000). "m" = millions.
+════ CRITICAL REVENUE RULES ════
+Only count money as revenue if it has already been physically received today.
+
+DO NOT count as revenue (set to 0, add to notes):
+- Money "agreed" or "approved" but not yet paid
+- Future retainers or recurring contracts not yet received
+- "Balance on delivery" — only count when explicitly collected
+- "They said they will pay" / "promise to pay"
+- "Starting next month" payments
+- Signed contracts where no cash has changed hands yet
+
+DO count as revenue:
+- Cash or transfer received today
+- Deposits or part-payments received today
+- Balances explicitly collected today ("collect balance", "they paid")
+- Debt payments received today ("she paid what she owed")
+
+When income is mentioned but NOT yet received, add it to notes as:
+"pending_income: [amount] - [description]"
+
+Example:
+"MTN invoice 250k, Zenith agreed 180k retainer"
+→ revenue: 250000 (MTN paid/invoiced today)
+→ notes: "pending_income: 180000 - Zenith Bank retainer agreed but not yet received"
+
+════ INVENTORY vs REVENUE RULES ════
+Message is INVENTORY IN (type: inventory_in) when:
+- Contains words: "received", "receive", "new stock", "restock", "from supplier",
+  "from warehouse", "buy stock", "stock arrive", "delivery arrive", "got stock"
+- Pattern: "[quantity] [item] at [price] each" with no sale keywords
+- The person is describing goods coming INTO their business
+
+Message is REVENUE (type: daily_entry) when:
+- Contains: "sell", "sold", "customer buy", "customer pay", "sale", "I move"
+- Or: lists items with prices where they are clearly the seller
+
+CRITICAL: "received 5 iPhone at 850000 each" → inventory_in, revenue=0 (NOT a sale)
+CRITICAL: "sell iPhone 1 piece 980000" → daily_entry, revenue=980000
+
+When ambiguous between purchase and sale — default to inventory_in.
+
+════ WHOLESALE / FMCG REVENUE RULES ════
+Nigerian traders — especially FMCG, wholesale, and market traders — often list
+sales WITHOUT using the word "sell". Treat these as daily_entry (revenue):
+
+Pattern examples (these are SALES, not purchases):
+- "indomie 80 carton 3800 each = 304000"
+- "peak milk 30 carton 7200 each = 216000"
+- "ankara 4 yards 4500 each = 18000"
+- "yam 35 tubers 1200 each"
+
+Recognize as REVENUE when:
+- Message lists item + quantity + price (quantity × price format)
+- No inventory keywords (received/bought/restock/from supplier) are present
+- The items listed are typical goods this business TYPE sells (not raw materials)
+- A total is provided that matches quantity × price
+
+In these cases: revenue = total provided by user (or calculated from qty × price)
+
+════ GENERAL RULES ════
+- All amounts must be numbers. "k" = thousands (30k = 30000). "m" = millions (1.5m = 1500000).
 - Natural language is normal: "Today was good, made 45k from customers, paid 10k stock and 3k transport" → daily_entry
 - If revenue AND expenses are mentioned together, it is ALWAYS daily_entry, never customer_log.
 - If revenue is not mentioned, set revenue to 0.

@@ -177,6 +177,19 @@ router.post('/', async (req, res) => {
           await WhatsAppService.sendMessage(from,
             `Hey ${user.name.split(' ')[0]}! 👋 I'm your BizPulse data assistant. Send me your sales and expenses anytime — or type "help" to see what I can do.`);
         }
+        // Still create a zero-entry transaction so the streak advances
+        await TransactionModel.create({
+          userId: user.id, revenue: 0, totalExpenses: 0,
+          expenseBreakdown: {}, profit: 0, margin: 0, customers: 0,
+          notes: 'Check-in (no numbers logged)', rawMessage: text,
+        });
+        const newStreak = await UserModel.touchLastEntry(user.id);
+        const firstName = user.name.split(' ')[0];
+        const s = parseInt(newStreak, 10) || 1;
+        // Append streak line to let the user know it counted
+        await WhatsAppService.sendMessage(from,
+          `📅 Check-in logged — Day ${s} streak${s >= 3 ? ' 🔥' : ''}. Send your numbers whenever you're ready!`
+        ).catch(() => {});
         break;
       }
 

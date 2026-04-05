@@ -99,11 +99,11 @@ const UserModel = {
 
     await query(
       `UPDATE users
-       SET last_entry_date        = CURRENT_DATE,
+       SET last_entry_date        = (CURRENT_TIMESTAMP AT TIME ZONE 'Africa/Lagos')::DATE,
            streak                 = $1,
-           last_message_date      = CURRENT_DATE,
+           last_message_date      = (CURRENT_TIMESTAMP AT TIME ZONE 'Africa/Lagos')::DATE,
            total_messages_sent    = total_messages_sent + 1,
-           first_message_date     = COALESCE(first_message_date, CURRENT_DATE)
+           first_message_date     = COALESCE(first_message_date, (CURRENT_TIMESTAMP AT TIME ZONE 'Africa/Lagos')::DATE)
        WHERE id = $2`,
       [newStreak, userId]
     );

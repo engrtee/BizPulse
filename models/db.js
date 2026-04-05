@@ -59,7 +59,7 @@ async function initDb() {
     CREATE TABLE IF NOT EXISTS transactions (
       id               SERIAL PRIMARY KEY,
       user_id          INTEGER REFERENCES users(id) ON DELETE CASCADE,
-      date             DATE NOT NULL DEFAULT CURRENT_DATE,
+      date             DATE NOT NULL DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'Africa/Lagos')::DATE,
       revenue          NUMERIC(15, 2) DEFAULT 0,
       total_expenses   NUMERIC(15, 2) DEFAULT 0,
       expense_breakdown JSONB DEFAULT '{}',
