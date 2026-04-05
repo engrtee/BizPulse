@@ -59,7 +59,7 @@ async function sendMessage(to, body) {
  * @param {string} firstName   User's first name
  * @param {object} data        { revenue, totalExpenses, profit, margin, customers, streak, topExpense }
  */
-async function sendEntryAck(to, firstName, { revenue, totalExpenses, profit, margin, customers, streak, topExpense }) {
+async function sendEntryAck(to, firstName, { revenue, totalExpenses, profit, margin, customers, streak, topExpense, entryMethod }) {
   const fmt = (n) => Number(n).toLocaleString('en-NG');
   const marginStr = `${parseFloat(margin).toFixed(1)}%`;
   const profitAbs = Math.abs(profit);
@@ -70,8 +70,10 @@ async function sendEntryAck(to, firstName, { revenue, totalExpenses, profit, mar
   if (s === 1)    streakHeader = ' 🌱 Day 1 streak';
   else            streakHeader = ` 🔥 Day ${s} streak`;
 
+  const prefix = entryMethod === 'voice' ? '🎤 Voice note logged' : '✅ Logged';
+
   const body =
-    `✅ Logged ${firstName}!${streakHeader}\n\n` +
+    `${prefix} ${firstName}!${streakHeader}\n\n` +
     `Revenue:   ₦${fmt(revenue)}\n` +
     `Expenses:  ₦${fmt(totalExpenses)}\n` +
     `Profit:    ${profit < 0 ? '-' : ''}₦${fmt(profitAbs)}\n` +

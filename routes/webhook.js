@@ -17,6 +17,7 @@
 
 const express         = require('express');
 const router          = express.Router();
+const axios           = require('axios');
 
 const UserModel       = require('../models/user');
 const TransactionModel= require('../models/transaction');
@@ -66,14 +67,61 @@ router.post('/', async (req, res) => {
     const msg     = value.messages[0];
     const contact = value.contacts?.[0];
 
-    // Only handle text messages
-    if (msg.type !== 'text') return;
+    // Only handle text and audio (voice note) messages
+    if (msg.type !== 'text' && msg.type !== 'audio') return;
 
-    const from    = msg.from; // phone number e.g. "2348012345678"
-    const text    = msg.text.body.trim();
-    const name    = contact?.profile?.name || 'there';
+    const from = msg.from; // phone number e.g. "2348012345678"
+    const name = contact?.profile?.name || 'there';
+    let text        = '';
+    let entryMethod = 'text';
 
-    console.log(`[Webhook] Message from ${from}: "${text}"`);
+    if (msg.type === 'text') {
+      text = msg.text.body.trim();
+      console.log(`[Webhook] Text message from ${from}: "${text}"`);
+    } else {
+      // ── Audio / voice note ──
+      entryMethod = 'voice';
+      const mediaId = msg.audio?.id;
+      console.log(`[Webhook] Voice note from ${from}, media_id: ${mediaId}`);
+
+      // Look up user early so we can send a holding message
+      const voiceUser = await UserModel.findByWhatsapp(from);
+      if (!voiceUser) {
+        await WhatsAppService.sendNotRegistered(from);
+        return;
+      }
+
+      // Acknowledge receipt immediately so the user knows we're working
+      await WhatsAppService.sendMessage(from,
+        `🎤 Got your voice note, ${voiceUser.name.split(' ')[0]}! Give me a moment...`
+      ).catch(() => {});
+
+      try {
+        const { buffer, mimeType } = await downloadWhatsAppAudio(mediaId);
+        const { transcript, confidence } = await GeminiService.transcribeAudio(buffer, mimeType, voiceUser);
+
+        if (!transcript || confidence < 0.5) {
+          await WhatsAppService.sendMessage(from,
+            `🎤 I couldn't make out your voice note clearly, ${voiceUser.name.split(' ')[0]}.\n\n` +
+            `Could you type your numbers instead?\nExample: "Made 45k today, spent 10k on stock"`);
+          return;
+        }
+
+        console.log(`[Webhook] Voice transcribed (confidence: ${confidence.toFixed(2)}): "${transcript}"`);
+        text = transcript;
+
+        // If confidence is borderline, note it in the entry — processing continues normally
+        if (confidence < 0.7) {
+          text = transcript + ` [voice note — please verify amounts]`;
+        }
+      } catch (err) {
+        console.error('[Webhook] Audio processing failed:', err.message);
+        await WhatsAppService.sendMessage(from,
+          `🎤 Sorry, I had trouble processing your voice note, ${voiceUser.name.split(' ')[0]}.\n\n` +
+          `Please type your numbers — example:\n"Made 45k today, spent 10k on stock and 3k transport"`);
+        return;
+      }
+    }
 
     // ── Look up user ──
     const user = await UserModel.findByWhatsapp(from);
@@ -128,7 +176,7 @@ router.post('/', async (req, res) => {
       }
 
       case 'daily_entry': {
-        await handleDailyEntry(user, from, data, text);
+        await handleDailyEntry(user, from, data, text, entryMethod);
         break;
       }
 
@@ -207,7 +255,7 @@ router.post('/', async (req, res) => {
 // ─────────────────────────────────────────────
 // Internal: handle daily_entry messages
 // ─────────────────────────────────────────────
-async function handleDailyEntry(user, from, data, rawMessage) {
+async function handleDailyEntry(user, from, data, rawMessage, entryMethod = 'text') {
   const { revenue, totalExpenses, expenseBreakdown, profit, margin, customers, notes } = data;
 
   // Save to PostgreSQL
@@ -221,6 +269,7 @@ async function handleDailyEntry(user, from, data, rawMessage) {
     customers,
     notes: notes || rawMessage,
     rawMessage,
+    entryMethod,
   });
 
   // Update last_entry_date and streak
@@ -246,6 +295,7 @@ async function handleDailyEntry(user, from, data, rawMessage) {
   // Send instant WhatsApp acknowledgement
   await WhatsAppService.sendEntryAck(from, user.name.split(' ')[0], {
     revenue, totalExpenses, profit, margin, customers, streak: newStreak, topExpense,
+    entryMethod,
   });
 
   // Milestone celebrations (non-blocking)
@@ -322,6 +372,31 @@ async function handleSummaryRequest(user, from) {
 
   await WhatsAppService.sendMessage(from,
     `📩 Summary sent to ${user.email}!\n\nCheck your inbox — it includes your AI recommendation for today.`);
+}
+
+// ─────────────────────────────────────────────
+// Internal: download audio from Meta Media API
+// ─────────────────────────────────────────────
+async function downloadWhatsAppAudio(mediaId) {
+  const token = process.env.WHATSAPP_TOKEN;
+
+  // Step 1 — get the temporary download URL from Meta
+  const metaRes = await axios.get(
+    `https://graph.facebook.com/v19.0/${mediaId}`,
+    { headers: { Authorization: `Bearer ${token}` } }
+  );
+  const { url, mime_type } = metaRes.data;
+
+  // Step 2 — download the actual audio bytes
+  const audioRes = await axios.get(url, {
+    headers: { Authorization: `Bearer ${token}` },
+    responseType: 'arraybuffer',
+  });
+
+  return {
+    buffer:   Buffer.from(audioRes.data),
+    mimeType: mime_type || 'audio/ogg; codecs=opus',
+  };
 }
 
 module.exports = router;

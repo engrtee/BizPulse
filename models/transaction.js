@@ -9,11 +9,11 @@ const { query } = require('./db');
 
 const TransactionModel = {
   /** Insert a daily entry (revenue + expenses) */
-  async create({ userId, revenue, totalExpenses, expenseBreakdown, profit, margin, customers, notes, rawMessage }) {
+  async create({ userId, revenue, totalExpenses, expenseBreakdown, profit, margin, customers, notes, rawMessage, entryMethod }) {
     const res = await query(
       `INSERT INTO transactions
-         (user_id, date, revenue, total_expenses, expense_breakdown, profit, margin, customers, notes, raw_message)
-       VALUES ($1, (CURRENT_TIMESTAMP AT TIME ZONE 'Africa/Lagos')::DATE, $2, $3, $4, $5, $6, $7, $8, $9)
+         (user_id, date, revenue, total_expenses, expense_breakdown, profit, margin, customers, notes, raw_message, entry_method)
+       VALUES ($1, (CURRENT_TIMESTAMP AT TIME ZONE 'Africa/Lagos')::DATE, $2, $3, $4, $5, $6, $7, $8, $9, $10)
        RETURNING *`,
       [
         userId,
@@ -25,6 +25,7 @@ const TransactionModel = {
         customers || 0,
         notes || null,
         rawMessage || null,
+        entryMethod || 'text',
       ]
     );
     return res.rows[0];

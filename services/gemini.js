@@ -268,4 +268,61 @@ Rules:
   }
 }
 
-module.exports = { parseWithAI, generateRecommendation };
+/**
+ * Transcribe a WhatsApp voice note using Gemini multimodal.
+ * Returns the plain-text transcript so it can be fed into parseWithAI()
+ * exactly like a typed message.
+ *
+ * @param {Buffer} audioBuffer  Raw audio bytes downloaded from Meta
+ * @param {string} mimeType     e.g. 'audio/ogg; codecs=opus'
+ * @param {object} user         User record (for biz_type context)
+ * @returns {{ transcript: string, confidence: number }}
+ */
+async function transcribeAudio(audioBuffer, mimeType, user) {
+  const prompt = `
+You are transcribing a voice note from a Nigerian small business owner.
+They may speak in Nigerian English, Pidgin English, or mix with Yoruba/Igbo/Hausa.
+The user runs a "${user.biz_type || 'retail'}" business.
+
+Common Nigerian speech patterns to recognise:
+- "Na" means "is/was": "Sales today na 45k" = revenue ₦45,000
+- "I sell am" = I sold it
+- "K" after number = thousands: "45k" = 45,000
+- "I buy" can mean "I spent on" / "I purchased"
+- "Nepa" = electricity/utility, "Gen" = generator, "Keke" = tricycle (transport)
+- "Oga" = boss/landlord, "Mama put" = small food vendor
+- Mixed English/Pidgin is completely normal
+
+Your tasks:
+1. Transcribe the voice note as accurately as possible in plain text.
+2. Estimate confidence from 0.0 (unintelligible) to 1.0 (crystal clear).
+
+Return ONLY valid JSON — no markdown, no explanation:
+{ "transcript": "exact words spoken", "confidence": 0.95 }
+`;
+
+  try {
+    const model = getClient().getGenerativeModel({ model: 'gemini-2.5-flash' });
+    const result = await model.generateContent([
+      {
+        inlineData: {
+          mimeType: mimeType || 'audio/ogg; codecs=opus',
+          data: audioBuffer.toString('base64'),
+        },
+      },
+      { text: prompt },
+    ]);
+    const text   = result.response.text().trim();
+    const clean  = text.replace(/^```json\s*/i, '').replace(/```$/i, '').trim();
+    const parsed = JSON.parse(clean);
+    return {
+      transcript: String(parsed.transcript || '').trim(),
+      confidence: parseFloat(parsed.confidence) || 0,
+    };
+  } catch (err) {
+    console.error('[Gemini] transcribeAudio error:', err.message);
+    return { transcript: '', confidence: 0 };
+  }
+}
+
+module.exports = { parseWithAI, generateRecommendation, transcribeAudio };

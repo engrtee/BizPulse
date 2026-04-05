@@ -84,6 +84,7 @@ async function initDb() {
     );
 
     ALTER TABLE inventory ADD COLUMN IF NOT EXISTS total_received NUMERIC(12, 2) DEFAULT 0;
+    ALTER TABLE transactions ADD COLUMN IF NOT EXISTS entry_method VARCHAR(20) DEFAULT 'text';
 
     CREATE TABLE IF NOT EXISTS customer_logs (
       id         SERIAL PRIMARY KEY,
