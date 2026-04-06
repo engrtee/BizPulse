@@ -94,9 +94,95 @@ async function initDb() {
       notes      TEXT,
       created_at TIMESTAMPTZ DEFAULT NOW()
     );
+
+    CREATE TABLE IF NOT EXISTS whatsapp_messages (
+      id            SERIAL PRIMARY KEY,
+      user_id       INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      phone_number  VARCHAR(20) NOT NULL,
+      direction     VARCHAR(10) NOT NULL DEFAULT 'inbound',
+      message_text  TEXT,
+      intent        VARCHAR(50),
+      parsed_data   JSONB,
+      response_sent TEXT,
+      status        VARCHAR(20) DEFAULT 'received',
+      created_at    TIMESTAMPTZ DEFAULT NOW()
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_wa_messages_phone    ON whatsapp_messages(phone_number);
+    CREATE INDEX IF NOT EXISTS idx_wa_messages_user     ON whatsapp_messages(user_id);
+    CREATE INDEX IF NOT EXISTS idx_wa_messages_created  ON whatsapp_messages(created_at DESC);
+  `);
+
+  // Normalize existing phone numbers to 234XXXXXXXXXX format (safe to run repeatedly)
+  await pool.query(`
+    UPDATE users
+    SET whatsapp_number = (
+      CASE
+        WHEN REGEXP_REPLACE(REGEXP_REPLACE(whatsapp_number, '[+ \\-()]', '', 'g'), '^0+', '') ~ '^[789][0-9]{9}$'
+          THEN '234' || REGEXP_REPLACE(REGEXP_REPLACE(whatsapp_number, '[+ \\-()]', '', 'g'), '^0+', '')
+        WHEN REGEXP_REPLACE(REGEXP_REPLACE(whatsapp_number, '[+ \\-()]', '', 'g'), '^0+', '') ~ '^234[789][0-9]{9}$'
+          THEN REGEXP_REPLACE(REGEXP_REPLACE(whatsapp_number, '[+ \\-()]', '', 'g'), '^0+', '')
+        ELSE whatsapp_number
+      END
+    )
+    WHERE whatsapp_number IS NOT NULL
+      AND NOT (whatsapp_number ~ '^234[0-9]{10}$')
   `);
 
   console.log('✅ Database tables ready.');
 }
 
-module.exports = { query, initDb, pool };
+// ─────────────────────────────────────────────
+// WhatsApp message log helpers
+// Used by webhook to record every inbound message and its processing result.
+// ─────────────────────────────────────────────
+const MessageModel = {
+  /** Insert a new inbound message row. Returns the row id so it can be updated later. */
+  async logInbound(phoneNumber, userId, messageText) {
+    const res = await pool.query(
+      `INSERT INTO whatsapp_messages (phone_number, user_id, message_text, direction, status)
+       VALUES ($1, $2, $3, 'inbound', 'received')
+       RETURNING id`,
+      [phoneNumber, userId || null, messageText]
+    );
+    return res.rows[0]?.id;
+  },
+
+  /** Update the log row after processing is complete. */
+  async updateLog(id, { intent, parsedData, responseSent, status = 'processed' }) {
+    if (!id) return;
+    await pool.query(
+      `UPDATE whatsapp_messages
+       SET intent = $1, parsed_data = $2, response_sent = $3, status = $4
+       WHERE id = $5`,
+      [intent || null, parsedData ? JSON.stringify(parsedData) : null, responseSent || null, status, id]
+    );
+  },
+
+  /** Fetch the last N messages (all users) for the admin dashboard. */
+  async getRecent(limit = 50) {
+    const res = await pool.query(
+      `SELECT m.*, u.name AS user_name, u.biz_name
+       FROM whatsapp_messages m
+       LEFT JOIN users u ON u.id = m.user_id
+       ORDER BY m.created_at DESC
+       LIMIT $1`,
+      [limit]
+    );
+    return res.rows;
+  },
+
+  /** Fetch all messages for a single user. */
+  async getByUser(userId, limit = 30) {
+    const res = await pool.query(
+      `SELECT * FROM whatsapp_messages
+       WHERE user_id = $1
+       ORDER BY created_at DESC
+       LIMIT $2`,
+      [userId, limit]
+    );
+    return res.rows;
+  },
+};
+
+module.exports = { query, initDb, pool, MessageModel };

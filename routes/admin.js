@@ -1,85 +1,173 @@
 /**
  * routes/admin.js
- * Password-protected admin dashboard.
+ * Password-protected admin dashboard — full rebuild.
  *
- * GET /admin           → HTML dashboard (requires ?password= or x-admin-password header)
- * GET /admin/stats     → JSON stats (for programmatic access)
- *
- * Set ADMIN_PASSWORD in environment variables to enable.
- * If ADMIN_PASSWORD is not set, admin is inaccessible.
+ * GET  /admin           → Full HTML dashboard (tabs: Overview | Users | Messages | At-Risk | Health)
+ * GET  /admin/stats     → JSON stats
+ * POST /admin/nudge     → Send a WhatsApp nudge to a specific user
+ * POST /admin/message   → Send a custom WhatsApp message to any user
  */
 
 'use strict';
 
-const express   = require('express');
-const router    = express.Router();
-const UserModel = require('../models/user');
+const express        = require('express');
+const router         = express.Router();
+const UserModel      = require('../models/user');
+const { MessageModel } = require('../models/db');
 
-// ─────────────────────────────────────────────
-// Middleware: simple password gate
-// ─────────────────────────────────────────────
 function adminAuth(req, res, next) {
   const provided = req.query.password || req.headers['x-admin-password'];
-
   if (!process.env.ADMIN_PASSWORD) {
     return res.status(503).send('Admin dashboard not configured. Set ADMIN_PASSWORD env var.');
   }
-
   if (provided !== process.env.ADMIN_PASSWORD) {
-    return res.status(401).send(`
-      <!DOCTYPE html>
-      <html lang="en">
-      <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width,initial-scale=1">
-        <title>BizPulse Admin</title>
-        <style>
-          * { box-sizing: border-box; margin: 0; padding: 0; }
-          body { font-family: sans-serif; background: #F0F4FA; display: flex; align-items: center; justify-content: center; min-height: 100vh; }
-          .box { background: #fff; border-radius: 12px; padding: 2rem; box-shadow: 0 4px 16px rgba(0,0,0,0.1); width: 100%; max-width: 360px; text-align: center; }
-          h2 { color: #0F2744; margin-bottom: 1.5rem; font-size: 1.25rem; }
-          input { width: 100%; padding: 10px 14px; border: 1px solid #E2E8F0; border-radius: 8px; font-size: 1rem; margin-bottom: 1rem; }
-          button { width: 100%; padding: 10px; background: #1A56A4; color: #fff; border: none; border-radius: 8px; font-size: 1rem; cursor: pointer; }
-          .logo { font-size: 2rem; margin-bottom: 0.5rem; }
-        </style>
-      </head>
-      <body>
-        <div class="box">
-          <div class="logo">📊</div>
-          <h2>BizPulse Admin</h2>
-          <form method="GET" action="/admin">
-            <input type="password" name="password" placeholder="Admin password" autofocus>
-            <button type="submit">Access Dashboard</button>
-          </form>
-        </div>
-      </body>
-      </html>
-    `);
+    return res.status(401).send(`<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>BizPulse Admin</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:sans-serif;background:#F0F4FA;display:flex;align-items:center;justify-content:center;min-height:100vh}
+    .box{background:#fff;border-radius:12px;padding:2rem;box-shadow:0 4px 16px rgba(0,0,0,.1);width:100%;max-width:360px;text-align:center}
+    h2{color:#0F2744;margin-bottom:1.5rem;font-size:1.25rem}
+    input{width:100%;padding:10px 14px;border:1px solid #E2E8F0;border-radius:8px;font-size:1rem;margin-bottom:1rem}
+    button{width:100%;padding:10px;background:#1A56A4;color:#fff;border:none;border-radius:8px;font-size:1rem;cursor:pointer}
+    .logo{font-size:2rem;margin-bottom:.5rem}
+  </style>
+</head>
+<body>
+  <div class="box">
+    <div class="logo">📊</div>
+    <h2>BizPulse Admin</h2>
+    <form method="GET" action="/admin">
+      <input type="password" name="password" placeholder="Admin password" autofocus>
+      <button type="submit">Access Dashboard</button>
+    </form>
+  </div>
+</body>
+</html>`);
   }
-
   next();
 }
 
 // ─────────────────────────────────────────────
-// GET /admin — HTML dashboard
+// GET /admin — Full HTML dashboard
 // ─────────────────────────────────────────────
 router.get('/', adminAuth, async (req, res) => {
   try {
-    const [stats, recentRegs] = await Promise.all([
+    const pw = req.query.password || '';
+
+    const [stats, recentRegs, allUsers, recentMessages, atRisk] = await Promise.all([
       UserModel.getAdminStats(),
       UserModel.getRecentRegistrations(7),
+      UserModel.findAllWithStats(),
+      MessageModel.getRecent(50),
+      UserModel.findAtRisk(),
     ]);
 
-    const pw             = req.query.password || '';
     const totalUsers     = parseInt(stats.total_users,      10) || 0;
     const activated      = parseInt(stats.activated,         10) || 0;
     const activeThisWeek = parseInt(stats.active_this_week,  10) || 0;
-    const atRisk         = parseInt(stats.at_risk,           10) || 0;
+    const atRiskCount    = parseInt(stats.at_risk,           10) || 0;
     const churned        = parseInt(stats.churned,           10) || 0;
     const avgMessages    = parseFloat(stats.avg_messages_per_user) || 0;
-
     const activationRate = totalUsers > 0 ? Math.round((activated / totalUsers) * 100) : 0;
 
+    // ── Active today ──
+    const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Lagos' });
+    const activeToday = allUsers.filter(u => {
+      if (!u.last_message_date) return false;
+      const d = new Date(u.last_message_date).toLocaleDateString('en-CA', { timeZone: 'Africa/Lagos' });
+      return d === todayStr;
+    }).length;
+
+    // ── User table rows ──
+    const userRows = allUsers.map(u => {
+      const lastSeen = u.last_message_date
+        ? new Date(u.last_message_date).toLocaleDateString('en-NG', { day: 'numeric', month: 'short' })
+        : '—';
+      const daysSince = u.last_message_date
+        ? Math.floor((Date.now() - new Date(u.last_message_date)) / 86400000)
+        : null;
+      let statusBadge = '<span style="background:#E2E8F0;color:#718096;padding:2px 8px;border-radius:12px;font-size:0.7rem">Not started</span>';
+      if (u.first_message_date && daysSince !== null) {
+        if (daysSince === 0)       statusBadge = '<span style="background:#C6F6D5;color:#1A7A4A;padding:2px 8px;border-radius:12px;font-size:0.7rem">Active today</span>';
+        else if (daysSince <= 7)   statusBadge = '<span style="background:#BEE3F8;color:#1A56A4;padding:2px 8px;border-radius:12px;font-size:0.7rem">Active</span>';
+        else if (daysSince <= 14)  statusBadge = '<span style="background:#FEFCBF;color:#B7791F;padding:2px 8px;border-radius:12px;font-size:0.7rem">At risk</span>';
+        else                       statusBadge = '<span style="background:#FED7D7;color:#C53030;padding:2px 8px;border-radius:12px;font-size:0.7rem">Churned</span>';
+      }
+      const streak    = parseInt(u.streak, 10) || 0;
+      const entries   = parseInt(u.total_entries, 10) || 0;
+      const regDate   = new Date(u.created_at).toLocaleDateString('en-NG', { day: 'numeric', month: 'short' });
+      const phone     = u.whatsapp_number || '—';
+      return `
+        <tr>
+          <td style="padding:10px 12px;border-bottom:1px solid #E2E8F0">
+            <div style="font-weight:600;color:#1a202c">${escHtml(u.name)}</div>
+            <div style="font-size:0.75rem;color:#718096">${escHtml(u.email)}</div>
+          </td>
+          <td style="padding:10px 12px;border-bottom:1px solid #E2E8F0;font-size:0.8rem">${escHtml(u.biz_type || '—')}</td>
+          <td style="padding:10px 12px;border-bottom:1px solid #E2E8F0;font-size:0.8rem">${escHtml(phone)}</td>
+          <td style="padding:10px 12px;border-bottom:1px solid #E2E8F0">${statusBadge}</td>
+          <td style="padding:10px 12px;border-bottom:1px solid #E2E8F0;text-align:center;font-size:0.8rem">${streak > 0 ? '🔥 ' + streak : '—'}</td>
+          <td style="padding:10px 12px;border-bottom:1px solid #E2E8F0;text-align:center;font-size:0.8rem">${entries}</td>
+          <td style="padding:10px 12px;border-bottom:1px solid #E2E8F0;font-size:0.8rem">${regDate}</td>
+          <td style="padding:10px 12px;border-bottom:1px solid #E2E8F0;font-size:0.8rem">${lastSeen}</td>
+          <td style="padding:10px 12px;border-bottom:1px solid #E2E8F0">
+            <button onclick="sendNudge(${u.id},'${escHtml(u.name.split(' ')[0])}')"
+              style="font-size:0.72rem;padding:4px 10px;background:#1A56A4;color:#fff;border:none;border-radius:6px;cursor:pointer;margin-right:4px">
+              Nudge
+            </button>
+          </td>
+        </tr>`;
+    }).join('');
+
+    // ── Message log rows ──
+    const intentColor = { daily_entry: '#BEE3F8', inventory_in: '#C6F6D5', inventory_out: '#FED7D7',
+      help: '#E2E8F0', summary: '#BEE3F8', stock_check: '#FEFCBF', onboarding: '#C6F6D5',
+      unregistered: '#FED7D7', unknown: '#FED7D7', greeting: '#E2E8F0', question: '#E2E8F0' };
+    const msgRows = recentMessages.map(m => {
+      const ts = new Date(m.created_at).toLocaleString('en-NG', { timeZone: 'Africa/Lagos', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+      const intent = m.intent || 'unknown';
+      const bg = intentColor[intent] || '#E2E8F0';
+      const statusDot = m.status === 'processed' ? '✅' : m.status === 'parse_error' ? '⚠️' : m.status === 'unhandled' ? '❓' : '•';
+      return `
+        <tr>
+          <td style="padding:8px 12px;border-bottom:1px solid #E2E8F0;font-size:0.75rem;color:#718096">${ts}</td>
+          <td style="padding:8px 12px;border-bottom:1px solid #E2E8F0;font-size:0.8rem;font-weight:600">${escHtml(m.user_name || m.phone_number)}</td>
+          <td style="padding:8px 12px;border-bottom:1px solid #E2E8F0;font-size:0.8rem;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(m.message_text || '—')}</td>
+          <td style="padding:8px 12px;border-bottom:1px solid #E2E8F0">
+            <span style="background:${bg};padding:2px 8px;border-radius:12px;font-size:0.7rem">${intent}</span>
+          </td>
+          <td style="padding:8px 12px;border-bottom:1px solid #E2E8F0;text-align:center;font-size:0.8rem">${statusDot}</td>
+        </tr>`;
+    }).join('') || '<tr><td colspan="5" style="padding:16px;text-align:center;color:#718096">No messages yet</td></tr>';
+
+    // ── At-risk user rows ──
+    const atRiskRows = atRisk.map(u => {
+      const daysSince = u.last_message_date
+        ? Math.floor((Date.now() - new Date(u.last_message_date)) / 86400000)
+        : '?';
+      const phone = u.whatsapp_number || '—';
+      return `
+        <tr>
+          <td style="padding:10px 12px;border-bottom:1px solid #E2E8F0;font-weight:600">${escHtml(u.name)}</td>
+          <td style="padding:10px 12px;border-bottom:1px solid #E2E8F0;font-size:0.8rem">${escHtml(u.biz_type || '—')}</td>
+          <td style="padding:10px 12px;border-bottom:1px solid #E2E8F0;font-size:0.8rem">${escHtml(phone)}</td>
+          <td style="padding:10px 12px;border-bottom:1px solid #E2E8F0;text-align:center">
+            <span style="background:#FEFCBF;color:#B7791F;padding:2px 8px;border-radius:12px;font-size:0.8rem">${daysSince} days ago</span>
+          </td>
+          <td style="padding:10px 12px;border-bottom:1px solid #E2E8F0">
+            <button onclick="sendNudge(${u.id},'${escHtml(u.name.split(' ')[0])}')"
+              style="font-size:0.75rem;padding:5px 12px;background:#B7791F;color:#fff;border:none;border-radius:6px;cursor:pointer">
+              Send Nudge
+            </button>
+          </td>
+        </tr>`;
+    }).join('') || '<tr><td colspan="5" style="padding:16px;text-align:center;color:#718096">No at-risk users — great retention! 🎉</td></tr>';
+
+    // ── Recent registrations ──
     const regRows = recentRegs.length > 0
       ? recentRegs.map(r => `
           <tr>
@@ -88,149 +176,272 @@ router.get('/', adminAuth, async (req, res) => {
           </tr>`).join('')
       : '<tr><td colspan="2" style="padding:12px;color:#718096;text-align:center">No registrations in last 7 days</td></tr>';
 
+    // ── System health ──
+    const healthItems = [
+      { label: 'WhatsApp Token',  ok: !!process.env.WHATSAPP_TOKEN,            detail: process.env.WHATSAPP_TOKEN ? `length: ${process.env.WHATSAPP_TOKEN.length}` : 'NOT SET' },
+      { label: 'Gemini API Key',  ok: !!process.env.GEMINI_API_KEY,            detail: process.env.GEMINI_API_KEY ? 'set' : 'NOT SET' },
+      { label: 'Brevo API Key',   ok: !!process.env.BREVO_API_KEY,             detail: process.env.BREVO_API_KEY ? 'set' : 'NOT SET' },
+      { label: 'Database URL',    ok: !!process.env.DATABASE_URL,              detail: process.env.DATABASE_URL ? 'set' : 'NOT SET' },
+      { label: 'Cron Secret',     ok: !!process.env.CRON_SECRET,              detail: process.env.CRON_SECRET ? 'set' : 'NOT SET' },
+      { label: 'WA Phone ID',     ok: !!process.env.WHATSAPP_PHONE_NUMBER_ID, detail: process.env.WHATSAPP_PHONE_NUMBER_ID || 'NOT SET' },
+    ];
+    const healthRows = healthItems.map(h => `
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #E2E8F0">
+        <span style="font-weight:500">${h.label}</span>
+        <span style="background:${h.ok ? '#C6F6D5' : '#FED7D7'};color:${h.ok ? '#1A7A4A' : '#C53030'};padding:3px 10px;border-radius:12px;font-size:0.8rem">
+          ${h.ok ? '✅ ' : '❌ '}${h.detail}
+        </span>
+      </div>`).join('');
+
     const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>BizPulse Admin Dashboard</title>
+  <title>BizPulse Admin</title>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: 'DM Sans', sans-serif; background: #F0F4FA; color: #1a202c; }
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:'DM Sans',sans-serif;background:#F0F4FA;color:#1a202c}
+    .header{background:#0F2744;color:#fff;padding:1rem 2rem;display:flex;justify-content:space-between;align-items:center}
+    .header h1{font-size:1.125rem;font-weight:600}
+    .header-right{display:flex;gap:.75rem;align-items:center}
+    .badge{background:rgba(255,255,255,.15);padding:4px 10px;border-radius:20px;font-size:.75rem}
+    .btn{background:#1A56A4;color:#fff;border:none;padding:8px 16px;border-radius:8px;cursor:pointer;font-size:.875rem;text-decoration:none}
 
-    .header {
-      background: #0F2744;
-      color: #fff;
-      padding: 1rem 2rem;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-    .header h1 { font-size: 1.125rem; font-weight: 600; }
-    .header-right { display: flex; gap: 0.75rem; align-items: center; }
-    .badge { background: rgba(255,255,255,0.15); padding: 4px 10px; border-radius: 20px; font-size: 0.75rem; }
-    .btn { background: #1A56A4; color: #fff; border: none; padding: 8px 16px; border-radius: 8px; cursor: pointer; font-size: 0.875rem; text-decoration: none; }
+    .metrics-bar{display:grid;grid-template-columns:repeat(6,1fr);gap:0;background:#fff;border-bottom:2px solid #E2E8F0;margin-bottom:0}
+    .metric-cell{padding:1rem 1.25rem;text-align:center;border-right:1px solid #E2E8F0}
+    .metric-cell:last-child{border-right:none}
+    .metric-cell .val{font-size:1.75rem;font-weight:700;line-height:1}
+    .metric-cell .lbl{font-size:.72rem;color:#718096;text-transform:uppercase;letter-spacing:.04em;margin-top:.25rem}
 
-    .container { max-width: 960px; margin: 2rem auto; padding: 0 1rem; }
-    .section-title { font-size: 0.875rem; font-weight: 600; color: #718096; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 1rem; }
+    .tabs{display:flex;gap:0;background:#fff;border-bottom:2px solid #E2E8F0}
+    .tab{padding:.75rem 1.5rem;cursor:pointer;font-size:.9rem;font-weight:500;color:#718096;border-bottom:2px solid transparent;margin-bottom:-2px;transition:all .2s}
+    .tab.active{color:#1A56A4;border-bottom-color:#1A56A4}
+    .tab:hover:not(.active){color:#1a202c}
 
-    .stats-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-      gap: 1rem;
-      margin-bottom: 2rem;
-    }
-    .card {
-      background: #fff;
-      border-radius: 12px;
-      padding: 1.25rem;
-      box-shadow: 0 1px 4px rgba(0,0,0,0.08);
-    }
-    .card .label { font-size: 0.75rem; color: #718096; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.4rem; }
-    .card .value { font-size: 2rem; font-weight: 700; line-height: 1.1; }
-    .card .sub { font-size: 0.75rem; color: #718096; margin-top: 0.25rem; }
-    .card.green .value { color: #1A7A4A; }
-    .card.blue  .value { color: #1A56A4; }
-    .card.gold  .value { color: #B7791F; }
-    .card.red   .value { color: #C53030; }
+    .pane{display:none;padding:1.5rem 2rem}
+    .pane.active{display:block}
 
-    .funnel { display: flex; gap: 0.5rem; margin-bottom: 2rem; align-items: stretch; }
-    .funnel-step {
-      flex: 1;
-      background: #fff;
-      border-radius: 10px;
-      padding: 1rem;
-      text-align: center;
-      box-shadow: 0 1px 4px rgba(0,0,0,0.08);
-      font-size: 0.8rem;
-    }
-    .funnel-step .fval { font-size: 1.5rem; font-weight: 700; }
-    .funnel-step .flabel { color: #718096; font-size: 0.75rem; margin-top: 0.25rem; }
-    .funnel-arrow { display: flex; align-items: center; color: #CBD5E0; font-size: 1.25rem; }
+    .section-title{font-size:.8rem;font-weight:600;color:#718096;text-transform:uppercase;letter-spacing:.05em;margin-bottom:1rem;margin-top:1.5rem}
+    .section-title:first-child{margin-top:0}
 
-    table { width: 100%; border-collapse: collapse; background: #fff; border-radius: 12px; overflow: hidden; box-shadow: 0 1px 4px rgba(0,0,0,0.08); }
-    thead th { background: #0F2744; color: #fff; padding: 10px 12px; text-align: left; font-size: 0.8rem; font-weight: 500; }
-    .updated { font-size: 0.75rem; color: #718096; text-align: right; margin-top: 1.5rem; }
+    .card{background:#fff;border-radius:12px;padding:1.25rem;box-shadow:0 1px 4px rgba(0,0,0,.08);margin-bottom:1.5rem}
 
-    @media (max-width: 600px) {
-      .funnel { flex-direction: column; }
-      .funnel-arrow { display: none; }
-      .stats-grid { grid-template-columns: repeat(2, 1fr); }
+    table{width:100%;border-collapse:collapse;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.08);font-size:.875rem}
+    thead th{background:#0F2744;color:#fff;padding:10px 12px;text-align:left;font-size:.78rem;font-weight:500}
+
+    .custom-msg-form{display:flex;gap:.75rem;flex-wrap:wrap;align-items:flex-end}
+    .custom-msg-form select,.custom-msg-form textarea,.custom-msg-form input{padding:8px 12px;border:1px solid #E2E8F0;border-radius:8px;font-family:inherit;font-size:.875rem}
+    .custom-msg-form textarea{flex:1;min-width:200px;resize:vertical}
+
+    .toast{position:fixed;bottom:2rem;right:2rem;background:#1A7A4A;color:#fff;padding:12px 20px;border-radius:8px;font-size:.875rem;display:none;z-index:999;box-shadow:0 4px 12px rgba(0,0,0,.2)}
+
+    @media(max-width:700px){
+      .metrics-bar{grid-template-columns:repeat(3,1fr)}
+      .tabs{overflow-x:auto}
+      .pane{padding:1rem}
     }
   </style>
 </head>
 <body>
-  <div class="header">
-    <h1>📊 BizPulse Admin</h1>
-    <div class="header-right">
-      <span class="badge">Phase 1</span>
-      <a href="/admin?password=${encodeURIComponent(pw)}" class="btn">Refresh</a>
+
+<div class="header">
+  <h1>📊 BizPulse Admin</h1>
+  <div class="header-right">
+    <span class="badge">Phase 1</span>
+    <a href="/admin?password=${encodeURIComponent(pw)}" class="btn" style="font-size:.8rem;padding:6px 14px">↻ Refresh</a>
+  </div>
+</div>
+
+<!-- Top metrics bar — always visible -->
+<div class="metrics-bar">
+  <div class="metric-cell">
+    <div class="val">${totalUsers}</div>
+    <div class="lbl">Total Users</div>
+  </div>
+  <div class="metric-cell">
+    <div class="val" style="color:#1A56A4">${activated}</div>
+    <div class="lbl">Activated (${activationRate}%)</div>
+  </div>
+  <div class="metric-cell">
+    <div class="val" style="color:#1A7A4A">${activeToday}</div>
+    <div class="lbl">Active Today</div>
+  </div>
+  <div class="metric-cell">
+    <div class="val" style="color:#1A7A4A">${activeThisWeek}</div>
+    <div class="lbl">Active This Week</div>
+  </div>
+  <div class="metric-cell">
+    <div class="val" style="color:#B7791F">${atRiskCount}</div>
+    <div class="lbl">At Risk</div>
+  </div>
+  <div class="metric-cell">
+    <div class="val" style="color:#C53030">${churned}</div>
+    <div class="lbl">Churned</div>
+  </div>
+</div>
+
+<!-- Tab bar -->
+<div class="tabs">
+  <div class="tab active" onclick="showTab('overview')">Overview</div>
+  <div class="tab" onclick="showTab('users')">Users (${totalUsers})</div>
+  <div class="tab" onclick="showTab('messages')">Messages</div>
+  <div class="tab" onclick="showTab('atrisk')">At-Risk (${atRiskCount})</div>
+  <div class="tab" onclick="showTab('health')">System Health</div>
+</div>
+
+<!-- ── OVERVIEW TAB ── -->
+<div id="tab-overview" class="pane active">
+  <p class="section-title">New Registrations — Last 7 Days</p>
+  <table>
+    <thead><tr><th>Date</th><th>New Users</th></tr></thead>
+    <tbody>${regRows}</tbody>
+  </table>
+
+  <p class="section-title" style="margin-top:1.5rem">Send Custom WhatsApp Message</p>
+  <div class="card">
+    <div class="custom-msg-form">
+      <select id="msgUserId" style="width:220px">
+        <option value="">— Select user —</option>
+        ${allUsers.filter(u => u.whatsapp_number).map(u =>
+          `<option value="${u.id}">${escHtml(u.name)} (${u.whatsapp_number})</option>`
+        ).join('')}
+      </select>
+      <textarea id="msgBody" rows="3" placeholder="Type your message…" style="min-height:80px"></textarea>
+      <button onclick="sendCustomMsg()"
+        style="padding:8px 20px;background:#1A7A4A;color:#fff;border:none;border-radius:8px;cursor:pointer;font-weight:600">
+        Send
+      </button>
     </div>
   </div>
 
-  <div class="container">
+  <p class="updated" style="font-size:.75rem;color:#718096;margin-top:1rem">
+    Last updated: ${new Date().toLocaleString('en-NG', { timeZone: 'Africa/Lagos' })} WAT
+  </p>
+</div>
 
-    <p class="section-title" style="margin-top:0">User Funnel</p>
-    <div class="funnel" style="margin-bottom:2rem">
-      <div class="funnel-step">
-        <div class="fval">${totalUsers}</div>
-        <div class="flabel">Registered</div>
-      </div>
-      <div class="funnel-arrow">→</div>
-      <div class="funnel-step">
-        <div class="fval" style="color:#1A56A4">${activated}</div>
-        <div class="flabel">Activated</div>
-      </div>
-      <div class="funnel-arrow">→</div>
-      <div class="funnel-step">
-        <div class="fval" style="color:#1A7A4A">${activeThisWeek}</div>
-        <div class="flabel">Active This Week</div>
-      </div>
-    </div>
-
-    <p class="section-title">Key Metrics</p>
-    <div class="stats-grid">
-      <div class="card">
-        <div class="label">Total Users</div>
-        <div class="value">${totalUsers}</div>
-        <div class="sub">All registered</div>
-      </div>
-      <div class="card green">
-        <div class="label">Activated</div>
-        <div class="value">${activated}</div>
-        <div class="sub">${activationRate}% activation rate</div>
-      </div>
-      <div class="card blue">
-        <div class="label">Active This Week</div>
-        <div class="value">${activeThisWeek}</div>
-        <div class="sub">Messaged in 7 days</div>
-      </div>
-      <div class="card gold">
-        <div class="label">At Risk</div>
-        <div class="value">${atRisk}</div>
-        <div class="sub">5–14 days inactive</div>
-      </div>
-      <div class="card red">
-        <div class="label">Churned</div>
-        <div class="value">${churned}</div>
-        <div class="sub">14+ days inactive</div>
-      </div>
-      <div class="card">
-        <div class="label">Avg Messages / User</div>
-        <div class="value">${avgMessages.toFixed(1)}</div>
-        <div class="sub">Engagement depth</div>
-      </div>
-    </div>
-
-    <p class="section-title">New Registrations — Last 7 Days</p>
+<!-- ── USERS TAB ── -->
+<div id="tab-users" class="pane">
+  <div style="overflow-x:auto">
     <table>
-      <thead><tr><th>Date</th><th>New Users</th></tr></thead>
-      <tbody>${regRows}</tbody>
+      <thead>
+        <tr>
+          <th>Name / Email</th>
+          <th>Business Type</th>
+          <th>Phone</th>
+          <th>Status</th>
+          <th>Streak</th>
+          <th>Entries</th>
+          <th>Registered</th>
+          <th>Last Active</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody>${userRows || '<tr><td colspan="9" style="padding:16px;text-align:center;color:#718096">No users yet</td></tr>'}</tbody>
     </table>
-
-    <p class="updated">Last updated: ${new Date().toLocaleString('en-NG', { timeZone: 'Africa/Lagos' })} WAT</p>
   </div>
+</div>
+
+<!-- ── MESSAGES TAB ── -->
+<div id="tab-messages" class="pane">
+  <p style="font-size:.85rem;color:#718096;margin-bottom:1rem">Last 50 inbound WhatsApp messages</p>
+  <div style="overflow-x:auto">
+    <table>
+      <thead>
+        <tr>
+          <th>Time</th>
+          <th>User</th>
+          <th>Message</th>
+          <th>Intent</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>${msgRows}</tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ── AT-RISK TAB ── -->
+<div id="tab-atrisk" class="pane">
+  <p style="font-size:.85rem;color:#718096;margin-bottom:1rem">
+    Users who haven't sent a message in 5–14 days. Send a nudge to bring them back.
+  </p>
+  <div style="overflow-x:auto">
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Business Type</th>
+          <th>Phone</th>
+          <th>Last Active</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody>${atRiskRows}</tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ── HEALTH TAB ── -->
+<div id="tab-health" class="pane">
+  <p class="section-title">Environment Variables</p>
+  <div class="card">${healthRows}</div>
+
+  <p class="section-title">Cron Jobs (external trigger URLs)</p>
+  <div class="card" style="font-size:.85rem;line-height:2">
+    <div>POST <code style="background:#F0F4FA;padding:2px 6px;border-radius:4px">${process.env.BASE_URL || ''}/api/cron/morning-broadcast</code> — 7am WAT daily</div>
+    <div>POST <code style="background:#F0F4FA;padding:2px 6px;border-radius:4px">${process.env.BASE_URL || ''}/api/cron/evening-reminder</code> — 6pm WAT daily</div>
+    <div>POST <code style="background:#F0F4FA;padding:2px 6px;border-radius:4px">${process.env.BASE_URL || ''}/api/cron/daily-summary</code> — 7pm WAT daily</div>
+    <div>POST <code style="background:#F0F4FA;padding:2px 6px;border-radius:4px">${process.env.BASE_URL || ''}/api/cron/retention-nudge</code> — 10am WAT daily</div>
+  </div>
+</div>
+
+<!-- Toast notification -->
+<div class="toast" id="toast"></div>
+
+<script>
+function showTab(name) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.pane').forEach(p => p.classList.remove('active'));
+  document.querySelector('[onclick="showTab(\\''+name+'\\')"]').classList.add('active');
+  document.getElementById('tab-'+name).classList.add('active');
+}
+
+function toast(msg, ok=true) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.style.background = ok ? '#1A7A4A' : '#C53030';
+  el.style.display = 'block';
+  setTimeout(() => { el.style.display='none'; }, 3500);
+}
+
+async function sendNudge(userId, firstName) {
+  if (!confirm('Send a WhatsApp nudge to ' + firstName + '?')) return;
+  const res = await fetch('/admin/nudge?password=${encodeURIComponent(pw)}', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ userId }),
+  });
+  const data = await res.json();
+  if (data.success) toast('✅ Nudge sent to ' + firstName);
+  else toast('❌ Failed: ' + (data.error || 'unknown error'), false);
+}
+
+async function sendCustomMsg() {
+  const userId  = document.getElementById('msgUserId').value;
+  const msgBody = document.getElementById('msgBody').value.trim();
+  if (!userId || !msgBody) { toast('Select a user and enter a message', false); return; }
+  const res = await fetch('/admin/message?password=${encodeURIComponent(pw)}', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ userId, message: msgBody }),
+  });
+  const data = await res.json();
+  if (data.success) { toast('✅ Message sent!'); document.getElementById('msgBody').value = ''; }
+  else toast('❌ Failed: ' + (data.error || 'unknown error'), false);
+}
+</script>
 </body>
 </html>`;
 
@@ -238,6 +449,48 @@ router.get('/', adminAuth, async (req, res) => {
   } catch (err) {
     console.error('[Admin] Dashboard error:', err.message);
     res.status(500).send('Admin dashboard error: ' + err.message);
+  }
+});
+
+// ─────────────────────────────────────────────
+// POST /admin/nudge — send a retention nudge WhatsApp message
+// ─────────────────────────────────────────────
+router.post('/nudge', adminAuth, async (req, res) => {
+  try {
+    const { userId } = req.body;
+    if (!userId) return res.status(400).json({ error: 'userId required' });
+
+    const user = await UserModel.findById(userId);
+    if (!user || !user.whatsapp_number) return res.status(404).json({ error: 'User not found or no phone number' });
+
+    const WhatsAppService = require('../services/whatsapp');
+    const firstName = user.name.split(' ')[0];
+    const streak = parseInt(user.streak, 10) || 0;
+    await WhatsAppService.sendReminder(user.whatsapp_number, firstName, streak);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[Admin] nudge error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─────────────────────────────────────────────
+// POST /admin/message — send a custom WhatsApp message
+// ─────────────────────────────────────────────
+router.post('/message', adminAuth, async (req, res) => {
+  try {
+    const { userId, message } = req.body;
+    if (!userId || !message) return res.status(400).json({ error: 'userId and message required' });
+
+    const user = await UserModel.findById(userId);
+    if (!user || !user.whatsapp_number) return res.status(404).json({ error: 'User not found or no phone number' });
+
+    const WhatsAppService = require('../services/whatsapp');
+    await WhatsAppService.sendMessage(user.whatsapp_number, message);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[Admin] message error:', err.message);
+    res.status(500).json({ error: err.message });
   }
 });
 
@@ -255,5 +508,18 @@ router.get('/stats', adminAuth, async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
+// ─────────────────────────────────────────────
+// Helper: escape HTML to prevent XSS in admin dashboard
+// ─────────────────────────────────────────────
+function escHtml(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
 
 module.exports = router;

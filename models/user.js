@@ -6,17 +6,16 @@
 'use strict';
 
 const { query } = require('./db');
+const { normalizePhone } = require('../utils/phone');
 
 const UserModel = {
   /** Find a user by their WhatsApp number (used on every inbound message).
-   *  Normalises both sides — Meta sends numbers without the leading +,
-   *  but users may register with or without it. */
+   *  Both the lookup key and stored value are normalised to 234XXXXXXXXXX. */
   async findByWhatsapp(whatsappNumber) {
-    const normalised = whatsappNumber.replace(/^\+/, '');
+    const canonical = normalizePhone(whatsappNumber);
     const res = await query(
-      `SELECT * FROM users
-       WHERE REPLACE(whatsapp_number, '+', '') = $1 AND active = TRUE LIMIT 1`,
-      [normalised]
+      `SELECT * FROM users WHERE whatsapp_number = $1 AND active = TRUE LIMIT 1`,
+      [canonical]
     );
     return res.rows[0] || null;
   },
@@ -46,11 +45,12 @@ const UserModel = {
 
   /** Create a new user during web registration */
   async create({ name, email, bizName, bizType, state, whatsappNumber }) {
+    const normalized = whatsappNumber ? normalizePhone(whatsappNumber) : null;
     const res = await query(
       `INSERT INTO users (name, email, biz_name, biz_type, state, whatsapp_number)
        VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING *`,
-      [name, email.toLowerCase().trim(), bizName, bizType, state, whatsappNumber || null]
+      [name, email.toLowerCase().trim(), bizName, bizType, state, normalized || null]
     );
     return res.rows[0];
   },
@@ -183,6 +183,35 @@ const UserModel = {
   /** Soft-delete a user (keeps their data intact) */
   async deactivate(userId) {
     await query('UPDATE users SET active = FALSE WHERE id = $1', [userId]);
+  },
+
+  /** Return all users with their transaction count — for admin user table. */
+  async findAllWithStats() {
+    const res = await query(`
+      SELECT u.*,
+        COUNT(t.id)                      AS total_entries,
+        MAX(t.created_at)                AS last_transaction_at,
+        COALESCE(SUM(t.revenue), 0)      AS total_revenue
+      FROM users u
+      LEFT JOIN transactions t ON t.user_id = u.id
+      GROUP BY u.id
+      ORDER BY u.created_at DESC
+    `);
+    return res.rows;
+  },
+
+  /** Return at-risk users: inactive 5–14 days, for admin nudge panel. */
+  async findAtRisk() {
+    const res = await query(`
+      SELECT *
+      FROM users
+      WHERE active = TRUE
+        AND first_message_date IS NOT NULL
+        AND last_message_date >= (CURRENT_TIMESTAMP AT TIME ZONE 'Africa/Lagos')::DATE - INTERVAL '14 days'
+        AND last_message_date <  (CURRENT_TIMESTAMP AT TIME ZONE 'Africa/Lagos')::DATE - INTERVAL '4 days'
+      ORDER BY last_message_date ASC
+    `);
+    return res.rows;
   },
 };
 

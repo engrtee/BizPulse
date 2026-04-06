@@ -211,6 +211,33 @@ async function sendEveningReminder(to, firstName, streak) {
 }
 
 /**
+ * Send the first-time welcome + command guide to a new user.
+ * Fires once — the moment they send their very first WhatsApp message.
+ */
+async function sendOnboarding(to, firstName) {
+  const body =
+    `Welcome to BizPulse, ${firstName}! 🎉\n\n` +
+    `I'm your business assistant. Just message me your daily numbers and I'll track everything for you.\n\n` +
+    `Here's what you can send me:\n\n` +
+    `💰 Daily sales + expenses:\n` +
+    `"Made 45k today, spent 10k on stock and 5k transport"\n\n` +
+    `📦 Received stock:\n` +
+    `"Received 50 bags rice at 900 each"\n\n` +
+    `📦 Sold stock:\n` +
+    `"Sold 12 bags rice today"\n\n` +
+    `🔍 Check your stock:\n` +
+    `"stock?" or "inventory?"\n\n` +
+    `📊 Get your full report:\n` +
+    `"summary" or "report"\n\n` +
+    `❓ See all commands:\n` +
+    `"help"\n\n` +
+    `Your full summary email arrives every evening at 7pm. 🎯\n\n` +
+    `Ready when you are — send me today's numbers! 💪`;
+
+  return sendMessage(to, body);
+}
+
+/**
  * Notify user their phone number is not registered.
  */
 async function sendNotRegistered(to) {
@@ -221,4 +248,4 @@ async function sendNotRegistered(to) {
   return sendMessage(to, body);
 }
 
-module.exports = { sendMessage, sendEntryAck, sendMilestone, sendStockReply, sendHelp, sendNotRegistered, sendReminder, sendMorningBroadcast, sendEveningReminder };
+module.exports = { sendMessage, sendEntryAck, sendMilestone, sendStockReply, sendHelp, sendNotRegistered, sendOnboarding, sendReminder, sendMorningBroadcast, sendEveningReminder };

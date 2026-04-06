@@ -24,6 +24,7 @@ const EmailService       = require('../services/email');
 
 const { calcHealthScore, healthLabel, topExpenseCategory, todayWAT } = require('../utils/formatter');
 const { calcMargin } = require('../utils/naira');
+const { normalizePhone } = require('../utils/phone');
 
 // ─────────────────────────────────────────────
 // POST /api/auth/login
@@ -69,7 +70,8 @@ router.post('/register', async (req, res) => {
       return res.status(409).json({ error: 'An account with this email already exists.', userId: existing.id });
     }
 
-    const user = await UserModel.create({ name, email, bizName, bizType, state, whatsappNumber });
+    const normalizedPhone = whatsappNumber ? normalizePhone(whatsappNumber) : null;
+    const user = await UserModel.create({ name, email, bizName, bizType, state, whatsappNumber: normalizedPhone });
     res.status(201).json({ success: true, userId: user.id, name: user.name });
   } catch (err) {
     console.error('[API] /register error:', err.message);

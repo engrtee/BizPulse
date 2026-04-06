@@ -21,6 +21,8 @@ const axios           = require('axios');
 
 const UserModel       = require('../models/user');
 const TransactionModel= require('../models/transaction');
+const { MessageModel }= require('../models/db');
+const { normalizePhone } = require('../utils/phone');
 
 const ParserService   = require('../services/parser');
 const GeminiService   = require('../services/gemini');
@@ -70,7 +72,7 @@ router.post('/', async (req, res) => {
     // Only handle text and audio (voice note) messages
     if (msg.type !== 'text' && msg.type !== 'audio') return;
 
-    const from = msg.from; // phone number e.g. "2348012345678"
+    const from = normalizePhone(msg.from); // canonical 234XXXXXXXXXX format
     const name = contact?.profile?.name || 'there';
     let text        = '';
     let entryMethod = 'text';
@@ -127,6 +129,23 @@ router.post('/', async (req, res) => {
     const user = await UserModel.findByWhatsapp(from);
     if (!user) {
       await WhatsAppService.sendNotRegistered(from);
+      // Still log the unregistered attempt
+      await MessageModel.logInbound(from, null, text).then(id =>
+        MessageModel.updateLog(id, { intent: 'unregistered', status: 'no_user' })
+      ).catch(() => {});
+      return;
+    }
+
+    // ── Log inbound message (update with intent/result after processing) ──
+    const msgLogId = await MessageModel.logInbound(from, user.id, text).catch(() => null);
+
+    // ── New user onboarding: first ever WhatsApp message ──
+    if (!user.first_message_date) {
+      const firstName = user.name.split(' ')[0];
+      await WhatsAppService.sendOnboarding(from, firstName);
+      // Mark first_message_date so this never fires again
+      await UserModel.touchLastEntry(user.id);
+      await MessageModel.updateLog(msgLogId, { intent: 'onboarding', status: 'processed' }).catch(() => {});
       return;
     }
 
@@ -160,23 +179,30 @@ router.post('/', async (req, res) => {
 
       case 'help': {
         await WhatsAppService.sendHelp(from);
+        await MessageModel.updateLog(msgLogId, { intent: 'help', status: 'processed' }).catch(() => {});
         break;
       }
 
       case 'stock_check': {
         const items = await InventoryService.getStock(user.id);
         await WhatsAppService.sendStockReply(from, items);
+        await MessageModel.updateLog(msgLogId, { intent: 'stock_check', status: 'processed' }).catch(() => {});
         break;
       }
 
       case 'summary': {
-        // Trigger an on-demand email and reply on WhatsApp
         await handleSummaryRequest(user, from);
+        await MessageModel.updateLog(msgLogId, { intent: 'summary', status: 'processed' }).catch(() => {});
         break;
       }
 
       case 'daily_entry': {
         await handleDailyEntry(user, from, data, text, entryMethod);
+        await MessageModel.updateLog(msgLogId, {
+          intent: 'daily_entry',
+          parsedData: { revenue: data.revenue, totalExpenses: data.totalExpenses, profit: data.profit },
+          status: 'processed',
+        }).catch(() => {});
         break;
       }
 
@@ -184,13 +210,15 @@ router.post('/', async (req, res) => {
         if (!data.item || !data.quantity) {
           await WhatsAppService.sendMessage(from,
             "I couldn't quite get the item details. Try:\n\"received 50 bags rice at 900 each\"");
+          await MessageModel.updateLog(msgLogId, { intent: 'inventory_in', status: 'parse_error' }).catch(() => {});
           break;
         }
-        const row = await InventoryService.receiveStock(user, data);
+        const rowIn = await InventoryService.receiveStock(user, data);
         await WhatsAppService.sendMessage(from,
           `✅ Stock updated!\n\n` +
           `📦 ${data.item}: +${data.quantity} units received\n` +
-          `Balance: ${parseFloat(row.current_balance).toLocaleString('en-NG')} units`);
+          `Balance: ${parseFloat(rowIn.current_balance).toLocaleString('en-NG')} units`);
+        await MessageModel.updateLog(msgLogId, { intent: 'inventory_in', parsedData: data, status: 'processed' }).catch(() => {});
         break;
       }
 
@@ -198,13 +226,15 @@ router.post('/', async (req, res) => {
         if (!data.item || !data.quantity) {
           await WhatsAppService.sendMessage(from,
             "I couldn't quite get the details. Try:\n\"sold 12 bags rice today\"");
+          await MessageModel.updateLog(msgLogId, { intent: 'inventory_out', status: 'parse_error' }).catch(() => {});
           break;
         }
-        const row = await InventoryService.sellStock(user, data);
+        const rowOut = await InventoryService.sellStock(user, data);
         await WhatsAppService.sendMessage(from,
           `✅ Sale recorded!\n\n` +
           `📦 ${data.item}: -${data.quantity} units sold\n` +
-          `Balance: ${parseFloat(row.current_balance).toLocaleString('en-NG')} units`);
+          `Balance: ${parseFloat(rowOut.current_balance).toLocaleString('en-NG')} units`);
+        await MessageModel.updateLog(msgLogId, { intent: 'inventory_out', parsedData: data, status: 'processed' }).catch(() => {});
         break;
       }
 
@@ -213,37 +243,36 @@ router.post('/', async (req, res) => {
         await CustomerService.logCustomers(user, count, text);
         await WhatsAppService.sendMessage(from,
           `✅ Logged ${count} customers today for ${user.name.split(' ')[0]}! 👥`);
+        await MessageModel.updateLog(msgLogId, { intent: 'customer_log', parsedData: { count }, status: 'processed' }).catch(() => {});
         break;
       }
 
       case 'greeting':
       case 'question': {
-        // Gemini already composed a warm reply — send it directly
         if (data.message) {
           await WhatsAppService.sendMessage(from, data.message);
         } else {
           await WhatsAppService.sendMessage(from,
             `Hey ${user.name.split(' ')[0]}! 👋 I'm your BizPulse data assistant. Send me your sales and expenses anytime — or type "help" to see what I can do.`);
         }
-        // Still create a zero-entry transaction so the streak advances
         await TransactionModel.create({
           userId: user.id, revenue: 0, totalExpenses: 0,
           expenseBreakdown: {}, profit: 0, margin: 0, customers: 0,
           notes: 'Check-in (no numbers logged)', rawMessage: text,
         });
         const newStreak = await UserModel.touchLastEntry(user.id);
-        const firstName = user.name.split(' ')[0];
         const s = parseInt(newStreak, 10) || 1;
-        // Append streak line to let the user know it counted
         await WhatsAppService.sendMessage(from,
           `📅 Check-in logged — Day ${s} streak${s >= 3 ? ' 🔥' : ''}. Send your numbers whenever you're ready!`
         ).catch(() => {});
+        await MessageModel.updateLog(msgLogId, { intent: type, status: 'processed' }).catch(() => {});
         break;
       }
 
       default: {
         await WhatsAppService.sendMessage(from,
           `I didn't quite get that, ${user.name.split(' ')[0]}.\n\nJust tell me how your business went today — like:\n"Made 45k today, spent 10k on stock and 3k transport"\n\nOr type "help" for commands. 😊`);
+        await MessageModel.updateLog(msgLogId, { intent: 'unknown', status: 'unhandled' }).catch(() => {});
         break;
       }
     }
