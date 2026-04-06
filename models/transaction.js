@@ -156,6 +156,36 @@ const TransactionModel = {
     };
   },
 
+  /** Raw (unaggregated) entries for a user — used in admin detail view and entry correction */
+  async getRawByUser(userId, limit = 30) {
+    const res = await query(
+      `SELECT id, date, revenue, total_expenses, profit, margin, customers,
+              notes, raw_message, entry_method, created_at
+       FROM transactions
+       WHERE user_id = $1
+       ORDER BY created_at DESC
+       LIMIT $2`,
+      [userId, limit]
+    );
+    return res.rows;
+  },
+
+  /** Correct a single entry (admin manual override) */
+  async correct(entryId, { revenue, totalExpenses, notes }) {
+    const rev    = parseFloat(revenue)      || 0;
+    const exp    = parseFloat(totalExpenses) || 0;
+    const profit = rev - exp;
+    const margin = rev > 0 ? parseFloat(((profit / rev) * 100).toFixed(2)) : 0;
+    const res = await query(
+      `UPDATE transactions
+       SET revenue = $1, total_expenses = $2, profit = $3, margin = $4, notes = $5
+       WHERE id = $6
+       RETURNING id, revenue, total_expenses, profit, margin`,
+      [rev, exp, profit, margin, notes || null, entryId]
+    );
+    return res.rows[0];
+  },
+
   /** Revenue / expenses / profit for this month vs last month */
   async getMonthlyTotals(userId) {
     const res = await query(

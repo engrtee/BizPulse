@@ -34,6 +34,7 @@ const HEALTH_STYLES = {
  * @param {Array}  lowStock     Array of inventory rows with low stock
  */
 function buildEmailHtml(user, summary, aiRec, lowStock = []) {
+  const waNumber   = (process.env.BIZPULSE_NUMBER || '').replace(/^\+/, '');
   const firstName  = user.name.split(' ')[0];
   const dateStr    = formatDate(summary.date || new Date());
   const profitColor = summary.profit >= 0 ? '#1A7A4A' : '#C53030';
@@ -139,6 +140,21 @@ function buildEmailHtml(user, summary, aiRec, lowStock = []) {
         <ul style="margin:0;padding-left:18px;color:#4A5568;font-size:14px">
           ${actionList}
         </ul>
+      </div>
+    </td>
+  </tr>
+
+  <!-- NPS RATING -->
+  <tr>
+    <td style="padding:0 24px 16px">
+      <div style="background:#F7FAFC;border:1px solid #E2E8F0;border-radius:8px;padding:16px;text-align:center">
+        <div style="font-size:13px;font-weight:600;color:#2D3748;margin-bottom:10px">How useful was today's summary?</div>
+        <div style="font-size:24px;letter-spacing:6px">
+          ${[1,2,3,4,5].map(n =>
+            `<a href="https://wa.me/${waNumber}?text=Rating%3A%20${n}" style="text-decoration:none">${['1️⃣','2️⃣','3️⃣','4️⃣','5️⃣'][n-1]}</a>`
+          ).join(' ')}
+        </div>
+        <div style="font-size:11px;color:#A0AEC0;margin-top:8px">Tap a number — opens WhatsApp · takes 2 seconds</div>
       </div>
     </td>
   </tr>

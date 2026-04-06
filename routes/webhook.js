@@ -149,6 +149,19 @@ router.post('/', async (req, res) => {
       return;
     }
 
+    // ── NPS response detection (email rating tap: "Rating: 4") ──
+    const npsMatch = text.match(/^Rating:\s*([1-5])$/i);
+    if (npsMatch) {
+      const rating = parseInt(npsMatch[1], 10);
+      await MessageModel.updateLog(msgLogId, { intent: 'nps_response', parsedData: { rating }, status: 'processed' }).catch(() => {});
+      const stars = '⭐'.repeat(rating) + '☆'.repeat(5 - rating);
+      await WhatsAppService.sendMessage(from,
+        `${stars} Thanks for rating ${rating}/5, ${user.name.split(' ')[0]}!\n\n` +
+        `Your feedback helps make BizPulse better for every business owner using it. 🙏`
+      );
+      return;
+    }
+
     // ── Parse intent ──
     let { type, data, needsAI } = ParserService.parseMessage(text);
 
@@ -345,8 +358,16 @@ async function handleDailyEntry(user, from, data, rawMessage, entryMethod = 'tex
     WhatsAppService.sendMilestone(from, 'entry10', { firstName }).catch(() => {});
   }
   if (parseFloat(profit) > 0 && totalMsgs === 1) {
-    // First entry and profitable
     WhatsAppService.sendMilestone(from, 'first_profit', { firstName }).catch(() => {});
+  }
+
+  // Feedback prompt every 7th entry
+  if (totalMsgs > 0 && totalMsgs % 7 === 0) {
+    WhatsAppService.sendMessage(from,
+      `🙏 You've logged ${totalMsgs} entries — that's real consistency, ${firstName}!\n\n` +
+      `Quick question: what's *one thing* that would make BizPulse even more useful for your business?\n\n` +
+      `Just reply to this message — every response is read personally. 👂`
+    ).catch(() => {});
   }
 
   // If any expenses landed in "Other", ask for clarification

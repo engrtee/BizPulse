@@ -13,7 +13,8 @@
 const express        = require('express');
 const router         = express.Router();
 const UserModel      = require('../models/user');
-const { MessageModel } = require('../models/db');
+const TransactionModel = require('../models/transaction');
+const { MessageModel, query } = require('../models/db');
 
 function adminAuth(req, res, next) {
   const provided = req.query.password || req.headers['x-admin-password'];
@@ -104,7 +105,7 @@ router.get('/', adminAuth, async (req, res) => {
       return `
         <tr>
           <td style="padding:10px 12px;border-bottom:1px solid #E2E8F0">
-            <div style="font-weight:600;color:#1a202c">${escHtml(u.name)}</div>
+            <div style="font-weight:600;color:#1A56A4;cursor:pointer;text-decoration:underline" onclick="openUserDetail(${u.id})">${escHtml(u.name)}</div>
             <div style="font-size:0.75rem;color:#718096">${escHtml(u.email)}</div>
           </td>
           <td style="padding:10px 12px;border-bottom:1px solid #E2E8F0;font-size:0.8rem">${escHtml(u.biz_type || '—')}</td>
@@ -136,7 +137,7 @@ router.get('/', adminAuth, async (req, res) => {
         <tr>
           <td style="padding:8px 12px;border-bottom:1px solid #E2E8F0;font-size:0.75rem;color:#718096">${ts}</td>
           <td style="padding:8px 12px;border-bottom:1px solid #E2E8F0;font-size:0.8rem;font-weight:600">${escHtml(m.user_name || m.phone_number)}</td>
-          <td style="padding:8px 12px;border-bottom:1px solid #E2E8F0;font-size:0.8rem;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(m.message_text || '—')}</td>
+          <td style="padding:8px 12px;border-bottom:1px solid #E2E8F0;font-size:0.8rem;word-break:break-word;max-width:280px">${escHtml(m.message_text || '—')}</td>
           <td style="padding:8px 12px;border-bottom:1px solid #E2E8F0">
             <span style="background:${bg};padding:2px 8px;border-radius:12px;font-size:0.7rem">${intent}</span>
           </td>
@@ -400,6 +401,20 @@ router.get('/', adminAuth, async (req, res) => {
 <!-- Toast notification -->
 <div class="toast" id="toast"></div>
 
+<!-- User detail modal -->
+<div id="userModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:200;overflow-y:auto;padding:1.5rem 1rem">
+  <div style="background:#fff;margin:0 auto;border-radius:12px;max-width:860px;overflow:hidden;box-shadow:0 8px 32px rgba(0,0,0,.2)">
+    <div style="background:#0F2744;color:#fff;padding:1rem 1.5rem;display:flex;justify-content:space-between;align-items:center">
+      <h3 id="modalTitle" style="font-size:1rem;font-weight:600;margin:0">User Details</h3>
+      <button onclick="document.getElementById('userModal').style.display='none'"
+        style="background:none;border:none;color:#fff;cursor:pointer;font-size:1.4rem;line-height:1">×</button>
+    </div>
+    <div id="modalContent" style="padding:1.5rem;font-family:'DM Sans',sans-serif">
+      <p style="color:#718096">Loading…</p>
+    </div>
+  </div>
+</div>
+
 <script>
 function showTab(name) {
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
@@ -440,6 +455,114 @@ async function sendCustomMsg() {
   const data = await res.json();
   if (data.success) { toast('✅ Message sent!'); document.getElementById('msgBody').value = ''; }
   else toast('❌ Failed: ' + (data.error || 'unknown error'), false);
+}
+
+function esc(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+let _currentUserId = null;
+
+async function openUserDetail(userId) {
+  _currentUserId = userId;
+  const modal   = document.getElementById('userModal');
+  const content = document.getElementById('modalContent');
+  modal.style.display = 'block';
+  content.innerHTML   = '<p style="color:#718096">Loading…</p>';
+
+  const res  = await fetch('/admin/user/' + userId + '?password=${encodeURIComponent(pw)}');
+  const data = await res.json();
+  if (!data.user) { content.innerHTML = '<p style="color:#C53030">Error loading user.</p>'; return; }
+
+  const u = data.user;
+  document.getElementById('modalTitle').textContent = u.name + (u.biz_name ? ' — ' + u.biz_name : '');
+
+  const fmt = n => Number(n||0).toLocaleString('en-NG');
+
+  const msgRows = (data.messages || []).map(m => {
+    const ts  = new Date(m.created_at).toLocaleString('en-NG', { timeZone:'Africa/Lagos', day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' });
+    const intentColors = { daily_entry:'#BEE3F8', nps_response:'#C6F6D5', onboarding:'#C6F6D5', unregistered:'#FED7D7', unknown:'#FED7D7' };
+    const bg  = intentColors[m.intent] || '#E2E8F0';
+    return '<tr>' +
+      '<td style="padding:7px 10px;border-bottom:1px solid #E2E8F0;font-size:0.72rem;color:#718096;white-space:nowrap">' + esc(ts) + '</td>' +
+      '<td style="padding:7px 10px;border-bottom:1px solid #E2E8F0;font-size:0.82rem;word-break:break-word">' + esc(m.message_text || '—') + '</td>' +
+      '<td style="padding:7px 10px;border-bottom:1px solid #E2E8F0"><span style="background:' + bg + ';padding:2px 7px;border-radius:10px;font-size:0.7rem">' + esc(m.intent || '—') + '</span></td>' +
+      '</tr>';
+  }).join('') || '<tr><td colspan="3" style="padding:12px;text-align:center;color:#718096">No messages logged yet</td></tr>';
+
+  const entryRows = (data.entries || []).map(e => {
+    const d   = new Date(e.date).toLocaleDateString('en-NG', { day:'numeric', month:'short' });
+    const pc  = parseFloat(e.profit) >= 0 ? '#1A7A4A' : '#C53030';
+    return '<tr id="erow-' + e.id + '">' +
+      '<td style="padding:7px 10px;border-bottom:1px solid #E2E8F0;font-size:0.8rem">' + d + '</td>' +
+      '<td style="padding:7px 10px;border-bottom:1px solid #E2E8F0;font-size:0.8rem">₦' + fmt(e.revenue) + '</td>' +
+      '<td style="padding:7px 10px;border-bottom:1px solid #E2E8F0;font-size:0.8rem">₦' + fmt(e.total_expenses) + '</td>' +
+      '<td style="padding:7px 10px;border-bottom:1px solid #E2E8F0;font-size:0.8rem;color:' + pc + '">₦' + fmt(e.profit) + '</td>' +
+      '<td style="padding:7px 10px;border-bottom:1px solid #E2E8F0;font-size:0.75rem;color:#718096">' + esc(e.entry_method || 'text') + '</td>' +
+      '<td style="padding:7px 10px;border-bottom:1px solid #E2E8F0">' +
+        '<button onclick="correctEntry(' + e.id + ',' + e.revenue + ',' + e.total_expenses + ',\`' + esc(e.notes||'') + '\`)"' +
+        ' style="font-size:0.72rem;padding:3px 9px;background:#B7791F;color:#fff;border:none;border-radius:5px;cursor:pointer">Edit</button>' +
+      '</td>' +
+      '</tr>';
+  }).join('') || '<tr><td colspan="6" style="padding:12px;text-align:center;color:#718096">No entries yet</td></tr>';
+
+  content.innerHTML =
+    '<div style="background:#F0F4FA;border-radius:8px;padding:12px 16px;font-size:0.85rem;margin-bottom:1.25rem;display:flex;flex-wrap:wrap;gap:1rem">' +
+      '<span>📱 <strong>' + esc(u.whatsapp_number||'—') + '</strong></span>' +
+      '<span>📧 ' + esc(u.email) + '</span>' +
+      '<span>🏢 ' + esc(u.biz_type||'—') + '</span>' +
+      '<span>🔥 ' + (u.streak||0) + ' day streak</span>' +
+      '<span>💬 ' + (u.total_messages_sent||0) + ' messages</span>' +
+    '</div>' +
+
+    '<h4 style="font-size:0.85rem;font-weight:600;margin:0 0 0.6rem">WhatsApp Messages (last 30)</h4>' +
+    '<div style="overflow-x:auto;margin-bottom:1.5rem;border-radius:8px;border:1px solid #E2E8F0">' +
+      '<table style="width:100%;border-collapse:collapse">' +
+        '<thead><tr style="background:#0F2744;color:#fff">' +
+          '<th style="padding:8px 10px;text-align:left;font-size:0.72rem;white-space:nowrap">Time (WAT)</th>' +
+          '<th style="padding:8px 10px;text-align:left;font-size:0.72rem">Message</th>' +
+          '<th style="padding:8px 10px;text-align:left;font-size:0.72rem">Intent</th>' +
+        '</tr></thead>' +
+        '<tbody>' + msgRows + '</tbody>' +
+      '</table>' +
+    '</div>' +
+
+    '<h4 style="font-size:0.85rem;font-weight:600;margin:0 0 0.6rem">Entries — click Edit to correct any wrong parse</h4>' +
+    '<div style="overflow-x:auto;border-radius:8px;border:1px solid #E2E8F0">' +
+      '<table style="width:100%;border-collapse:collapse">' +
+        '<thead><tr style="background:#0F2744;color:#fff">' +
+          '<th style="padding:8px 10px;text-align:left;font-size:0.72rem">Date</th>' +
+          '<th style="padding:8px 10px;text-align:left;font-size:0.72rem">Revenue</th>' +
+          '<th style="padding:8px 10px;text-align:left;font-size:0.72rem">Expenses</th>' +
+          '<th style="padding:8px 10px;text-align:left;font-size:0.72rem">Profit</th>' +
+          '<th style="padding:8px 10px;text-align:left;font-size:0.72rem">Method</th>' +
+          '<th style="padding:8px 10px;text-align:left;font-size:0.72rem">Action</th>' +
+        '</tr></thead>' +
+        '<tbody>' + entryRows + '</tbody>' +
+      '</table>' +
+    '</div>';
+}
+
+async function correctEntry(id, curRev, curExp, curNotes) {
+  const newRev = prompt('Revenue (₦):', curRev);
+  if (newRev === null) return;
+  const newExp = prompt('Total Expenses (₦):', curExp);
+  if (newExp === null) return;
+  const newNotes = prompt('Notes (optional — leave blank to keep):', curNotes);
+  if (newNotes === null) return;
+
+  const res  = await fetch('/admin/entry/' + id + '/correct?password=${encodeURIComponent(pw)}', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ revenue: parseFloat(newRev), totalExpenses: parseFloat(newExp), notes: newNotes }),
+  });
+  const data = await res.json();
+  if (data.success) {
+    toast('✅ Entry corrected — Profit: ₦' + Number(data.profit).toLocaleString('en-NG') + ' (' + data.margin + '%)');
+    openUserDetail(_currentUserId); // refresh the modal
+  } else {
+    toast('❌ ' + (data.error || 'Correction failed'), false);
+  }
 }
 </script>
 </body>
@@ -490,6 +613,42 @@ router.post('/message', adminAuth, async (req, res) => {
     res.json({ success: true });
   } catch (err) {
     console.error('[Admin] message error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─────────────────────────────────────────────
+// GET /admin/user/:id — full user detail for the modal (messages + entries)
+// ─────────────────────────────────────────────
+router.get('/user/:id', adminAuth, async (req, res) => {
+  try {
+    const user = await UserModel.findById(req.params.id);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    const [messages, entries] = await Promise.all([
+      MessageModel.getByUser(user.id, 30),
+      TransactionModel.getRawByUser(user.id, 30),
+    ]);
+
+    res.json({ user, messages, entries });
+  } catch (err) {
+    console.error('[Admin] /user/:id error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─────────────────────────────────────────────
+// POST /admin/entry/:id/correct — admin manual correction of a parsed entry
+// ─────────────────────────────────────────────
+router.post('/entry/:id/correct', adminAuth, async (req, res) => {
+  try {
+    const { revenue, totalExpenses, notes } = req.body;
+    const updated = await TransactionModel.correct(req.params.id, { revenue, totalExpenses, notes });
+    if (!updated) return res.status(404).json({ error: 'Entry not found' });
+    console.log(`[Admin] Entry ${req.params.id} corrected: revenue=${updated.revenue}, profit=${updated.profit}`);
+    res.json({ success: true, profit: parseFloat(updated.profit), margin: parseFloat(updated.margin) });
+  } catch (err) {
+    console.error('[Admin] /entry/:id/correct error:', err.message);
     res.status(500).json({ error: err.message });
   }
 });
