@@ -78,12 +78,18 @@ async function runRetentionNudge() {
   }
 }
 
-/**
- * Schedule: 10:00 AM WAT = 9:00 AM UTC every day.
- */
-function scheduleRetentionNudge() {
-  cron.schedule('0 9 * * *', runRetentionNudge, { timezone: 'UTC' });
-  console.log('[Cron] Retention nudge job scheduled for 10:00 AM WAT (9:00 AM UTC).');
-}
+// ── Schedule — fires automatically when this module is required ──
 
-module.exports = { scheduleRetentionNudge, runRetentionNudge };
+// 10:00 AM WAT — retention nudges for inactive users
+cron.schedule('0 10 * * *', async () => {
+  console.log('[Retention] 🔔 Nudge job firing:', new Date().toISOString());
+  try {
+    await runRetentionNudge();
+    console.log('[Retention] 🔔 Nudge job completed.');
+  } catch (err) {
+    console.error('[Retention] Nudge job failed:', err.message);
+  }
+}, { timezone: 'Africa/Lagos' });
+console.log('[Cron] Retention nudge scheduled for 10:00 AM WAT.');
+
+module.exports = { runRetentionNudge };

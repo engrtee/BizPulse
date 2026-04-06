@@ -185,18 +185,42 @@ async function runReminderJob() {
   }
 }
 
-function scheduleDailySummary() {
-  // 7:00 AM WAT = 6:00 AM UTC — morning broadcast (quote + encouragement)
-  cron.schedule('0 6 * * *', runMorningBroadcast, { timezone: 'UTC' });
-  console.log('[Cron] Morning broadcast scheduled for 7:00 AM WAT (6:00 AM UTC).');
+// ── Schedule all three jobs — fires automatically when this module is required ──
 
-  // 7:00 PM WAT = 6:00 PM UTC — full summary email
-  cron.schedule('0 18 * * *', runDailySummary, { timezone: 'UTC' });
-  console.log('[Cron] Daily summary job scheduled for 7:00 PM WAT (6:00 PM UTC).');
+// 9:00 AM WAT — morning broadcast (quote + encouragement)
+cron.schedule('0 9 * * *', async () => {
+  console.log('[Cron] ☀️ Morning broadcast firing:', new Date().toISOString());
+  try {
+    await runMorningBroadcast();
+    console.log('[Cron] ☀️ Morning broadcast completed.');
+  } catch (err) {
+    console.error('[Cron] Morning broadcast failed:', err.message);
+  }
+}, { timezone: 'Africa/Lagos' });
+console.log('[Cron] Morning broadcast scheduled for 9:00 AM WAT.');
 
-  // 6:00 PM WAT = 5:00 PM UTC — WhatsApp reminder for users who haven't logged
-  cron.schedule('0 17 * * *', runReminderJob, { timezone: 'UTC' });
-  console.log('[Cron] Reminder job scheduled for 6:00 PM WAT (5:00 PM UTC).');
-}
+// 6:00 PM WAT — WhatsApp reminder for users who haven't logged today
+cron.schedule('0 18 * * *', async () => {
+  console.log('[Cron] 🔔 Evening reminder firing:', new Date().toISOString());
+  try {
+    await runReminderJob();
+    console.log('[Cron] 🔔 Evening reminder completed.');
+  } catch (err) {
+    console.error('[Cron] Evening reminder failed:', err.message);
+  }
+}, { timezone: 'Africa/Lagos' });
+console.log('[Cron] Evening reminder scheduled for 6:00 PM WAT.');
 
-module.exports = { scheduleDailySummary, runDailySummary, runReminderJob, runMorningBroadcast };
+// 7:00 PM WAT — full summary email
+cron.schedule('0 19 * * *', async () => {
+  console.log('[Cron] 🕖 Daily summary firing:', new Date().toISOString());
+  try {
+    await runDailySummary();
+    console.log('[Cron] 🕖 Daily summary completed.');
+  } catch (err) {
+    console.error('[Cron] Daily summary failed:', err.message);
+  }
+}, { timezone: 'Africa/Lagos' });
+console.log('[Cron] Daily summary scheduled for 7:00 PM WAT.');
+
+module.exports = { runDailySummary, runReminderJob, runMorningBroadcast };

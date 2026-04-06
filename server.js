@@ -19,8 +19,9 @@ const authRouter               = require('./routes/auth');
 const apiRouter                = require('./routes/api');
 const emailRouter              = require('./routes/email');
 const adminRouter              = require('./routes/admin');
-const { scheduleDailySummary } = require('./jobs/dailySummary');
-const { scheduleRetentionNudge } = require('./jobs/retentionNudge');
+// Requiring these modules starts their internal cron schedules immediately
+require('./jobs/dailySummary');
+require('./jobs/retentionNudge');
 
 const app  = express();
 const PORT = process.env.PORT || 3000;
@@ -75,11 +76,7 @@ async function start() {
       console.log(`   Frontend:         http://localhost:${PORT}\n`);
     });
 
-    // Start the 7pm WAT daily summary cron
-    scheduleDailySummary();
-
-    // Start the 10am WAT retention nudge cron
-    scheduleRetentionNudge();
+    // Cron jobs are already scheduled — they started when the modules were required above
   } catch (err) {
     console.error('❌ Failed to start BizPulse:', err.message);
     process.exit(1);
