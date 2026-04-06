@@ -203,6 +203,44 @@ async function sendMorningBroadcast(to, firstName, bizName, quote, streak) {
 }
 
 /**
+ * Send the 7pm daily summary as a WhatsApp message.
+ * Replaces (or supplements) the email — delivers highlights + AI insight directly.
+ */
+async function sendEveningSummaryWhatsApp(to, firstName, summaryData, aiRec, lowStock = []) {
+  const fmt  = (n) => Number(n || 0).toLocaleString('en-NG');
+  const { revenue, totalExpenses, profit, margin, customers, topExpense, date } = summaryData;
+
+  const profitLine = profit >= 0
+    ? `✅ Profit:    ₦${fmt(profit)}`
+    : `⚠️ Loss:      ₦${fmt(Math.abs(profit))}`;
+
+  const dateLabel = new Date(date).toLocaleDateString('en-NG', {
+    weekday: 'short', day: 'numeric', month: 'short', timeZone: 'Africa/Lagos',
+  });
+
+  // Use first action from AI rec as the WhatsApp insight — already specific to their biz
+  const insight = (aiRec?.actions?.[0]) || (aiRec?.risk) || 'Keep tracking — consistency is what builds profitable businesses.';
+
+  const lowStockLines = lowStock.length > 0
+    ? `\n⚠️ Low stock: ${lowStock.map(i => `${i.item_name} (${Number(i.current_balance).toLocaleString('en-NG')} left)`).join(', ')}\n`
+    : '';
+
+  const body =
+    `📊 *${firstName}, here's your ${dateLabel} summary*\n\n` +
+    `Revenue:    ₦${fmt(revenue)}\n` +
+    `Expenses:   ₦${fmt(totalExpenses)}\n` +
+    `${profitLine}\n` +
+    `Margin:     ${parseFloat(margin).toFixed(1)}%\n` +
+    (customers > 0 ? `Customers:  ${customers}\n` : '') +
+    (topExpense ? `Top cost:   ${topExpense.category} (₦${fmt(topExpense.amount)})\n` : '') +
+    lowStockLines +
+    `\n💡 *Insight:*\n${insight}\n\n` +
+    `Full report 👉 ${process.env.BASE_URL || 'https://bizpulse-urub.onrender.com'}`;
+
+  return sendMessage(to, body);
+}
+
+/**
  * Send the 6pm reminder to users who haven't logged today.
  * (Alias kept for backward compatibility — sendReminder is the live version)
  */
@@ -248,4 +286,4 @@ async function sendNotRegistered(to) {
   return sendMessage(to, body);
 }
 
-module.exports = { sendMessage, sendEntryAck, sendMilestone, sendStockReply, sendHelp, sendNotRegistered, sendOnboarding, sendReminder, sendMorningBroadcast, sendEveningReminder };
+module.exports = { sendMessage, sendEntryAck, sendMilestone, sendStockReply, sendHelp, sendNotRegistered, sendOnboarding, sendReminder, sendMorningBroadcast, sendEveningReminder, sendEveningSummaryWhatsApp };

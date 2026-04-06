@@ -71,10 +71,20 @@ async function processUser(user) {
       date,
     };
 
-    // Generate personalised AI recommendation
+    // Generate personalised AI recommendation (used for both email and WhatsApp)
     const aiRec = await GeminiService.generateRecommendation(summaryData, user);
 
-    // Send email
+    const firstName = user.name.split(' ')[0];
+
+    // Send WhatsApp summary first — reaches users who may not open email
+    if (user.whatsapp_number) {
+      await WhatsAppService.sendEveningSummaryWhatsApp(
+        user.whatsapp_number, firstName, summaryData, aiRec, lowStock
+      );
+      console.log(`[Cron] 📱 WhatsApp summary sent to ${user.name}`);
+    }
+
+    // Send email summary
     await EmailService.sendSummaryEmail(user, summaryData, aiRec, lowStock);
 
     console.log(`[Cron] ✅ Summary sent to ${user.name} <${user.email}>`);
