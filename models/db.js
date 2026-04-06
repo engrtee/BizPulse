@@ -113,21 +113,37 @@ async function initDb() {
     CREATE INDEX IF NOT EXISTS idx_wa_messages_created  ON whatsapp_messages(created_at DESC);
   `);
 
-  // Normalize existing phone numbers to 234XXXXXXXXXX format (safe to run repeatedly)
-  await pool.query(`
-    UPDATE users
-    SET whatsapp_number = (
-      CASE
-        WHEN REGEXP_REPLACE(REGEXP_REPLACE(whatsapp_number, '[+ \\-()]', '', 'g'), '^0+', '') ~ '^[789][0-9]{9}$'
-          THEN '234' || REGEXP_REPLACE(REGEXP_REPLACE(whatsapp_number, '[+ \\-()]', '', 'g'), '^0+', '')
-        WHEN REGEXP_REPLACE(REGEXP_REPLACE(whatsapp_number, '[+ \\-()]', '', 'g'), '^0+', '') ~ '^234[789][0-9]{9}$'
-          THEN REGEXP_REPLACE(REGEXP_REPLACE(whatsapp_number, '[+ \\-()]', '', 'g'), '^0+', '')
-        ELSE whatsapp_number
-      END
-    )
-    WHERE whatsapp_number IS NOT NULL
-      AND NOT (whatsapp_number ~ '^234[0-9]{10}$')
-  `);
+  // Normalize existing phone numbers to 234XXXXXXXXXX format.
+  // Skips any row whose normalized value would collide with another row (safe to run repeatedly).
+  try {
+    await pool.query(`
+      WITH normalized AS (
+        SELECT id,
+          CASE
+            WHEN REGEXP_REPLACE(REGEXP_REPLACE(whatsapp_number, '[+ \\-()]', '', 'g'), '^0+', '') ~ '^[789][0-9]{9}$'
+              THEN '234' || REGEXP_REPLACE(REGEXP_REPLACE(whatsapp_number, '[+ \\-()]', '', 'g'), '^0+', '')
+            WHEN REGEXP_REPLACE(REGEXP_REPLACE(whatsapp_number, '[+ \\-()]', '', 'g'), '^0+', '') ~ '^234[789][0-9]{9}$'
+              THEN REGEXP_REPLACE(REGEXP_REPLACE(whatsapp_number, '[+ \\-()]', '', 'g'), '^0+', '')
+            ELSE whatsapp_number
+          END AS new_number
+        FROM users
+        WHERE whatsapp_number IS NOT NULL
+          AND NOT (whatsapp_number ~ '^234[0-9]{10}$')
+      )
+      UPDATE users u
+      SET whatsapp_number = n.new_number
+      FROM normalized n
+      WHERE u.id = n.id
+        AND NOT EXISTS (
+          SELECT 1 FROM users u2
+          WHERE u2.whatsapp_number = n.new_number
+            AND u2.id != u.id
+        )
+    `);
+    console.log('✅ Phone number normalisation complete.');
+  } catch (err) {
+    console.warn('[DB] Phone normalisation skipped:', err.message);
+  }
 
   console.log('✅ Database tables ready.');
 }
