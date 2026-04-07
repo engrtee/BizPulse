@@ -32,118 +32,94 @@ const query = (text, params) => pool.query(text, params);
  * Safe to call repeatedly — uses CREATE TABLE IF NOT EXISTS.
  */
 async function initDb() {
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS users (
-      id                   SERIAL PRIMARY KEY,
-      name                 VARCHAR(100) NOT NULL,
-      email                VARCHAR(255) UNIQUE NOT NULL,
-      biz_name             VARCHAR(200),
-      biz_type             VARCHAR(100),
-      state                VARCHAR(100),
-      whatsapp_number      VARCHAR(20) UNIQUE,
-      sheet_id             VARCHAR(200),
-      google_access_token  TEXT,
-      google_refresh_token TEXT,
-      created_at           TIMESTAMPTZ DEFAULT NOW(),
-      active               BOOLEAN DEFAULT TRUE,
-      last_entry_date      DATE,
-      streak               INTEGER DEFAULT 0
-    );
+  const run = async (sql, label) => {
+    try {
+      await pool.query(sql);
+    } catch (err) {
+      console.warn(`[DB] ${label} skipped:`, err.message);
+    }
+  };
 
-    ALTER TABLE users ADD COLUMN IF NOT EXISTS streak               INTEGER DEFAULT 0;
-    ALTER TABLE users ADD COLUMN IF NOT EXISTS first_message_date  DATE;
-    ALTER TABLE users ADD COLUMN IF NOT EXISTS last_message_date   DATE;
-    ALTER TABLE users ADD COLUMN IF NOT EXISTS total_messages_sent INTEGER DEFAULT 0;
-    ALTER TABLE users ADD COLUMN IF NOT EXISTS referred_by         INTEGER REFERENCES users(id);
+  // Core tables
+  await run(`CREATE TABLE IF NOT EXISTS users (
+    id                   SERIAL PRIMARY KEY,
+    name                 VARCHAR(100) NOT NULL,
+    email                VARCHAR(255) UNIQUE NOT NULL,
+    biz_name             VARCHAR(200),
+    biz_type             VARCHAR(100),
+    state                VARCHAR(100),
+    whatsapp_number      VARCHAR(20) UNIQUE,
+    sheet_id             VARCHAR(200),
+    google_access_token  TEXT,
+    google_refresh_token TEXT,
+    created_at           TIMESTAMPTZ DEFAULT NOW(),
+    active               BOOLEAN DEFAULT TRUE,
+    last_entry_date      DATE,
+    streak               INTEGER DEFAULT 0
+  )`, 'CREATE users');
 
-    CREATE TABLE IF NOT EXISTS transactions (
-      id               SERIAL PRIMARY KEY,
-      user_id          INTEGER REFERENCES users(id) ON DELETE CASCADE,
-      date             DATE NOT NULL DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'Africa/Lagos')::DATE,
-      revenue          NUMERIC(15, 2) DEFAULT 0,
-      total_expenses   NUMERIC(15, 2) DEFAULT 0,
-      expense_breakdown JSONB DEFAULT '{}',
-      profit           NUMERIC(15, 2) DEFAULT 0,
-      margin           NUMERIC(6, 2) DEFAULT 0,
-      customers        INTEGER DEFAULT 0,
-      notes            TEXT,
-      raw_message      TEXT,
-      created_at       TIMESTAMPTZ DEFAULT NOW()
-    );
+  await run(`ALTER TABLE users ADD COLUMN IF NOT EXISTS streak               INTEGER DEFAULT 0`, 'ADD streak');
+  await run(`ALTER TABLE users ADD COLUMN IF NOT EXISTS first_message_date  DATE`,               'ADD first_message_date');
+  await run(`ALTER TABLE users ADD COLUMN IF NOT EXISTS last_message_date   DATE`,               'ADD last_message_date');
+  await run(`ALTER TABLE users ADD COLUMN IF NOT EXISTS total_messages_sent INTEGER DEFAULT 0`,  'ADD total_messages_sent');
+  await run(`ALTER TABLE users ADD COLUMN IF NOT EXISTS referred_by         INTEGER REFERENCES users(id)`, 'ADD referred_by');
 
-    CREATE TABLE IF NOT EXISTS inventory (
-      id                  SERIAL PRIMARY KEY,
-      user_id             INTEGER REFERENCES users(id) ON DELETE CASCADE,
-      item_name           VARCHAR(200) NOT NULL,
-      current_balance     NUMERIC(12, 2) DEFAULT 0,
-      total_received      NUMERIC(12, 2) DEFAULT 0,
-      unit_price          NUMERIC(15, 2) DEFAULT 0,
-      low_stock_threshold NUMERIC(12, 2) DEFAULT 20,
-      last_updated        TIMESTAMPTZ DEFAULT NOW(),
-      UNIQUE(user_id, item_name)
-    );
+  await run(`CREATE TABLE IF NOT EXISTS transactions (
+    id                SERIAL PRIMARY KEY,
+    user_id           INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    date              DATE NOT NULL DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'Africa/Lagos')::DATE,
+    revenue           NUMERIC(15,2) DEFAULT 0,
+    total_expenses    NUMERIC(15,2) DEFAULT 0,
+    expense_breakdown JSONB DEFAULT '{}',
+    profit            NUMERIC(15,2) DEFAULT 0,
+    margin            NUMERIC(6,2)  DEFAULT 0,
+    customers         INTEGER DEFAULT 0,
+    notes             TEXT,
+    raw_message       TEXT,
+    created_at        TIMESTAMPTZ DEFAULT NOW()
+  )`, 'CREATE transactions');
 
-    ALTER TABLE inventory ADD COLUMN IF NOT EXISTS total_received NUMERIC(12, 2) DEFAULT 0;
-    ALTER TABLE transactions ADD COLUMN IF NOT EXISTS entry_method VARCHAR(20) DEFAULT 'text';
+  await run(`ALTER TABLE transactions ADD COLUMN IF NOT EXISTS entry_method VARCHAR(20) DEFAULT 'text'`, 'ADD entry_method');
 
-    CREATE TABLE IF NOT EXISTS customer_logs (
-      id         SERIAL PRIMARY KEY,
-      user_id    INTEGER REFERENCES users(id) ON DELETE CASCADE,
-      date       DATE NOT NULL DEFAULT CURRENT_DATE,
-      count      INTEGER DEFAULT 0,
-      notes      TEXT,
-      created_at TIMESTAMPTZ DEFAULT NOW()
-    );
+  await run(`CREATE TABLE IF NOT EXISTS inventory (
+    id                  SERIAL PRIMARY KEY,
+    user_id             INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    item_name           VARCHAR(200) NOT NULL,
+    current_balance     NUMERIC(12,2) DEFAULT 0,
+    total_received      NUMERIC(12,2) DEFAULT 0,
+    unit_price          NUMERIC(15,2) DEFAULT 0,
+    low_stock_threshold NUMERIC(12,2) DEFAULT 20,
+    last_updated        TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(user_id, item_name)
+  )`, 'CREATE inventory');
 
-    CREATE TABLE IF NOT EXISTS whatsapp_messages (
-      id            SERIAL PRIMARY KEY,
-      user_id       INTEGER REFERENCES users(id) ON DELETE SET NULL,
-      phone_number  VARCHAR(20) NOT NULL,
-      direction     VARCHAR(10) NOT NULL DEFAULT 'inbound',
-      message_text  TEXT,
-      intent        VARCHAR(50),
-      parsed_data   JSONB,
-      response_sent TEXT,
-      status        VARCHAR(20) DEFAULT 'received',
-      created_at    TIMESTAMPTZ DEFAULT NOW()
-    );
+  await run(`ALTER TABLE inventory ADD COLUMN IF NOT EXISTS total_received NUMERIC(12,2) DEFAULT 0`, 'ADD inventory.total_received');
 
-    CREATE INDEX IF NOT EXISTS idx_wa_messages_phone    ON whatsapp_messages(phone_number);
-    CREATE INDEX IF NOT EXISTS idx_wa_messages_user     ON whatsapp_messages(user_id);
-    CREATE INDEX IF NOT EXISTS idx_wa_messages_created  ON whatsapp_messages(created_at DESC);
-  `);
+  await run(`CREATE TABLE IF NOT EXISTS customer_logs (
+    id         SERIAL PRIMARY KEY,
+    user_id    INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    date       DATE NOT NULL DEFAULT CURRENT_DATE,
+    count      INTEGER DEFAULT 0,
+    notes      TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+  )`, 'CREATE customer_logs');
 
-  // Normalize existing phone numbers to 234XXXXXXXXXX format.
-  // Skips any row whose normalized value would collide with another row (safe to run repeatedly).
-  try {
-    await pool.query(`
-      WITH normalized AS (
-        SELECT id,
-          CASE
-            WHEN REGEXP_REPLACE(REGEXP_REPLACE(whatsapp_number, '[+ \\-()]', '', 'g'), '^0+', '') ~ '^[789][0-9]{9}$'
-              THEN '234' || REGEXP_REPLACE(REGEXP_REPLACE(whatsapp_number, '[+ \\-()]', '', 'g'), '^0+', '')
-            WHEN REGEXP_REPLACE(REGEXP_REPLACE(whatsapp_number, '[+ \\-()]', '', 'g'), '^0+', '') ~ '^234[789][0-9]{9}$'
-              THEN REGEXP_REPLACE(REGEXP_REPLACE(whatsapp_number, '[+ \\-()]', '', 'g'), '^0+', '')
-            ELSE whatsapp_number
-          END AS new_number
-        FROM users
-        WHERE whatsapp_number IS NOT NULL
-          AND NOT (whatsapp_number ~ '^234[0-9]{10}$')
-      )
-      UPDATE users u
-      SET whatsapp_number = n.new_number
-      FROM normalized n
-      WHERE u.id = n.id
-        AND NOT EXISTS (
-          SELECT 1 FROM users u2
-          WHERE u2.whatsapp_number = n.new_number
-            AND u2.id != u.id
-        )
-    `);
-    console.log('✅ Phone number normalisation complete.');
-  } catch (err) {
-    console.warn('[DB] Phone normalisation skipped:', err.message);
-  }
+  await run(`CREATE TABLE IF NOT EXISTS whatsapp_messages (
+    id            SERIAL PRIMARY KEY,
+    user_id       INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    phone_number  VARCHAR(20) NOT NULL,
+    direction     VARCHAR(10) NOT NULL DEFAULT 'inbound',
+    message_text  TEXT,
+    intent        VARCHAR(50),
+    parsed_data   JSONB,
+    response_sent TEXT,
+    status        VARCHAR(20) DEFAULT 'received',
+    created_at    TIMESTAMPTZ DEFAULT NOW()
+  )`, 'CREATE whatsapp_messages');
+
+  await run(`CREATE INDEX IF NOT EXISTS idx_wa_messages_phone   ON whatsapp_messages(phone_number)`,   'INDEX phone');
+  await run(`CREATE INDEX IF NOT EXISTS idx_wa_messages_user    ON whatsapp_messages(user_id)`,        'INDEX user');
+  await run(`CREATE INDEX IF NOT EXISTS idx_wa_messages_created ON whatsapp_messages(created_at DESC)`,'INDEX created');
 
   console.log('✅ Database tables ready.');
 }
