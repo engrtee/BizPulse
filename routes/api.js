@@ -294,10 +294,11 @@ router.get('/summary/latest', async (req, res) => {
 // ─────────────────────────────────────────────
 router.put('/user/update', async (req, res) => {
   try {
-    const { userId, name, email, bizName, bizType, state } = req.body;
+    const { userId, name, email, bizName, bizType, state, whatsappNumber } = req.body;
     if (!userId) return res.status(400).json({ error: 'userId is required.' });
 
-    const updated = await UserModel.update(userId, { name, email, bizName, bizType, state });
+    const normalizedPhone = whatsappNumber ? normalizePhone(whatsappNumber) : undefined;
+    const updated = await UserModel.update(userId, { name, email, bizName, bizType, state, whatsappNumber: normalizedPhone });
     res.json({ success: true, user: updated });
   } catch (err) {
     console.error('[API] /user/update error:', err.message);

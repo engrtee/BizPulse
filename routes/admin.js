@@ -500,19 +500,24 @@ async function openUserDetail(userId) {
       '<td style="padding:7px 10px;border-bottom:1px solid #E2E8F0;font-size:0.8rem;color:' + pc + '">₦' + fmt(e.profit) + '</td>' +
       '<td style="padding:7px 10px;border-bottom:1px solid #E2E8F0;font-size:0.75rem;color:#718096">' + esc(e.entry_method || 'text') + '</td>' +
       '<td style="padding:7px 10px;border-bottom:1px solid #E2E8F0">' +
-        '<button onclick="correctEntry(' + e.id + ',' + e.revenue + ',' + e.total_expenses + ',\`' + esc(e.notes||'') + '\`)"' +
+        '<button onclick="showCorrectForm(' + e.id + ',' + e.revenue + ',' + e.total_expenses + ')"' +
         ' style="font-size:0.72rem;padding:3px 9px;background:#B7791F;color:#fff;border:none;border-radius:5px;cursor:pointer">Edit</button>' +
       '</td>' +
       '</tr>';
   }).join('') || '<tr><td colspan="6" style="padding:12px;text-align:center;color:#718096">No entries yet</td></tr>';
 
   content.innerHTML =
-    '<div style="background:#F0F4FA;border-radius:8px;padding:12px 16px;font-size:0.85rem;margin-bottom:1.25rem;display:flex;flex-wrap:wrap;gap:1rem">' +
-      '<span>📱 <strong>' + esc(u.whatsapp_number||'—') + '</strong></span>' +
+    '<div style="background:#F0F4FA;border-radius:8px;padding:12px 16px;font-size:0.85rem;margin-bottom:1rem;display:flex;flex-wrap:wrap;gap:1rem;align-items:center">' +
+      '<span>📱 <strong id="phoneDisplay">' + esc(u.whatsapp_number||'—') + '</strong></span>' +
       '<span>📧 ' + esc(u.email) + '</span>' +
       '<span>🏢 ' + esc(u.biz_type||'—') + '</span>' +
       '<span>🔥 ' + (u.streak||0) + ' day streak</span>' +
       '<span>💬 ' + (u.total_messages_sent||0) + ' messages</span>' +
+    '</div>' +
+    '<div style="background:#FFF8E1;border:1px solid #F6E05E;border-radius:8px;padding:10px 14px;margin-bottom:1.25rem;display:flex;gap:8px;align-items:center;flex-wrap:wrap">' +
+      '<span style="font-size:0.82rem;font-weight:600;color:#B7791F">Update WhatsApp number:</span>' +
+      '<input id="newPhoneInput" placeholder="e.g. 08035273030" style="padding:5px 10px;border:1px solid #E2E8F0;border-radius:6px;font-size:0.85rem;flex:1;min-width:160px">' +
+      '<button onclick="savePhone(' + u.id + ')" style="padding:5px 14px;background:#1A56A4;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:0.82rem;font-weight:600">Save</button>' +
     '</div>' +
 
     '<h4 style="font-size:0.85rem;font-weight:600;margin:0 0 0.6rem">WhatsApp Messages (last 30)</h4>' +
@@ -543,25 +548,52 @@ async function openUserDetail(userId) {
     '</div>';
 }
 
-async function correctEntry(id, curRev, curExp, curNotes) {
-  const newRev = prompt('Revenue (₦):', curRev);
-  if (newRev === null) return;
-  const newExp = prompt('Total Expenses (₦):', curExp);
-  if (newExp === null) return;
-  const newNotes = prompt('Notes (optional — leave blank to keep):', curNotes);
-  if (newNotes === null) return;
+function showCorrectForm(id, curRev, curExp) {
+  // Replace the row's Edit button with an inline form
+  const row = document.getElementById('erow-' + id);
+  if (!row) return;
+  const cells = row.querySelectorAll('td');
+  // Show inline inputs in Revenue and Expenses cells, Save button in Action cell
+  cells[1].innerHTML = '<input id="cr-rev-'+id+'" value="'+curRev+'" style="width:90px;padding:3px 6px;border:1px solid #1A56A4;border-radius:4px;font-size:0.8rem">';
+  cells[2].innerHTML = '<input id="cr-exp-'+id+'" value="'+curExp+'" style="width:90px;padding:3px 6px;border:1px solid #1A56A4;border-radius:4px;font-size:0.8rem">';
+  cells[5].innerHTML =
+    '<button onclick="submitCorrection('+id+')" style="font-size:0.72rem;padding:3px 9px;background:#1A7A4A;color:#fff;border:none;border-radius:5px;cursor:pointer;margin-right:3px">Save</button>' +
+    '<button onclick="openUserDetail('+_currentUserId+')" style="font-size:0.72rem;padding:3px 9px;background:#718096;color:#fff;border:none;border-radius:5px;cursor:pointer">Cancel</button>';
+}
 
+async function submitCorrection(id) {
+  const rev = parseFloat(document.getElementById('cr-rev-'+id)?.value || 0);
+  const exp = parseFloat(document.getElementById('cr-exp-'+id)?.value || 0);
   const res  = await fetch('/admin/entry/' + id + '/correct?password=${encodeURIComponent(pw)}', {
     method: 'POST',
     headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({ revenue: parseFloat(newRev), totalExpenses: parseFloat(newExp), notes: newNotes }),
+    body: JSON.stringify({ revenue: rev, totalExpenses: exp }),
   });
   const data = await res.json();
   if (data.success) {
-    toast('✅ Entry corrected — Profit: ₦' + Number(data.profit).toLocaleString('en-NG') + ' (' + data.margin + '%)');
-    openUserDetail(_currentUserId); // refresh the modal
+    toast('✅ Entry corrected — Profit: ₦' + Number(data.profit).toLocaleString('en-NG') + ' (' + parseFloat(data.margin).toFixed(1) + '%)');
+    openUserDetail(_currentUserId);
   } else {
     toast('❌ ' + (data.error || 'Correction failed'), false);
+  }
+}
+
+async function savePhone(userId) {
+  const phone = document.getElementById('newPhoneInput')?.value?.trim();
+  if (!phone) { toast('Enter a phone number first', false); return; }
+  const res  = await fetch('/admin/user/' + userId + '/phone?password=${encodeURIComponent(pw)}', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ phone }),
+  });
+  const data = await res.json();
+  if (data.success) {
+    toast('✅ Phone updated → ' + data.canonical);
+    const el = document.getElementById('phoneDisplay');
+    if (el) el.textContent = data.canonical;
+    document.getElementById('newPhoneInput').value = '';
+  } else {
+    toast('❌ ' + (data.error || 'Update failed'), false);
   }
 }
 </script>
@@ -633,6 +665,24 @@ router.get('/user/:id', adminAuth, async (req, res) => {
     res.json({ user, messages, entries });
   } catch (err) {
     console.error('[Admin] /user/:id error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─────────────────────────────────────────────
+// POST /admin/user/:id/phone — update a user's WhatsApp number from admin
+// ─────────────────────────────────────────────
+router.post('/user/:id/phone', adminAuth, async (req, res) => {
+  try {
+    const { phone } = req.body;
+    if (!phone) return res.status(400).json({ error: 'phone required' });
+    const { normalizePhone } = require('../utils/phone');
+    const canonical = normalizePhone(phone);
+    await query('UPDATE users SET whatsapp_number = $1 WHERE id = $2', [canonical, req.params.id]);
+    console.log(`[Admin] Phone updated for user ${req.params.id} → ${canonical}`);
+    res.json({ success: true, canonical });
+  } catch (err) {
+    console.error('[Admin] /user/:id/phone error:', err.message);
     res.status(500).json({ error: err.message });
   }
 });

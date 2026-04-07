@@ -169,13 +169,16 @@ const UserModel = {
   },
 
   /** Update user profile settings from the frontend */
-  async update(userId, { name, email, bizName, bizType, state }) {
+  async update(userId, { name, email, bizName, bizType, state, whatsappNumber }) {
     const res = await query(
       `UPDATE users
        SET name = $1, email = $2, biz_name = $3, biz_type = $4, state = $5
+           ${whatsappNumber !== undefined ? ', whatsapp_number = $7' : ''}
        WHERE id = $6
        RETURNING *`,
-      [name, email, bizName, bizType, state, userId]
+      whatsappNumber !== undefined
+        ? [name, email, bizName, bizType, state, userId, whatsappNumber]
+        : [name, email, bizName, bizType, state, userId]
     );
     return res.rows[0];
   },
