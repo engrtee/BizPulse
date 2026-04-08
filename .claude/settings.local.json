@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node -e \"require\\('dotenv'\\).config\\(\\); const axios = require\\('axios'\\); const BASE = process.env.BASE_URL; console.log\\('BASE_URL:', BASE\\);\")",
+      "Bash(curl -s \"https://bizpulse-urub.onrender.com/api/test/whatsapp-config\")",
+      "Bash(curl -s \"https://bizpulse-urub.onrender.com/api/test/parse?message=Today+was+good+made+45k+from+sales+paid+10k+for+stock+3k+transport\")"
+    ]
+  }
+}

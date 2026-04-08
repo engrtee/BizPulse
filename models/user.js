@@ -10,11 +10,21 @@ const { normalizePhone } = require('../utils/phone');
 
 const UserModel = {
   /** Find a user by their WhatsApp number (used on every inbound message).
-   *  Both the lookup key and stored value are normalised to 234XXXXXXXXXX. */
+   *  Normalises both the incoming number AND the stored value at query time,
+   *  so it works regardless of what format is stored in the DB. */
   async findByWhatsapp(whatsappNumber) {
     const canonical = normalizePhone(whatsappNumber);
     const res = await query(
-      `SELECT * FROM users WHERE whatsapp_number = $1 AND active = TRUE LIMIT 1`,
+      `SELECT * FROM users
+       WHERE active = TRUE
+         AND CASE
+           WHEN whatsapp_number ~ '^0[789][0-9]{9}$'
+             THEN '234' || SUBSTRING(whatsapp_number, 2)
+           WHEN whatsapp_number ~ '^\\+?234[789][0-9]{9}$'
+             THEN REGEXP_REPLACE(whatsapp_number, '^\\+', '')
+           ELSE whatsapp_number
+         END = $1
+       LIMIT 1`,
       [canonical]
     );
     return res.rows[0] || null;
