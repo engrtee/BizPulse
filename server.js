@@ -51,7 +51,8 @@ app.use('/api/summary',    emailRouter);
 app.use('/admin',          adminRouter);
 
 // Health check (useful for Render and uptime monitors)
-app.get('/health', (_req, res) => {
+// Handles both GET and POST for cron monitoring services
+app.all('/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString(), service: 'BizPulse' });
 });
 
