@@ -96,6 +96,7 @@ function getCoachingMessage(context, marketInsight) {
       `🌅 Good morning, ${firstName}! ☀️\n\n` +
       `Ready for another day? Log your numbers with me:\n` +
       `"Made 50k today, spent 15k stock, 3k transport"\n\n` +
+      `💡 *Tip:* Ask me anything about your business — "Is my margin good?" or "Should I raise prices?" I'll coach you.\n\n` +
       `Let's build your business insight today! 📊`
     );
   }
@@ -109,6 +110,7 @@ function getCoachingMessage(context, marketInsight) {
     `🌅 Good morning, ${firstName}! ☀️\n\n` +
     `${profitLine}\n\n` +
     `${marketInsight.insight}\n\n` +
+    `💡 *Tip:* Ask me "Is my margin good?" or any business question for personalized coaching.\n\n` +
     `Send me your numbers today — let's see what today brings! 📈`
   );
 }

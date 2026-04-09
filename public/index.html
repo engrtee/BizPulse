@@ -793,10 +793,10 @@
             <div style="background:rgba(255,255,255,0.1);border-radius:8px;padding:10px 14px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center">
               <div>
                 <div style="font-size:11px;color:rgba(255,255,255,0.6);margin-bottom:2px">Your BizPulse WhatsApp number</div>
-                <div style="font-size:17px;font-weight:700;letter-spacing:0.02em">+1 555 167 6111</div>
+                <div style="font-size:17px;font-weight:700;letter-spacing:0.02em">+234 912 878 1426</div>
               </div>
             </div>
-            <a href="https://wa.me/15551676111" target="_blank" rel="noopener noreferrer"
+            <a href="https://wa.me/2349128781426" target="_blank" rel="noopener noreferrer"
                style="display:flex;align-items:center;justify-content:center;gap:8px;background:#25D366;color:#fff;border-radius:10px;padding:13px 16px;font-weight:700;font-size:15px;text-decoration:none;margin-bottom:8px">
               <span>💬</span> Open WhatsApp Chat
             </a>
@@ -805,7 +805,7 @@
 
           <!-- WhatsApp Pill — shown when user HAS logged today -->
           <div id="wa-pill" style="display:none;margin-bottom:12px;text-align:right">
-            <a href="https://wa.me/15551676111" target="_blank" rel="noopener noreferrer"
+            <a href="https://wa.me/2349128781426" target="_blank" rel="noopener noreferrer"
                style="display:inline-flex;align-items:center;gap:6px;background:#25D366;color:#fff;border-radius:20px;padding:7px 14px;font-size:12px;font-weight:700;text-decoration:none">
               💬 WhatsApp Chat
             </a>
@@ -1099,7 +1099,7 @@
             <div class="card">
               <div class="card-title">WhatsApp</div>
               <p style="font-size:14px;color:var(--muted);margin-bottom:10px">Your BizPulse WhatsApp number:</p>
-              <div style="background:var(--bg);padding:14px 16px;border-radius:8px;font-weight:700;font-size:17px;color:var(--navy);margin-bottom:12px" id="settings-wa-number">+15551676111</div>
+              <div style="background:var(--bg);padding:14px 16px;border-radius:8px;font-weight:700;font-size:17px;color:var(--navy);margin-bottom:12px" id="settings-wa-number">+2349128781426</div>
               <p style="font-size:13px;color:var(--muted);margin-bottom:16px">Save it as a contact and send messages any time to log entries or check your stock.</p>
               <div style="background:#F0FFF4;border:1px solid #9AE6B4;border-radius:8px;padding:14px 16px">
                 <div style="font-size:12px;font-weight:700;color:var(--green);margin-bottom:8px;text-transform:uppercase;letter-spacing:.04em">WhatsApp Commands</div>
@@ -1887,7 +1887,7 @@ async function populateSettings() {
   const bt = document.getElementById('set-biz-type');
   for (const o of bt.options) { if (o.value === currentUser.biz_type) { o.selected = true; break; } }
   const waNum = document.getElementById('settings-wa-number');
-  if (waNum) waNum.textContent = currentUser.whatsapp_number || '+15551676111';
+  if (waNum) waNum.textContent = currentUser.whatsapp_number || '+2349128781426';
   // Data quality
   try {
     const userId = localStorage.getItem('bizpulse_user_id');

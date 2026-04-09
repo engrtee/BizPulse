@@ -235,6 +235,7 @@ async function sendEveningSummaryWhatsApp(to, firstName, summaryData, aiRec, low
     (topExpense ? `Top cost:   ${topExpense.category} (₦${fmt(topExpense.amount)})\n` : '') +
     lowStockLines +
     `\n💡 *Insight:*\n${insight}\n\n` +
+    `❓ *Ask me anything:* "Is my margin good?", "Should I raise prices?", or send "summary last 7 days" for trends.\n\n` +
     `Full report 👉 ${process.env.BASE_URL || 'https://bizpulse-urub.onrender.com'}`;
 
   return sendMessage(to, body);
