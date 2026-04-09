@@ -236,7 +236,7 @@ async function sendEveningSummaryWhatsApp(to, firstName, summaryData, aiRec, low
     lowStockLines +
     `\n💡 *Insight:*\n${insight}\n\n` +
     `❓ *Ask me anything:* "Is my margin good?", "Should I raise prices?", or send "summary last 7 days" for trends.\n\n` +
-    `Full report 👉 ${process.env.BASE_URL || 'https://bizpulse-urub.onrender.com'}`;
+    `Full report 👉 ${process.env.FRONTEND_URL || process.env.BASE_URL || 'https://mybizpulse.app'}`;
 
   return sendMessage(to, body);
 }
