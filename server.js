@@ -21,6 +21,7 @@ const emailRouter              = require('./routes/email');
 const adminRouter              = require('./routes/admin');
 // Requiring these modules starts their internal cron schedules immediately
 require('./jobs/dailySummary');
+require('./jobs/morningCoaching');
 require('./jobs/retentionNudge');
 
 const app  = express();

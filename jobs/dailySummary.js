@@ -25,7 +25,7 @@ const cron = require('node-cron');
 const UserModel        = require('../models/user');
 const TransactionModel = require('../models/transaction');
 const InventoryService = require('../services/inventory');
-const GeminiService    = require('../services/gemini');
+const ClaudeService    = require('../services/claude');
 const EmailService     = require('../services/email');
 const WhatsAppService  = require('../services/whatsapp');
 
@@ -71,8 +71,8 @@ async function processUser(user) {
       date,
     };
 
-    // Generate personalised AI recommendation (used for both email and WhatsApp)
-    const aiRec = await GeminiService.generateRecommendation(summaryData, user);
+    // Generate personalised AI recommendation with Claude (better Nigerian market context)
+    const aiRec = await ClaudeService.generateRecommendation(summaryData, user);
 
     const firstName = user.name.split(' ')[0];
 
@@ -94,49 +94,16 @@ async function processUser(user) {
 }
 
 // Rotating business quotes for the morning broadcast
-const MORNING_QUOTES = [
-  'The secret of getting ahead is getting started.',
-  'Do not watch the clock; do what it does. Keep going.',
-  'A big business starts small.',
-  'Opportunities do not happen. You create them.',
-  'Chase the vision, not the money.',
-  'Work like someone is trying to take your place.',
-  'Your income is directly related to your hustle.',
-  'Every day you are not tracking is a day you are guessing.',
-  'Small daily improvements are the key to long-term results.',
-  'Know your numbers, own your future.',
-  'Discipline is the bridge between goals and accomplishment.',
-  'Great businesses are built one transaction at a time.',
-  'The hustle you put in today is the story you tell tomorrow.',
-  'Profit does not happen by accident. Track it.',
-  'Your next level starts with knowing where you are today.',
-];
+// DEPRECATED: Replaced with dedicated morningCoaching.js job for personalized coaching
+// Kept for reference only
 
 /**
  * Send personalised 7am morning broadcast to all active users with a WhatsApp number.
+ * DEPRECATED: Use jobs/morningCoaching.js instead for personalized messaging.
  */
 async function runMorningBroadcast() {
-  console.log(`[Cron] ☀️ Morning broadcast started at ${new Date().toISOString()}`);
-  try {
-    const users = await UserModel.findAllActive();
-    // Pick today's quote based on day-of-year so it's consistent across all users
-    const dayOfYear = Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 0)) / 86400000);
-    const quote = MORNING_QUOTES[dayOfYear % MORNING_QUOTES.length];
-
-    for (const user of users) {
-      if (!user.whatsapp_number) continue;
-      try {
-        const firstName = user.name.split(' ')[0];
-        await WhatsAppService.sendMorningBroadcast(user.whatsapp_number, firstName, user.biz_name, quote, user.streak || 0);
-        console.log(`[Cron] ☀️ Morning broadcast sent to ${user.name}`);
-      } catch (err) {
-        console.error(`[Cron] Morning broadcast failed for ${user.name}:`, err.message);
-      }
-    }
-    console.log('[Cron] ☀️ Morning broadcast complete.');
-  } catch (err) {
-    console.error('[Cron] Morning broadcast job error:', err.message);
-  }
+  console.log('[Cron] ⚠️ runMorningBroadcast is deprecated — use morningCoaching.js instead');
+  // This function is no longer called but kept for backward compatibility
 }
 
 /**
@@ -195,19 +162,10 @@ async function runReminderJob() {
   }
 }
 
-// ── Schedule all three jobs — fires automatically when this module is required ──
+// ── Schedule all jobs — fires automatically when this module is required ──
 
-// 6:00 AM WAT — morning broadcast (quote + encouragement)
-cron.schedule('0 6 * * *', async () => {
-  console.log('[Cron] ☀️ Morning broadcast firing:', new Date().toISOString());
-  try {
-    await runMorningBroadcast();
-    console.log('[Cron] ☀️ Morning broadcast completed.');
-  } catch (err) {
-    console.error('[Cron] Morning broadcast failed:', err.message);
-  }
-}, { timezone: 'Africa/Lagos' });
-console.log('[Cron] Morning broadcast scheduled for 6:00 AM WAT.');
+// 6:00 AM WAT — morning coaching now handled by dedicated jobs/morningCoaching.js
+// (removed from here to avoid duplicate messages)
 
 // 6:00 PM WAT — WhatsApp reminder for users who haven't logged today
 cron.schedule('0 18 * * *', async () => {

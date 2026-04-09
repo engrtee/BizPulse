@@ -211,6 +211,18 @@ router.post('/', async (req, res) => {
         break;
       }
 
+      case 'on_demand_summary': {
+        await handleOnDemandSummary(user, from, text);
+        await MessageModel.updateLog(msgLogId, { intent: 'on_demand_summary', status: 'processed' }).catch(() => {});
+        break;
+      }
+
+      case 'business_question': {
+        await handleBusinessQuestion(user, from, text);
+        await MessageModel.updateLog(msgLogId, { intent: 'business_question', status: 'processed' }).catch(() => {});
+        break;
+      }
+
       case 'daily_entry': {
         await handleDailyEntry(user, from, data, text, entryMethod);
         await MessageModel.updateLog(msgLogId, {
@@ -467,6 +479,141 @@ async function downloadWhatsAppAudio(mediaId) {
   return {
     buffer:   Buffer.from(audioRes.data),
     mimeType: mime_type || 'audio/ogg; codecs=opus',
+  };
+}
+
+// ─────────────────────────────────────────────
+// On-demand summary with period parsing
+// ─────────────────────────────────────────────
+async function handleOnDemandSummary(user, from, text) {
+  const { parsePeriod } = require('../utils/periodParser');
+  const { query } = require('../models/db');
+
+  // Parse period from message (e.g. "show me last 7 days", "give me this month")
+  const period = parsePeriod(text);
+  const { startDate, endDate, label } = period;
+
+  // Fetch transactions in date range
+  const res = await query(
+    `SELECT
+       date,
+       COALESCE(SUM(revenue), 0) as revenue,
+       COALESCE(SUM(total_expenses), 0) as total_expenses,
+       COALESCE(SUM(profit), 0) as profit,
+       COALESCE(SUM(customers), 0) as customers,
+       CASE WHEN SUM(revenue) > 0 THEN (SUM(profit) / SUM(revenue)) * 100 ELSE 0 END as margin
+     FROM transactions
+     WHERE user_id = $1 AND date >= $2 AND date <= $3
+     GROUP BY date
+     ORDER BY date DESC`,
+    [user.id, startDate, endDate]
+  );
+
+  const rows = res.rows;
+
+  if (rows.length === 0) {
+    await WhatsAppService.sendMessage(from,
+      `📊 No data recorded for ${label.toLowerCase()}, ${user.name.split(' ')[0]}.\n\n` +
+      `Start logging your business numbers — Send:\n"Made 50k today, spent 15k on stock"`);
+    return;
+  }
+
+  // Calculate totals across period
+  const totalRevenue = rows.reduce((s, r) => s + parseFloat(r.revenue), 0);
+  const totalExpenses = rows.reduce((s, r) => s + parseFloat(r.total_expenses), 0);
+  const totalProfit = rows.reduce((s, r) => s + parseFloat(r.profit), 0);
+  const totalCustomers = rows.reduce((s, r) => s + parseInt(r.customers), 0);
+  const avgMargin = totalRevenue > 0 ? parseFloat(((totalProfit / totalRevenue) * 100).toFixed(2)) : 0;
+
+  const fmt = (n) => Number(n).toLocaleString('en-NG');
+  const profitAbs = Math.abs(totalProfit);
+
+  const summary = `📊 *${label}* Summary for ${user.name.split(' ')[0]}\n\n` +
+    `Days logged: ${rows.length}\n` +
+    `Total Revenue: ₦${fmt(totalRevenue)}\n` +
+    `Total Expenses: ₦${fmt(totalExpenses)}\n` +
+    `Total Profit: ${totalProfit < 0 ? '-' : ''}₦${fmt(profitAbs)}\n` +
+    `Average Margin: ${avgMargin}%\n` +
+    `Total Customers: ${totalCustomers}\n\n` +
+    `Get insights → Send "summary" for today's full breakdown 📈`;
+
+  await WhatsAppService.sendMessage(from, summary);
+}
+
+// ─────────────────────────────────────────────
+// Business coaching question handler
+// ─────────────────────────────────────────────
+async function handleBusinessQuestion(user, from, question) {
+  const firstName = user.name.split(' ')[0];
+
+  // Send thinking message
+  await WhatsAppService.sendMessage(from,
+    `🤔 Let me analyze your numbers and get you advice, ${firstName}... (moment please)`).catch(() => {});
+
+  try {
+    // Gather user's financial data
+    const userData = await gatherUserFinancialData(user.id);
+
+    // If too little data, ask them to log more
+    if(!userData.history || userData.history.length < 3) {
+      await WhatsAppService.sendMessage(from,
+        `I need a bit more data to give you solid advice, ${firstName}! 📊\n\n` +
+        `You've logged ${userData.history?.length || 0} entries. Once you hit 3-5, I can spot real patterns.\n\n` +
+        `Keep sending your daily numbers — I'll get smarter every day!`);
+      return;
+    }
+
+    // Use Claude for personalized coaching
+    const coaching = await ClaudeService.answerBusinessQuestion(question, user, userData);
+
+    await WhatsAppService.sendMessage(from, coaching);
+
+    // Offer next step
+    await WhatsAppService.sendMessage(from,
+      `💡 Want another insight? Just ask me anything about your business!\n\n` +
+      `Examples:\n• "Is my margin good?"\n• "Should I raise prices?"\n• "Why are expenses so high?"`
+    ).catch(() => {});
+  } catch (err) {
+    console.error('[Webhook] Business question failed:', err.message);
+    await WhatsAppService.sendMessage(from,
+      `Sorry, I had trouble analyzing your data right now, ${firstName}.\n\nTry again in a moment! 🔄`);
+  }
+}
+
+// ─────────────────────────────────────────────
+// Helper: Gather all financial data for a user
+// ─────────────────────────────────────────────
+async function gatherUserFinancialData(userId) {
+  const { query } = require('../models/db');
+
+  // Get last 30 days of transactions
+  const historyRes = await query(
+    `SELECT date, revenue, total_expenses, profit, margin, customers
+     FROM transactions 
+     WHERE user_id = $1 
+     ORDER BY date DESC 
+     LIMIT 30`,
+    [userId]
+  );
+
+  // Calculate averages
+  const history = historyRes.rows;
+  const avgRevenue = history.length > 0 ? history.reduce((s, r) => s + parseFloat(r.revenue), 0) / history.length : 0;
+  const avgExpenses = history.length > 0 ? history.reduce((s, r) => s + parseFloat(r.total_expenses), 0) / history.length : 0;
+  const avgMargin = history.length > 0 ? history.reduce((s, r) => s + parseFloat(r.margin), 0) / history.length : 0;
+
+  // Get inventory
+  const inventoryRes = await query(
+    `SELECT item_name, current_balance, unit_price, total_ever_received 
+     FROM inventory 
+     WHERE user_id = $1`,
+    [userId]
+  );
+
+  return {
+    history,
+    avgMetrics: { avgRevenue, avgExpenses, avgMargin },
+    inventory: inventoryRes.rows || [],
   };
 }
 
