@@ -197,8 +197,8 @@ async function runReminderJob() {
 
 // ── Schedule all three jobs — fires automatically when this module is required ──
 
-// 9:00 AM WAT — morning broadcast (quote + encouragement)
-cron.schedule('0 9 * * *', async () => {
+// 6:00 AM WAT — morning broadcast (quote + encouragement)
+cron.schedule('0 6 * * *', async () => {
   console.log('[Cron] ☀️ Morning broadcast firing:', new Date().toISOString());
   try {
     await runMorningBroadcast();
@@ -207,7 +207,7 @@ cron.schedule('0 9 * * *', async () => {
     console.error('[Cron] Morning broadcast failed:', err.message);
   }
 }, { timezone: 'Africa/Lagos' });
-console.log('[Cron] Morning broadcast scheduled for 9:00 AM WAT.');
+console.log('[Cron] Morning broadcast scheduled for 6:00 AM WAT.');
 
 // 6:00 PM WAT — WhatsApp reminder for users who haven't logged today
 cron.schedule('0 18 * * *', async () => {
