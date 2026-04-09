@@ -30,12 +30,14 @@ const { parseAmount } = require('../utils/naira');
 
 // Keywords that unambiguously signal intent
 const INTENT_PATTERNS = {
-  help:         /^(help|\?|commands?)$/i,
-  stock_check:  /^(stock|inventory|stock\?|inventory\?)\??$/i,
-  summary:      /^(summary|report|show me|my report|today's report)$/i,
-  inventory_in: /\b(received|got|bought|purchased|stocked|restocked)\b.*\b(bags?|units?|pieces?|pcs|cartons?|crates?|rolls?|bottles?|packs?|dozens?|sets?|pairs?|items?|shirts?|trousers?|fabric|rice|beans|yam|maize|tomatoes?|pepper|flour|sugar|oil|sachet|gallon|kg|litre?s?|litres?|cans?|tins?)/i,
-  inventory_out:/\b(sold|sell|sold out|cleared)\b.*\b(\d+)\b.*\b(bags?|units?|pieces?|pcs|cartons?|crates?|rolls?|bottles?|packs?|dozens?|shirts?|trousers?|fabric|rice|beans|items?)/i,
-  customer_log: /\b(customers?|clients?|served|people today|new customer|customer today)\b/i,
+  help:              /^(help|\?|commands?)$/i,
+  stock_check:       /^(stock|inventory|stock\?|inventory\?)\??$/i,
+  summary:           /^(summary|report|show me|my report|today's report)$/i,
+  on_demand_summary: /^(show me|give me|send me).*(summary|report|numbers|total|revenue|profit)|(last\s+\d+\s+days?|last\s+week|last\s+month|this\s+month|this\s+week|today)/i,
+  business_question: /^(is\s+my|should\s+i|how.*(my|our)?|what.*(my|our)?|why.*(my|our)?|can\s+i|do\s+i|am\s+i).*/i,
+  inventory_in:      /\b(received|got|bought|purchased|stocked|restocked)\b.*\b(bags?|units?|pieces?|pcs|cartons?|crates?|rolls?|bottles?|packs?|dozens?|sets?|pairs?|items?|shirts?|trousers?|fabric|rice|beans|yam|maize|tomatoes?|pepper|flour|sugar|oil|sachet|gallon|kg|litre?s?|litres?|cans?|tins?)/i,
+  inventory_out:     /\b(sold|sell|sold out|cleared)\b.*\b(\d+)\b.*\b(bags?|units?|pieces?|pcs|cartons?|crates?|rolls?|bottles?|packs?|dozens?|shirts?|trousers?|fabric|rice|beans|items?)/i,
+  customer_log:      /\b(customers?|clients?|served|people today|new customer|customer today)\b/i,
 };
 
 // Expense category keywords → canonical labels

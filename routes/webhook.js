@@ -26,6 +26,7 @@ const { normalizePhone } = require('../utils/phone');
 
 const ParserService   = require('../services/parser');
 const GeminiService   = require('../services/gemini');
+const ClaudeService   = require('../services/claude');
 const WhatsAppService = require('../services/whatsapp');
 const InventoryService= require('../services/inventory');
 const CustomerService = require('../services/customers');
@@ -34,6 +35,7 @@ const EmailService    = require('../services/email');
 
 const { calcHealthScore, healthLabel, topExpenseCategory, todayWAT } = require('../utils/formatter');
 const { calcMargin } = require('../utils/naira');
+const { parsePeriod } = require('../utils/periodParser');
 
 // ─────────────────────────────────────────────
 // GET /webhook — Meta verification handshake
