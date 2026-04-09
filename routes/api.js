@@ -115,6 +115,7 @@ router.post('/entry', async (req, res) => {
     ].filter(Boolean).join('\n') || null;
 
     // Save transaction to DB
+    console.log(`[API] 💾 Saving entry for user ${user.id} (${user.name}): ₦${rev} revenue`);
     const txn = await TransactionModel.create({
       userId: user.id,
       revenue:          rev,
@@ -126,6 +127,13 @@ router.post('/entry', async (req, res) => {
       notes:            combinedNotes,
       rawMessage:       'web_entry',
     });
+    
+    if (!txn || !txn.id) {
+      console.error('[API] ❌ Transaction create returned null or no ID!');
+      return res.status(500).json({ error: 'Failed to save transaction' });
+    }
+    
+    console.log(`[API] ✅ Saved transaction ID: ${txn.id} with date: ${txn.date}`);
 
     // Update last_entry_date and streak
     const newStreak = await UserModel.touchLastEntry(user.id);
