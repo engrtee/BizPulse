@@ -34,7 +34,7 @@ function getClient() {
 // Nigerian Business Context
 // ────────────────────────────────────────
 const NIGERIA_CONTEXT = `
-You are a business coach for Nigerian SME owners. You have deep expertise in:
+You are a relentless business coach for Nigerian SME owners. Your job is ADDICTIVE INSIGHTS + REAL-WORLD ACTIONS.
 
 NIGERIAN MARKET CONTEXT:
 - Currency: Nigerian Naira (₦). "k" = thousands, "m" = millions
@@ -44,22 +44,40 @@ NIGERIAN MARKET CONTEXT:
 - Language: Informal Nigerian English, Pidgin, mixed languages
   Examples: "made 50k" = ₦50k revenue, "gave transport 3k" = ₦3k on logistics, "sold am for 5k" = sold for ₦5k
 
-YOUR APPROACH:
-1. Always reference actual numbers from user's data (never generic)
-2. Give specific, actionable advice for Nigerian context
-3. Use plain English - NO jargon
-4. Be warm, encouraging, personal
-5. Challenge users to think bigger, but realistically
-6. Ground advice in market research + their specific numbers
+YOUR COACHING APPROACH - MAKE IT ADDICTIVE:
+1. ALWAYS lead with a SPECIFIC INSIGHT from their numbers (not generic praise)
+2. ALWAYS compare to Nigerian industry benchmarks for their business type
+3. ALWAYS identify ONE hidden problem nobody talks about
+4. ALWAYS suggest ONE concrete action that INCREASES PROFIT or SAVES TIME
+5. ALWAYS include market context (exchange rates, seasonal trends, competitor moves)
+6. Use confidence + urgency - they should feel they're leaving money on the table
+7. Be warm but DIRECT - no sugar-coating, no management speak
 
-EXAMPLE (GOOD):
-"Your margin of 32% is healthy, but for fashion retail in this environment, you're leaving money.
-Top traders average 40-45% because they negotiate bulk discounts. You paid ₦4,500/item on average last week.
-Try negotiating with your supplier for ₦4,200 on next order of 50+ units — that alone gets you to 38% margin."
+EXAMPLES OF ADDICTIVE INSIGHTS:
 
-EXAMPLE (BAD - never do this):
-"Monitor inventory closely to protect margins." (Generic, not actionable)
+GOOD (addictive + actionable):
+"Your margin of 32% tells me you're buying at retail prices, not wholesale.
+Top fashion traders in Lekos/Onitsha average 42% because they buy 50+ units per supplier.
+Next Monday, call your 3 suppliers — quote ₦4,200/unit on a 50-unit order (vs your current ₦4,500).
+That ONE move = 38% margin. You'll feel that extra ₦300 × 50 = ₦15k per order."
+
+GOOD (product performance):
+"Your customers average 7 per day but your stock turns only twice/month.
+That means you're holding ₦150k in inventory that moves slow.
+Fashion = speed. Fast-movers (daily sales items) should be 60% of stock, niche items 40%.
+This week: restock only your top 5 best-sellers. Drop the slow-movers. Free up ₦30k for faster inventory."
+
+GOOD (market insight):
+"Fuel price just hit ₦1,000/liter. Your transport costs will spike 15-20% next week.
+Smart traders raise prices 5-7% today, BEFORE the market panic.
+Raise your average item by ₦200-500 this week. You'll be cheap compared to next week's market."
+
+BAD (generic - never ever do this):
+"Keep monitoring your expenses." — NO ACTION, NO INSIGHT
+"Your margin is healthy." — No urgency, not addictive
+"Track inventory closely." — Every coach says this
 `;
+
 
 /**
  * Parse a WhatsApp message using Claude.
@@ -124,7 +142,8 @@ STRICT RULES:
 
 /**
  * Generate a personalized AI recommendation for the daily 7pm summary.
- * Uses full access to user's financial data.
+ * Uses full access to user's financial data + market insights.
+ * THIS IS WHAT MAKES IT ADDICTIVE.
  */
 async function generateRecommendation(summaryData, user) {
   const client = getClient();
@@ -141,36 +160,60 @@ async function generateRecommendation(summaryData, user) {
     daysTrend, // { revenue: [...], margin: [...], profit: [...] }
   } = summaryData;
 
+  // Get market insights for context
+  let marketInsight = '';
+  try {
+    const insight = await MarketDataService.getMarketInsight(user.biz_type || 'Business', {
+      revenue,
+      totalExpenses,
+      margin,
+    });
+    marketInsight = `\n\nMARKET CONTEXT: ${insight.insight}`;
+  } catch (e) {
+    // Optional
+  }
+
+  // Analyze if they're underperforming vs their own average (hidden problem)
+  let performanceAlert = '';
+  if (daysTrend && daysTrend.revenue && daysTrend.revenue.length >= 7) {
+    const last7 = daysTrend.revenue.slice(-7).map(r => parseFloat(r) || 0);
+    const avg7 = last7.reduce((a, b) => a + b, 0) / 7;
+    
+    if (revenue < avg7 * 0.8) {
+      performanceAlert = `\n⚠️ ALERT: Today (₦${Number(revenue).toLocaleString('en-NG')}) is 20% below your 7-day average (₦${Number(avg7).toLocaleString('en-NG')}). What's different?`;
+    } else if (revenue > avg7 * 1.2) {
+      performanceAlert = `\n✨ WIN: Today (₦${Number(revenue).toLocaleString('en-NG')}) is 20% ABOVE your 7-day average! What did you do differently?`;
+    }
+  }
+
   const trendContext =
     daysTrend && daysTrend.revenue && daysTrend.revenue.length > 0
-      ? `\nTrends (last 7 days):
-- Revenue: ${daysTrend.revenue.join(', ')}
-- Margin: ${daysTrend.margin.join(', ')}%
-- Profit: ${daysTrend.profit.join(', ')}`
+      ? `\nLast 7 days: Revenue ${daysTrend.revenue.slice(-7).join(' → ')} ₦`
       : '';
 
   const prompt = `${NIGERIA_CONTEXT}
 
-USER DATA:
-Name: ${user.name}
-Business: ${user.biz_type}
-Today (${date}):
+TODAY'S PERFORMANCE (${date}):
 - Revenue: ₦${Number(revenue).toLocaleString('en-NG')}
 - Expenses: ₦${Number(totalExpenses).toLocaleString('en-NG')}
 - Profit: ₦${Number(profit).toLocaleString('en-NG')}
 - Margin: ${margin}%
-- Top expense: ${topExpense ? topExpense.category : 'N/A'}
+${topExpense ? `- Biggest cost: ${topExpense.category} (₦${Number(topExpense.amount).toLocaleString('en-NG')})` : ''}
 - Customers: ${customers}
 ${trendContext}
+${performanceAlert}
+${marketInsight}
 
-Generate ONE PARAGRAPH of personalized business coaching that:
-1. Opens with specific observation about TODAY (reference actual numbers)
-2. Gives ONE concrete action they can take tomorrow or this week
-3. Relates to their business type and Nigerian market
-4. Is encouraging but honest
-5. Uses plain language - no jargon
+Generate ONE PARAGRAPH of addictive business insight that:
+1. Opens with specific observation about TODAY (not generic praise/warning)
+2. Identifies ONE hidden problem or opportunity in their numbers TODAY
+3. Gives ONE concrete action they can do TOMORROW to increase profit
+4. References their specific ₦ amounts and percentages
+5. References Nigerian market context if relevant
+6. Uses plain language - no jargon
+7. Be DIRECT but warm - make them feel they might be leaving money on the table
 
-Keep it under 150 words. Be personal, not generic.`;
+Keep under 150 words. Make it memorable + actionable. This is their daily business coach speaking.`;
 
   try {
     const message_obj = await client.messages.create({
@@ -193,12 +236,13 @@ Keep it under 150 words. Be personal, not generic.`;
 
 /**
  * Answer a business question using Claude.
- * Claude has full context of user's financial history.
+ * Claude has full context of user's financial history + market data.
+ * This is where ADDICTIVE INSIGHTS happen.
  */
 async function answerBusinessQuestion(question, user, userData) {
   const client = getClient();
 
-  // userData should contain: { history: [...], inventory: [...], customers: [...], etc }
+  // userData should contain: { history: [...], inventory: [...], avgMetrics: {...} }
   const { history = [], inventory = [], avgMetrics = {} } = userData;
 
   const recentHistory = history.slice(0, 30).map((d) => ({
@@ -209,6 +253,54 @@ async function answerBusinessQuestion(question, user, userData) {
     margin: d.margin,
   }));
 
+  // GET MARKET INSIGHTS - Real-time context
+  let marketInsight = '';
+  try {
+    const insight = await MarketDataService.getMarketInsight(user.biz_type, {
+      revenue: avgMetrics.avgRevenue || 0,
+      totalExpenses: avgMetrics.avgExpenses || 0,
+      margin: avgMetrics.avgMargin || 0,
+    });
+    marketInsight = `\nMARKET BENCHMARK FOR ${user.biz_type.toUpperCase()}:\n${insight.insight}`;
+  } catch (e) {
+    // Market data optional
+  }
+
+  // CALCULATE PRODUCT PERFORMANCE METRICS
+  let productPerformance = '';
+  if (inventory && inventory.length > 0) {
+    const totalStockValue = inventory.reduce((sum, i) => sum + (parseFloat(i.current_balance) * (parseFloat(i.unit_price) || 0)), 0);
+    const totalEverReceived = inventory.reduce((sum, i) => sum + parseFloat(i.total_received || 0), 0);
+    const avgTurnover = totalEverReceived > 0 ? (avgMetrics.avgRevenue / (totalStockValue || 1)) : 0;
+    
+    productPerformance = `
+PRODUCT PERFORMANCE ANALYSIS:
+- Total inventory value: ₦${Number(totalStockValue).toLocaleString('en-NG')}
+- Avg items per day: ${Math.round(totalEverReceived / 30)}
+- Inventory turnover ratio: ${avgTurnover.toFixed(2)}x per day
+- Top 5 items: ${inventory.slice(0, 5).map(i => i.item_name).join(', ')}
+${inventory.some(i => parseFloat(i.current_balance) === 0) ? '⚠️ WARNING: You have OUT-OF-STOCK items' : ''}
+${inventory.some(i => parseFloat(i.current_balance) < (parseFloat(i.total_received) * 0.2)) ? '⚠️ WARNING: Multiple items below 20% threshold' : ''}`;
+  }
+
+  // TREND ANALYSIS
+  let trendAnalysis = '';
+  if (recentHistory.length >= 7) {
+    const last7 = recentHistory.slice(-7);
+    const prev7 = recentHistory.slice(-14, -7);
+    
+    const last7Avg = last7.reduce((sum, d) => sum + parseFloat(d.revenue), 0) / 7;
+    const prev7Avg = prev7.length > 0 ? prev7.reduce((sum, d) => sum + parseFloat(d.revenue), 0) / 7 : last7Avg;
+    
+    const trend = ((last7Avg - prev7Avg) / prev7Avg) * 100;
+    const trendDirection = trend > 5 ? '📈 UP' : trend < -5 ? '📉 DOWN' : '➡️ FLAT';
+    
+    trendAnalysis = `\nTREND ANALYSIS (last 14 days):
+${trendDirection} Revenue trend: ${Math.abs(trend).toFixed(1)}%
+- Last 7 days avg: ₦${Number(last7Avg).toLocaleString('en-NG')}
+- Previous 7 days avg: ₦${Number(prev7Avg).toLocaleString('en-NG')}`;
+  }
+
   const prompt = `${NIGERIA_CONTEXT}
 
 USER CONTEXT:
@@ -216,30 +308,37 @@ Name: ${user.name}
 Business: ${user.biz_type}
 Location: ${user.state || 'Nigeria'}
 
-FINANCIAL HISTORY (last 30 days):
+FINANCIAL DATA (last 30 days):
 ${JSON.stringify(recentHistory, null, 2)}
 
-AVERAGES:
+KEY METRICS:
 - Daily revenue: ₦${Number(avgMetrics.avgRevenue || 0).toLocaleString('en-NG')}
 - Daily expenses: ₦${Number(avgMetrics.avgExpenses || 0).toLocaleString('en-NG')}
 - Average margin: ${(avgMetrics.avgMargin || 0).toFixed(1)}%
-${inventory && inventory.length > 0 ? `\nINVENTORY:\n${JSON.stringify(inventory.slice(0, 5), null, 2)}` : ''}
+- Highest revenue day: ₦${Math.max(...recentHistory.map(d => parseFloat(d.revenue) || 0)).toLocaleString('en-NG')}
+- Lowest revenue day: ₦${Math.min(...recentHistory.map(d => parseFloat(d.revenue) || 0)).toLocaleString('en-NG')}
 
-QUESTION FROM USER: "${question}"
+${productPerformance}
+${trendAnalysis}
+${marketInsight}
 
-Respond with personalized, specific business advice that:
-1. References their actual numbers + data trends
-2. Acknowledges Nigerian market realities
-3. Gives 1-2 concrete action steps
-4. Is in plain language (no jargon)
-5. Is warm and encouraging
+USER'S QUESTION: "${question}"
 
-Keep under 200 words.`;
+NOW GIVE ADDICTIVE, ACTIONABLE COACHING:
+1. Lead with ONE specific insight from their data (not generic)
+2. If comparing to market: show the gap and how to close it
+3. If product performance issue: identify the hidden problem (slow movers, overstock, etc.)
+4. If trend issue: explain WHY and what to do NOW
+5. Give ONE concrete action they can do TODAY or THIS WEEK that affects profit
+6. Reference actual ₦ amounts and percentage changes
+7. Be DIRECT but warm - use "you're" not "users"
+
+Keep under 250 words. Make it addictive enough they WANT more insights.`;
 
   try {
     const message_obj = await client.messages.create({
       model: 'claude-3-5-sonnet-20241022',
-      max_tokens: 400,
+      max_tokens: 500,
       messages: [
         {
           role: 'user',
@@ -250,7 +349,7 @@ Keep under 200 words.`;
 
     return message_obj.content[0].type === 'text'
       ? message_obj.content[0].text
-      : "I don't have enough data yet to give you specific advice. Keep logging your numbers!";
+      : "Keep logging your data — insights get better with more numbers!";
   } catch (err) {
     console.error('[Claude] answerBusinessQuestion failed:', err.message);
     return "I'm having trouble right now. Try again in a moment!";
