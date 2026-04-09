@@ -331,12 +331,31 @@ async function handleDailyEntry(user, from, data, rawMessage, entryMethod = 'tex
     }).catch((err) => console.error('[Sheets] appendTransaction error:', err.message));
   }
 
-  // Derive top expense from this entry's breakdown
-  const topExpense = topExpenseCategory([expenseBreakdown || {}]);
+  // ✅ CRITICAL FIX: Fetch TODAY'S CUMULATIVE TOTALS from all entries today (not just this entry)
+  const date = todayWAT();
+  const dailyTotals = await TransactionModel.getDailyTotals(user.id, date);
+  const expenseBreakdowns = await TransactionModel.getExpenseBreakdowns(user.id, date);
+  
+  const cumulativeRevenue = parseFloat(dailyTotals.revenue) || 0;
+  const cumulativeTotalExpenses = parseFloat(dailyTotals.total_expenses) || 0;
+  const cumulativeProfit = parseFloat(dailyTotals.profit) || 0;
+  const cumulativeMargin = cumulativeRevenue > 0 
+    ? parseFloat(((cumulativeProfit / cumulativeRevenue) * 100).toFixed(2))
+    : 0;
+  const cumulativeCustomers = parseInt(dailyTotals.customers, 10) || 0;
 
-  // Send instant WhatsApp acknowledgement
+  // Derive top expense from ALL TODAY'S ENTRIES (not just this one)
+  const topExpense = topExpenseCategory(expenseBreakdowns);
+
+  // Send instant WhatsApp acknowledgement with CUMULATIVE daily totals
   await WhatsAppService.sendEntryAck(from, user.name.split(' ')[0], {
-    revenue, totalExpenses, profit, margin, customers, streak: newStreak, topExpense,
+    revenue: cumulativeRevenue,
+    totalExpenses: cumulativeTotalExpenses,
+    profit: cumulativeProfit,
+    margin: cumulativeMargin,
+    customers: cumulativeCustomers,
+    streak: newStreak,
+    topExpense,
     entryMethod,
   });
 
@@ -357,7 +376,7 @@ async function handleDailyEntry(user, from, data, rawMessage, entryMethod = 'tex
   if (totalMsgs === 10) {
     WhatsAppService.sendMilestone(from, 'entry10', { firstName }).catch(() => {});
   }
-  if (parseFloat(profit) > 0 && totalMsgs === 1) {
+  if (parseFloat(cumulativeProfit) > 0 && totalMsgs === 1) {
     WhatsAppService.sendMilestone(from, 'first_profit', { firstName }).catch(() => {});
   }
 
