@@ -21,7 +21,8 @@ let claudeClient = null;
 function getClient() {
   if (!claudeClient) {
     if (!process.env.ANTHROPIC_API_KEY) {
-      throw new Error('ANTHROPIC_API_KEY not set in .env');
+      console.warn('[Claude] ⚠️ ANTHROPIC_API_KEY not set — Claude features will use fallback messages');
+      return null; // Return null instead of throwing — will trigger fallback
     }
     claudeClient = new Anthropic({
       apiKey: process.env.ANTHROPIC_API_KEY,
@@ -147,6 +148,20 @@ STRICT RULES:
  */
 async function generateRecommendation(summaryData, user) {
   const client = getClient();
+  
+  // Graceful fallback if API key not set
+  if (!client) {
+    const revenue = summaryData.revenue || 0;
+    const profit = summaryData.profit || 0;
+    const margin = summaryData.margin || 0;
+    if (profit > 0) {
+      return `✅ You made ₦${Number(profit).toLocaleString('en-NG')} profit today! Keep tracking — you're building valuable data about your business.`;
+    } else if (revenue > 0) {
+      return `📊 You logged ₦${Number(revenue).toLocaleString('en-NG')} in revenue today. Even on low-profit days, the data matters. Keep showing up.`;
+    } else {
+      return 'Keep logging your numbers. Every entry builds your business picture. 📈';
+    }
+  }
 
   const {
     revenue,

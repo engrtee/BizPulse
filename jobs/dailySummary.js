@@ -49,9 +49,11 @@ async function processUser(user) {
 
     // Skip users with zero activity today
     if (revenue === 0 && totalExpenses === 0) {
-      console.log(`[Cron] Skipping ${user.name} — no entries today`);
+      console.log(`[Cron] ⏭️  Skipping ${user.name} — no entries for ${date} (check entries exist)`);
       return;
     }
+
+    console.log(`[Cron] 🔍 ${user.name}: Found ₦${Number(revenue).toLocaleString('en-NG')} revenue for ${date}`);
 
     const margin     = calcMargin(profit, revenue);
     const score      = calcHealthScore(margin);
@@ -89,7 +91,7 @@ async function processUser(user) {
 
     console.log(`[Cron] ✅ Summary sent to ${user.name} <${user.email}>`);
   } catch (err) {
-    console.error(`[Cron] ❌ Failed for ${user.name} <${user.email}>:`, err.message);
+    console.error(`[Cron] ❌ Failed for ${user.name} <${user.email}>:`, err.message, err.stack);
   }
 }
 
