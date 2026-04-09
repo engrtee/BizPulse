@@ -175,6 +175,13 @@ These fixes were implemented after bugs were discovered. They must NEVER be reve
 **Data ownership:** Users export their data via CSV download endpoint.
 **DO NOT:** Add Google OAuth, Google Sheets API, or Google Drive back under any circumstances.
 
+### FIX 4 — Inventory Fuzzy Matching (Duplicate Prevention)
+**Problem fixed:** Users created duplicate inventory items due to case differences or plurals ("Laptop", "laptop", "laptops").
+**Fix applied:** Before INSERT, search for existing items using fuzzy matching (case-insensitive + plural stripping).
+**Rule:** The `applyMovement()` function MUST use `getItemFuzzy()` not `getItem()` to prevent new duplicates.
+**Existing duplicates:** Run `node scripts/merge-duplicate-inventory.js` manually to combine them (does NOT auto-run).
+**Before touching inventory save/insert logic:** Ensure fuzzy matching is preserved in `applyMovement()`.
+
 ---
 
 ## TECHNICAL ARCHITECTURE
@@ -324,6 +331,23 @@ Sell 28 → balance: 10, low stock: NO (10/50 = 20% — exactly at threshold)
 Sell 1 → balance: 9, low stock: YES (9/50 = 18% — below threshold)
 Sell 9 → balance: 0, out of stock: YES
 ```
+
+**Duplicate Prevention (Fuzzy Matching):**
+- Problem: Users create duplicates of same item due to case differences or plurals
+  - Example: "Laptop" + "laptops" are tracked as separate products
+  - Results in confusing inventory view and inflated product count
+- Solution: Before inserting new product, search for existing item using fuzzy matching
+- Implementation:
+  - `normalizeItemName(name)` — lowercase + strip trailing 's' (unless 'ss')
+  - `getItemFuzzy(userId, itemName)` — PostgreSQL REGEXP_REPLACE matching
+  - `applyMovement()` uses fuzzy match instead of exact match before INSERT
+- Rule: Does NOT automatically merge existing duplicates (prevents unintended data loss)
+- Data migration: Run `node scripts/merge-duplicate-inventory.js` manually to clean up existing duplicates
+  - Shows all duplicate groups to user
+  - Asks which version to keep
+  - Allows customizing final product name
+  - Combines balances and preserves all historical data
+  - Confirm before each merge
 
 ---
 
