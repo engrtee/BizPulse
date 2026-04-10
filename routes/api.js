@@ -134,6 +134,13 @@ router.post('/entry', async (req, res) => {
     }
     
     console.log(`[API] ✅ Saved transaction ID: ${txn.id} with date: ${txn.date}`);
+    
+    // FAILSAFE: Verify entry actually exists in database
+    const verification = await TransactionModel.getDailyTotals(user.id, txn.date);
+    if (!verification) {
+      console.error('[API] 🚨 CRITICAL: Entry was not found after save!');
+      return res.status(500).json({ error: 'Entry was not persisted' });
+    }
 
     // Update last_entry_date and streak
     const newStreak = await UserModel.touchLastEntry(user.id);
@@ -202,11 +209,13 @@ router.post('/entry', async (req, res) => {
       streak:  newStreak || 1,
       aiRec,
       entry: {
-        revenue: rev,
-        totalExpenses,
-        profit,
-        margin,
-        customers: parseInt(customers, 10) || 0,
+        id: txn.id,
+        revenue: parseFloat(txn.revenue),
+        totalExpenses: parseFloat(txn.total_expenses),
+        profit: parseFloat(txn.profit),
+        margin: parseFloat(txn.margin),
+        customers: parseInt(txn.customers, 10),
+        date: txn.date,
       },
     });
   } catch (err) {
