@@ -11,22 +11,30 @@
 
 require('dotenv').config();
 const axios = require('axios');
+const { normalizePhone } = require('../utils/phone');
 
 const BASE_URL = 'https://graph.facebook.com/v19.0';
 
 /**
  * Send a plain-text WhatsApp message to a phone number.
- * @param {string} to   Recipient number in international format, e.g. "2348012345678"
+ * @param {string} to   Recipient number in any format, e.g. "08012345678", "+2348012345678", or "2348012345678"
  * @param {string} body Message text (up to 4096 chars)
  */
 async function sendMessage(to, body) {
   const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
   const token         = process.env.WHATSAPP_TOKEN;
 
+  // Safety: normalize phone number to international format
+  const normalizedTo = normalizePhone(to);
+  if (!normalizedTo) {
+    console.error(`[WhatsApp] ❌ Invalid phone number: ${to}`);
+    throw new Error(`Invalid phone number: ${to}`);
+  }
+
   // Dev/staging: credentials not yet filled — log instead of crash
   if (!phoneNumberId || !token) {
-    console.log(`[WhatsApp DEV] → ${to}\n${body}\n`);
-    return { status: 'dev_mode', to, body };
+    console.log(`[WhatsApp DEV] → ${normalizedTo}\n${body}\n`);
+    return { status: 'dev_mode', to: normalizedTo, body };
   }
 
   try {
@@ -35,7 +43,7 @@ async function sendMessage(to, body) {
       {
         messaging_product: 'whatsapp',
         recipient_type:    'individual',
-        to,
+        to: normalizedTo,
         type:              'text',
         text:              { preview_url: false, body },
       },
