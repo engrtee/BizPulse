@@ -442,7 +442,7 @@ async function handleSummaryRequest(user, from) {
     return;
   }
 
-  const aiRec = await GeminiService.generateRecommendation(summaryData, user);
+  const aiRec = await ClaudeService.generateRecommendation(summaryData, user);
 
   // Send email
   await EmailService.sendSummaryEmail(user, summaryData, aiRec, lowStock)
