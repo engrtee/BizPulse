@@ -421,10 +421,8 @@ async function handleDailyEntry(user, from, data, rawMessage, entryMethod = 'tex
 // Internal: handle on-demand "summary" request
 // ─────────────────────────────────────────────
 async function handleSummaryRequest(user, from) {
-  const { formatDate, calcHealthScore, healthLabel, topExpenseCategory } = require('../utils/formatter');
-  const GeminiService  = require('../services/gemini');
-  const EmailService   = require('../services/email');
-  const InventoryModel = require('../models/inventory');
+  const { calcHealthScore, healthLabel, topExpenseCategory } = require('../utils/formatter');
+  const EmailService = require('../services/email');
 
   const date = todayWAT();
 
@@ -452,12 +450,12 @@ async function handleSummaryRequest(user, from) {
 
   const aiRec = await ClaudeService.generateRecommendation(summaryData, user);
 
-  // Send email
-  await EmailService.sendSummaryEmail(user, summaryData, aiRec, lowStock)
-    .catch((err) => console.error('[Email] sendSummaryEmail error:', err.message));
+  // Send numbers directly in WhatsApp — user asked, they should see it here
+  await WhatsAppService.sendEveningSummaryWhatsApp(from, user.name.split(' ')[0], summaryData, aiRec, lowStock);
 
-  await WhatsAppService.sendMessage(from,
-    `📩 Summary sent to ${user.email}!\n\nCheck your inbox — it includes your AI recommendation for today.`);
+  // Also send email with full report (non-blocking)
+  EmailService.sendSummaryEmail(user, summaryData, aiRec, lowStock)
+    .catch((err) => console.error('[Email] sendSummaryEmail error:', err.message));
 }
 
 // ─────────────────────────────────────────────
@@ -607,8 +605,8 @@ async function gatherUserFinancialData(userId) {
 
   // Get inventory
   const inventoryRes = await query(
-    `SELECT item_name, current_balance, unit_price, total_ever_received 
-     FROM inventory 
+    `SELECT item_name, current_balance, unit_price, total_received
+     FROM inventory
      WHERE user_id = $1`,
     [userId]
   );

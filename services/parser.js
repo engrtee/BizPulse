@@ -120,6 +120,12 @@ function parseMessage(message) {
   if (INTENT_PATTERNS.stock_check.test(lower)) return { type: 'stock_check', data: {}, needsAI: false };
   if (INTENT_PATTERNS.summary.test(lower))     return { type: 'summary',     data: {}, needsAI: false };
 
+  // Natural summary requests — "summary of my numbers", "give me my summary", "business report" etc.
+  // Runs before period-check so "last week summary" still gets the date-range handler below
+  if (/\b(summary|report)\b/i.test(lower) && !/\b(last\s+\d+\s+days?|last\s+(week|month)|this\s+(month|week))\b/i.test(lower)) {
+    return { type: 'summary', data: {}, needsAI: false };
+  }
+
   // Period-based summary requests — "last 7 days", "last week", "this month", etc.
   // Check before business_question so "what were my sales last week?" gets date-range data
   if (/\b(last\s+\d+\s+days?|last\s+(week|month)|this\s+(month|week))\b/i.test(lower)) {
