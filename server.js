@@ -15,7 +15,6 @@ const path    = require('path');
 
 const { initDb }               = require('./models/db');
 const webhookRouter            = require('./routes/webhook');
-const authRouter               = require('./routes/auth');
 const apiRouter                = require('./routes/api');
 const emailRouter              = require('./routes/email');
 const adminRouter              = require('./routes/admin');
@@ -46,7 +45,6 @@ app.use(express.static(path.join(__dirname, 'public')));
 // Routes
 // ─────────────────────────────────────────────
 app.use('/webhook',        webhookRouter);
-app.use('/api/auth',       authRouter);
 app.use('/api',            apiRouter);
 app.use('/api/summary',    emailRouter);
 app.use('/admin',          adminRouter);

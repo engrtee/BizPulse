@@ -114,9 +114,8 @@ router.post('/', async (req, res) => {
         console.log(`[Webhook] Voice transcribed (confidence: ${confidence.toFixed(2)}): "${transcript}"`);
         text = transcript;
 
-        // If confidence is borderline, note it in the entry — processing continues normally
         if (confidence < 0.7) {
-          text = transcript + ` [voice note — please verify amounts]`;
+          console.log(`[Webhook] Low-confidence voice transcript (${confidence.toFixed(2)}) — processing anyway`);
         }
       } catch (err) {
         console.error('[Webhook] Audio processing failed:', err.message);
@@ -282,11 +281,7 @@ router.post('/', async (req, res) => {
           await WhatsAppService.sendMessage(from,
             `Hey ${user.name.split(' ')[0]}! 👋 I'm your BizPulse data assistant. Send me your sales and expenses anytime — or type "help" to see what I can do.`);
         }
-        await TransactionModel.create({
-          userId: user.id, revenue: 0, totalExpenses: 0,
-          expenseBreakdown: {}, profit: 0, margin: 0, customers: 0,
-          notes: 'Check-in (no numbers logged)', rawMessage: text,
-        });
+        // Update last_message_date/streak without inserting a 0-revenue transaction
         const newStreak = await UserModel.touchLastEntry(user.id);
         const s = parseInt(newStreak, 10) || 1;
         await WhatsAppService.sendMessage(from,

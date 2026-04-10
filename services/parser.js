@@ -120,6 +120,17 @@ function parseMessage(message) {
   if (INTENT_PATTERNS.stock_check.test(lower)) return { type: 'stock_check', data: {}, needsAI: false };
   if (INTENT_PATTERNS.summary.test(lower))     return { type: 'summary',     data: {}, needsAI: false };
 
+  // Period-based summary requests — "last 7 days", "last week", "this month", etc.
+  // Check before business_question so "what were my sales last week?" gets date-range data
+  if (/\b(last\s+\d+\s+days?|last\s+(week|month)|this\s+(month|week))\b/i.test(lower)) {
+    return { type: 'on_demand_summary', data: {}, needsAI: false };
+  }
+
+  // Business coaching questions — routed to Claude with full financial history
+  if (INTENT_PATTERNS.business_question.test(lower)) {
+    return { type: 'business_question', data: {}, needsAI: false };
+  }
+
   // Everything else goes to Gemini — handles any natural language
   return { type: 'unknown', data: {}, needsAI: true };
 }

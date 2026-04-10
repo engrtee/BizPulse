@@ -1,6 +1,6 @@
 /**
  * services/inventory.js
- * Orchestrates stock movements across PostgreSQL (fast balance) and Google Sheets (audit trail).
+ * Orchestrates stock movements in PostgreSQL.
  *
  * Called by the webhook handler when a message is classified as inventory_in or inventory_out.
  *
@@ -11,39 +11,22 @@
 'use strict';
 
 const InventoryModel  = require('../models/inventory');
-const SheetsService   = require('./sheets');
 const WhatsAppService = require('./whatsapp');
-const { todayWAT }    = require('../utils/formatter');
 
 /**
  * Record stock received from a supplier.
- * Updates the inventory balance in PostgreSQL and appends a row to Google Sheets.
+ * Updates the inventory balance in PostgreSQL.
  *
  * @param {object} user     Full user record
  * @param {object} data     { item, quantity, unitPrice } (parsed by Gemini)
  * @returns {object}        Updated inventory row
  */
 async function receiveStock(user, { item, quantity, unitPrice }) {
-  const date       = todayWAT();
-  const qty        = parseFloat(quantity) || 0;
-  const price      = parseFloat(unitPrice) || 0;
-  const totalValue = qty * price;
+  const qty   = parseFloat(quantity) || 0;
+  const price = parseFloat(unitPrice) || 0;
 
   // Update fast-lookup balance in PostgreSQL
   const row = await InventoryModel.applyMovement(user.id, item, 'received', qty, price);
-
-  // Append to Google Sheets if connected
-  if (user.sheet_id) {
-    await SheetsService.appendInventory(user, {
-      date,
-      item,
-      quantity: qty,
-      direction:    'Received',
-      unitPrice:    price,
-      totalValue,
-      balanceAfter: row.current_balance,
-    }).catch((err) => console.error('[Sheets] appendInventory error:', err.message));
-  }
 
   return row;
 }
@@ -56,8 +39,7 @@ async function receiveStock(user, { item, quantity, unitPrice }) {
  * @returns {object}      Updated inventory row
  */
 async function sellStock(user, { item, quantity }) {
-  const date  = todayWAT();
-  const qty   = parseFloat(quantity) || 0;
+  const qty = parseFloat(quantity) || 0;
 
   // Check for oversell BEFORE applying movement
   const existing = await InventoryModel.getItem(user.id, item);
@@ -81,18 +63,6 @@ async function sellStock(user, { item, quantity }) {
       user.whatsapp_number,
       `⚠️ Your ${item} stock shows 0 units. Please update your inventory.`
     ).catch((err) => console.error('[Inventory] OOS WhatsApp alert error:', err.message));
-  }
-
-  if (user.sheet_id) {
-    await SheetsService.appendInventory(user, {
-      date,
-      item,
-      quantity: qty,
-      direction:    'Sold',
-      unitPrice:    row.unit_price,
-      totalValue:   qty * (row.unit_price || 0),
-      balanceAfter: row.current_balance,
-    }).catch((err) => console.error('[Sheets] appendInventory error:', err.message));
   }
 
   return row;
