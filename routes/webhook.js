@@ -273,8 +273,7 @@ router.post('/', async (req, res) => {
         break;
       }
 
-      case 'greeting':
-      case 'question': {
+      case 'greeting': {
         if (data.message) {
           await WhatsAppService.sendMessage(from, data.message);
         } else {
@@ -287,7 +286,16 @@ router.post('/', async (req, res) => {
         await WhatsAppService.sendMessage(from,
           `📅 Check-in logged — Day ${s} streak${s >= 3 ? ' 🔥' : ''}. Send your numbers whenever you're ready!`
         ).catch(() => {});
-        await MessageModel.updateLog(msgLogId, { intent: type, status: 'processed' }).catch(() => {});
+        await MessageModel.updateLog(msgLogId, { intent: 'greeting', status: 'processed' }).catch(() => {});
+        break;
+      }
+
+      case 'question': {
+        // Gemini classified this as a question — route to Claude for full financial coaching
+        // (covers follow-ups that don't match the rule-based business_question pattern)
+        await handleBusinessQuestion(user, from, text);
+        await UserModel.touchLastEntry(user.id).catch(() => {});
+        await MessageModel.updateLog(msgLogId, { intent: 'question', status: 'processed' }).catch(() => {});
         break;
       }
 

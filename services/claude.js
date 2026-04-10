@@ -151,16 +151,20 @@ async function generateRecommendation(summaryData, user) {
   
   // Graceful fallback if API key not set
   if (!client) {
-    const revenue = summaryData.revenue || 0;
     const profit = summaryData.profit || 0;
-    const margin = summaryData.margin || 0;
-    if (profit > 0) {
-      return `✅ You made ₦${Number(profit).toLocaleString('en-NG')} profit today! Keep tracking — you're building valuable data about your business.`;
-    } else if (revenue > 0) {
-      return `📊 You logged ₦${Number(revenue).toLocaleString('en-NG')} in revenue today. Even on low-profit days, the data matters. Keep showing up.`;
-    } else {
-      return 'Keep logging your numbers. Every entry builds your business picture. 📈';
-    }
+    const revenue = summaryData.revenue || 0;
+    return {
+      risk: profit > 0
+        ? `You made ₦${Number(profit).toLocaleString('en-NG')} profit today — keep tracking to protect that margin.`
+        : revenue > 0
+          ? `You logged ₦${Number(revenue).toLocaleString('en-NG')} revenue but expenses are eating into profit.`
+          : 'No revenue logged today — make sure to record tomorrow\'s numbers.',
+      actions: [
+        'Review your top expense category and see if any costs can be reduced this week.',
+        'Follow up with repeat customers to encourage another purchase.',
+        'Set a daily revenue target and track it every morning.',
+      ],
+    };
   }
 
   const {
@@ -219,33 +223,42 @@ ${trendContext}
 ${performanceAlert}
 ${marketInsight}
 
-Generate ONE PARAGRAPH of addictive business insight that:
-1. Opens with specific observation about TODAY (not generic praise/warning)
-2. Identifies ONE hidden problem or opportunity in their numbers TODAY
-3. Gives ONE concrete action they can do TOMORROW to increase profit
-4. References their specific ₦ amounts and percentages
-5. References Nigerian market context if relevant
-6. Uses plain language - no jargon
-7. Be DIRECT but warm - make them feel they might be leaving money on the table
+Return ONLY this JSON (no markdown, no explanation):
+{
+  "risk": "One direct sentence identifying the specific risk from today's numbers — must name the actual ₦ amount or margin %",
+  "actions": [
+    "Specific action referencing this business type and actual ₦ figures — doable this week",
+    "Specific action 2",
+    "Specific action 3"
+  ]
+}
 
-Keep under 150 words. Make it memorable + actionable. This is their daily business coach speaking.`;
+Rules:
+- risk: name the top expense and margin specifically, make them feel the urgency
+- actions: each must reference actual numbers, no generic advice like "track expenses"
+- Total response under 150 words
+- Nigerian market context where relevant`;
 
   try {
     const message_obj = await client.messages.create({
       model: 'claude-3-5-sonnet-20241022',
-      max_tokens: 300,
-      messages: [
-        {
-          role: 'user',
-          content: prompt,
-        },
-      ],
+      max_tokens: 400,
+      messages: [{ role: 'user', content: prompt }],
     });
 
-    return message_obj.content[0].type === 'text' ? message_obj.content[0].text : 'Keep logging to see patterns!';
+    const text  = message_obj.content[0].type === 'text' ? message_obj.content[0].text : '';
+    const clean = text.replace(/^```json\s*/i, '').replace(/```$/i, '').trim();
+    return JSON.parse(clean);
   } catch (err) {
     console.error('[Claude] generateRecommendation failed:', err.message);
-    return 'Your numbers today show you\'re tracking well. Keep the momentum!';
+    return {
+      risk: 'Review your top expense category — it may be squeezing your margin.',
+      actions: [
+        'Compare this week\'s expenses to last week and find one category to cut.',
+        'Reach out to 3 repeat customers today for a follow-up sale.',
+        'Set a revenue target for tomorrow before you open for business.',
+      ],
+    };
   }
 }
 
@@ -348,18 +361,13 @@ NOW GIVE ADDICTIVE, ACTIONABLE COACHING:
 6. Reference actual ₦ amounts and percentage changes
 7. Be DIRECT but warm - use "you're" not "users"
 
-Keep under 250 words. Make it addictive enough they WANT more insights.`;
+Keep under 400 words. Make it addictive enough they WANT more insights. End with one follow-up question they can ask next.`;
 
   try {
     const message_obj = await client.messages.create({
       model: 'claude-3-5-sonnet-20241022',
-      max_tokens: 500,
-      messages: [
-        {
-          role: 'user',
-          content: prompt,
-        },
-      ],
+      max_tokens: 1024,
+      messages: [{ role: 'user', content: prompt }],
     });
 
     return message_obj.content[0].type === 'text'
