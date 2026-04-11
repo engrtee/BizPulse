@@ -78,18 +78,18 @@ async function processUser(user) {
 
     const firstName = user.name.split(' ')[0];
 
-    // Send WhatsApp summary first — reaches users who may not open email
+    // Send WhatsApp summary — non-blocking so a token error never blocks the email
     if (user.whatsapp_number) {
-      await WhatsAppService.sendEveningSummaryWhatsApp(
+      WhatsAppService.sendEveningSummaryWhatsApp(
         user.whatsapp_number, firstName, summaryData, aiRec, lowStock
-      );
-      console.log(`[Cron] 📱 WhatsApp summary sent to ${user.name}`);
+      ).then(() => console.log(`[Cron] 📱 WhatsApp summary sent to ${user.name}`))
+       .catch((err) => console.error(`[Cron] ⚠️  WhatsApp failed for ${user.name}:`, err?.response?.data?.error?.message || err.message));
     }
 
-    // Send email summary
+    // Send email summary — always runs regardless of WhatsApp status
     await EmailService.sendSummaryEmail(user, summaryData, aiRec, lowStock);
 
-    console.log(`[Cron] ✅ Summary sent to ${user.name} <${user.email}>`);
+    console.log(`[Cron] ✅ Email summary sent to ${user.name} <${user.email}>`);
   } catch (err) {
     console.error(`[Cron] ❌ Failed for ${user.name} <${user.email}>:`, err.message, err.stack);
   }
