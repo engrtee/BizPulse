@@ -9,6 +9,8 @@
     "setup-db": "node scripts/setupDb.js"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.87.0",
+    "@google/generative-ai": "^0.15.0",
     "axios": "^1.7.2",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
@@ -16,9 +18,7 @@
     "googleapis": "^140.0.1",
     "node-cron": "^3.0.3",
     "nodemailer": "^6.9.14",
-    "pg": "^8.12.0",
-    "@google/generative-ai": "^0.15.0",
-    "@anthropic-ai/sdk": "^0.16.0"
+    "pg": "^8.12.0"
   },
   "devDependencies": {
     "nodemon": "^3.1.4"

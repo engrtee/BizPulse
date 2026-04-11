@@ -16,6 +16,8 @@ require('dotenv').config();
 const Anthropic = require('@anthropic-ai/sdk');
 const MarketDataService = require('./marketData');
 
+const MODEL = 'claude-sonnet-4-6';
+
 let claudeClient = null;
 
 function getClient() {
@@ -88,6 +90,9 @@ BAD (generic - never ever do this):
  */
 async function parseWithAI(message, user) {
   const client = getClient();
+  if (!client) {
+    return { type: 'unknown', data: {}, confidence: 0 };
+  }
 
   const prompt = `${NIGERIA_CONTEXT}
 
@@ -117,7 +122,7 @@ STRICT RULES:
 
   try {
     const message_obj = await client.messages.create({
-      model: 'claude-3-5-sonnet-20241022',
+      model: MODEL,
       max_tokens: 500,
       messages: [
         {
@@ -136,7 +141,7 @@ STRICT RULES:
       confidence: parsed.confidence || 0,
     };
   } catch (err) {
-    console.error('[Claude] parseWithAI failed:', err.message);
+    console.error('[Claude] parseWithAI failed:', err.constructor?.name, err.status || '', err.message);
     return { type: 'unknown', data: {}, confidence: 0 };
   }
 }
@@ -241,7 +246,7 @@ Rules:
 
   try {
     const message_obj = await client.messages.create({
-      model: 'claude-3-5-sonnet-20241022',
+      model: MODEL,
       max_tokens: 400,
       messages: [{ role: 'user', content: prompt }],
     });
@@ -250,7 +255,7 @@ Rules:
     const clean = text.replace(/^```json\s*/i, '').replace(/```$/i, '').trim();
     return JSON.parse(clean);
   } catch (err) {
-    console.error('[Claude] generateRecommendation failed:', err.message);
+    console.error('[Claude] generateRecommendation failed:', err.constructor?.name, err.status || '', err.message);
     return {
       risk: 'Review your top expense category — it may be squeezing your margin.',
       actions: [
@@ -269,6 +274,13 @@ Rules:
  */
 async function answerBusinessQuestion(question, user, userData) {
   const client = getClient();
+  if (!client) {
+    return (
+      `I need my AI brain to answer this properly, ${user.name.split(' ')[0]}! 🧠\n\n` +
+      `It looks like the AI service isn't configured yet. Once it's set up, I can give you specific insights based on your actual numbers.\n\n` +
+      `In the meantime, send "summary" to see your latest numbers, or "stock?" to check your inventory.`
+    );
+  }
 
   // userData should contain: { history: [...], inventory: [...], avgMetrics: {...} }
   const { history = [], inventory = [], avgMetrics = {} } = userData;
@@ -343,8 +355,8 @@ KEY METRICS:
 - Daily revenue: ₦${Number(avgMetrics.avgRevenue || 0).toLocaleString('en-NG')}
 - Daily expenses: ₦${Number(avgMetrics.avgExpenses || 0).toLocaleString('en-NG')}
 - Average margin: ${(avgMetrics.avgMargin || 0).toFixed(1)}%
-- Highest revenue day: ₦${Math.max(...recentHistory.map(d => parseFloat(d.revenue) || 0)).toLocaleString('en-NG')}
-- Lowest revenue day: ₦${Math.min(...recentHistory.map(d => parseFloat(d.revenue) || 0)).toLocaleString('en-NG')}
+- Highest revenue day: ₦${Math.max(0, ...recentHistory.map(d => parseFloat(d.revenue) || 0)).toLocaleString('en-NG')}
+- Lowest revenue day: ₦${Math.min(0, ...recentHistory.map(d => parseFloat(d.revenue) || 0)).toLocaleString('en-NG')}
 
 ${productPerformance}
 ${trendAnalysis}
@@ -365,7 +377,7 @@ Keep under 400 words. Make it addictive enough they WANT more insights. End with
 
   try {
     const message_obj = await client.messages.create({
-      model: 'claude-3-5-sonnet-20241022',
+      model: MODEL,
       max_tokens: 1024,
       messages: [{ role: 'user', content: prompt }],
     });
@@ -374,8 +386,12 @@ Keep under 400 words. Make it addictive enough they WANT more insights. End with
       ? message_obj.content[0].text
       : "Keep logging your data — insights get better with more numbers!";
   } catch (err) {
-    console.error('[Claude] answerBusinessQuestion failed:', err.message);
-    return "I'm having trouble right now. Try again in a moment!";
+    console.error('[Claude] answerBusinessQuestion failed:', err.constructor?.name, err.status || '', err.message);
+    return (
+      `Sorry, I hit a snag analyzing your data, ${user.name.split(' ')[0]}. 🔄\n\n` +
+      `Try asking again in a moment — or rephrase your question.\n\n` +
+      `You can also send "summary" to see your latest numbers right now.`
+    );
   }
 }
 

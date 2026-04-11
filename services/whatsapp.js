@@ -216,7 +216,7 @@ async function sendMorningBroadcast(to, firstName, bizName, quote, streak) {
  */
 async function sendEveningSummaryWhatsApp(to, firstName, summaryData, aiRec, lowStock = []) {
   const fmt  = (n) => Number(n || 0).toLocaleString('en-NG');
-  const { revenue, totalExpenses, profit, margin, customers, topExpense, date } = summaryData;
+  const { revenue, totalExpenses, profit, margin, customers, topExpense, date, inventory = [] } = summaryData;
 
   const profitLine = profit >= 0
     ? `✅ Profit:    ₦${fmt(profit)}`
@@ -226,12 +226,25 @@ async function sendEveningSummaryWhatsApp(to, firstName, summaryData, aiRec, low
     weekday: 'short', day: 'numeric', month: 'short', timeZone: 'Africa/Lagos',
   });
 
-  // Use first action from AI rec as the WhatsApp insight — already specific to their biz
-  const insight = (aiRec?.actions?.[0]) || (aiRec?.risk) || 'Keep tracking — consistency is what builds profitable businesses.';
+  // AI insight: prefer the risk sentence (most urgent), fall back to first action
+  const insight = (aiRec?.risk) || (aiRec?.actions?.[0]) || 'Keep tracking — consistency is what builds profitable businesses.';
 
-  const lowStockLines = lowStock.length > 0
-    ? `\n⚠️ Low stock: ${lowStock.map(i => `${i.item_name} (${Number(i.current_balance).toLocaleString('en-NG')} left)`).join(', ')}\n`
-    : '';
+  // Stock section — show all items with counts, flag low/out-of-stock
+  let stockSection = '';
+  if (inventory.length > 0) {
+    const lowStockIds = new Set((lowStock || []).map(i => i.id));
+    const stockLines = inventory.map(item => {
+      const bal = parseFloat(item.current_balance);
+      const isOut = bal === 0;
+      const isLow = lowStockIds.has(item.id);
+      const flag = isOut ? ' ❌' : isLow ? ' ⚠️' : '';
+      return `  • ${item.item_name}: ${bal.toLocaleString('en-NG')} units${flag}`;
+    });
+    stockSection = `\n📦 *Stock levels:*\n${stockLines.join('\n')}\n`;
+    if (lowStock.length > 0) {
+      stockSection += `(⚠️ = low stock, ❌ = out of stock)\n`;
+    }
+  }
 
   const body =
     `📊 *${firstName}, here's your ${dateLabel} summary*\n\n` +
@@ -241,9 +254,9 @@ async function sendEveningSummaryWhatsApp(to, firstName, summaryData, aiRec, low
     `Margin:     ${parseFloat(margin).toFixed(1)}%\n` +
     (customers > 0 ? `Customers:  ${customers}\n` : '') +
     (topExpense ? `Top cost:   ${topExpense.category} (₦${fmt(topExpense.amount)})\n` : '') +
-    lowStockLines +
+    stockSection +
     `\n💡 *Insight:*\n${insight}\n\n` +
-    `❓ *Ask me anything:* "Is my margin good?", "Should I raise prices?", or send "summary last 7 days" for trends.\n\n` +
+    `❓ Ask me anything: "Is my margin good?", "Should I raise prices?", "Show me last 7 days"\n\n` +
     `Full report 👉 ${process.env.FRONTEND_URL || process.env.BASE_URL || 'https://mybizpulse.app'}`;
 
   return sendMessage(to, body);

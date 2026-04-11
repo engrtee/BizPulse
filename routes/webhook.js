@@ -426,10 +426,13 @@ async function handleSummaryRequest(user, from) {
 
   const date = todayWAT();
 
-  // Get today's totals from DB
-  const totals     = await TransactionModel.getDailyTotals(user.id, date);
-  const breakdowns = await TransactionModel.getExpenseBreakdowns(user.id, date);
-  const lowStock   = await InventoryService.getLowStockAlerts(user.id);
+  // Get today's totals, expense breakdowns, stock alerts, and full inventory
+  const [totals, breakdowns, lowStock, allInventory] = await Promise.all([
+    TransactionModel.getDailyTotals(user.id, date),
+    TransactionModel.getExpenseBreakdowns(user.id, date),
+    InventoryService.getLowStockAlerts(user.id),
+    InventoryService.getStock(user.id),
+  ]);
 
   const revenue       = parseFloat(totals.revenue)       || 0;
   const totalExpenses = parseFloat(totals.total_expenses) || 0;
@@ -440,7 +443,12 @@ async function handleSummaryRequest(user, from) {
   const hl            = healthLabel(score);
   const topExpense    = topExpenseCategory(breakdowns);
 
-  const summaryData = { revenue, totalExpenses, profit, margin, healthScore: score, healthKey: hl.key, topExpense, customers, date };
+  const summaryData = {
+    revenue, totalExpenses, profit, margin,
+    healthScore: score, healthKey: hl.key,
+    topExpense, customers, date,
+    inventory: allInventory,  // full stock counts for the summary
+  };
 
   if (revenue === 0) {
     await WhatsAppService.sendMessage(from,
