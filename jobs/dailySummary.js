@@ -33,6 +33,47 @@ const { calcHealthScore, healthLabel, topExpenseCategory, todayWAT } = require('
 const { calcMargin } = require('../utils/naira');
 
 /**
+ * Send a 7pm nudge to a user who hasn't logged today.
+ * Includes a short Claude-generated coaching insight from their history.
+ */
+async function sendEveningNudge(user) {
+  const firstName = user.name.split(' ')[0];
+  const streak    = user.streak || 0;
+
+  // Pull their recent history for a personalised coaching tip
+  let coachingTip = '';
+  try {
+    const history = await TransactionModel.getHistory(user.id, 7);
+    if (history && history.length >= 3) {
+      const avgRevenue = history.reduce((s, r) => s + parseFloat(r.revenue), 0) / history.length;
+      const avgMargin  = history.reduce((s, r) => s + parseFloat(r.margin),  0) / history.length;
+      const tip = await ClaudeService.generateNudgeInsight(user, { avgRevenue, avgMargin, dayCount: history.length });
+      if (tip) coachingTip = tip;
+    }
+  } catch (e) {
+    // coaching tip is optional — nudge still goes out
+  }
+
+  const streakLine = streak >= 3
+    ? `\n\n🔥 You're on a ${streak}-day streak — one quick message keeps it alive.`
+    : streak >= 1
+    ? `\n\n📈 Day ${streak} streak going — keep the habit.`
+    : '';
+
+  const genericTip = `Businesses that log consistently spot problems early and fix them before they become losses. The more days you track, the sharper the insights get.`;
+
+  const body =
+    `Hey ${firstName}! 👋 No numbers from you today yet.\n\n` +
+    `💡 *Today's insight:*\n${coachingTip || genericTip}\n\n` +
+    `Send me today's numbers to get your full breakdown and personalised coaching:\n` +
+    `_"Made 50k today, spent 15k on stock and 3k transport"_` +
+    streakLine;
+
+  await WhatsAppService.sendMessage(user.whatsapp_number, body);
+  console.log(`[Cron] 💬 Evening nudge sent to ${user.name}`);
+}
+
+/**
  * Process a single user: compute summary, call Gemini, send email.
  * Errors are caught per-user so one failure doesn't block the rest.
  */
@@ -47,9 +88,14 @@ async function processUser(user) {
     const profit        = parseFloat(totals.profit)         || 0;
     const customers     = parseInt(totals.customers, 10)    || 0;
 
-    // Skip users with zero activity today
+    // No entries today — send a nudge with a coaching tip instead of silently skipping
     if (revenue === 0 && totalExpenses === 0) {
-      console.log(`[Cron] ⏭️  Skipping ${user.name} — no entries for ${date} (check entries exist)`);
+      console.log(`[Cron] 💬 No entries for ${user.name} on ${date} — sending nudge`);
+      if (user.whatsapp_number) {
+        await sendEveningNudge(user).catch(e =>
+          console.error(`[Cron] Nudge failed for ${user.name}:`, e.message)
+        );
+      }
       return;
     }
 

@@ -410,8 +410,51 @@ Keep under 350 words. End with one follow-up question they can ask to go deeper.
   }
 }
 
+/**
+ * Generate a short coaching nudge for users who haven't logged today.
+ * Used by the 7pm cron for users with no entries.
+ * Returns a 2-3 sentence insight based on their historical averages, or null on failure.
+ */
+async function generateNudgeInsight(user, avgData) {
+  const client = getClient();
+  if (!client) return null;
+
+  const { avgRevenue, avgMargin, dayCount } = avgData;
+
+  const prompt = `${COACHING_CONTEXT}
+
+USER: ${user.name.split(' ')[0]}
+Business: ${user.biz_type || 'Small business'}
+Location: ${user.state || 'unknown'} — use the correct local currency
+
+THEIR RECENT AVERAGES (last ${dayCount} days logged):
+- Average daily revenue: ${Number(avgRevenue).toLocaleString()}
+- Average margin: ${avgMargin.toFixed(1)}%
+
+Write ONE short coaching insight — 2 to 3 sentences only.
+Rules:
+- Reference their actual average numbers with local currency
+- Give one specific thing worth thinking about or checking today
+- Make logging feel worthwhile ("the more you log, the sharper this gets")
+- Warm and encouraging, not pushy or guilt-tripping
+- Plain sentences only — no emojis, no bullet points, no headers`;
+
+  try {
+    const msg = await client.messages.create({
+      model: MODEL,
+      max_tokens: 150,
+      messages: [{ role: 'user', content: prompt }],
+    });
+    return msg.content[0]?.type === 'text' ? msg.content[0].text.trim() : null;
+  } catch (err) {
+    console.error('[Claude] generateNudgeInsight failed:', err.constructor?.name, err.status || '', err.message);
+    return null;
+  }
+}
+
 module.exports = {
   parseWithAI,
   generateRecommendation,
   answerBusinessQuestion,
+  generateNudgeInsight,
 };
