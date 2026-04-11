@@ -21,6 +21,7 @@ const SheetsService      = require('../services/sheets');
 
 const GeminiService      = require('../services/gemini');
 const EmailService       = require('../services/email');
+const WhatsAppService    = require('../services/whatsapp');
 
 const { calcHealthScore, healthLabel, topExpenseCategory, todayWAT } = require('../utils/formatter');
 const { calcMargin } = require('../utils/naira');
@@ -72,6 +73,20 @@ router.post('/register', async (req, res) => {
 
     const normalizedPhone = whatsappNumber ? normalizePhone(whatsappNumber) : null;
     const user = await UserModel.create({ name, email, bizName, bizType, state, whatsappNumber: normalizedPhone });
+
+    // Send WhatsApp welcome message immediately on registration (non-blocking)
+    if (normalizedPhone) {
+      const firstName = user.name.split(' ')[0];
+      WhatsAppService.sendMessage(normalizedPhone,
+        `🎉 Welcome to BizPulse, ${firstName}!\n\n` +
+        `I'm your business assistant — I track your numbers so you don't have to carry them in your head.\n\n` +
+        `To get started, just message me your sales for today. For example:\n` +
+        `_"Made 45k today, spent 10k on stock and 3k transport"_\n\n` +
+        `Or type *help* to see everything I can do. 👇\n\n` +
+        `Your daily summary email arrives every evening at 7pm. 📊`
+      ).catch((err) => console.error('[API] Registration WhatsApp welcome failed:', err.message));
+    }
+
     res.status(201).json({ success: true, userId: user.id, name: user.name });
   } catch (err) {
     console.error('[API] /register error:', err.message);
