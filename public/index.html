@@ -1469,7 +1469,7 @@ function updateHomeGreeting() {
 
 async function loadHomeSnapshot() {
   const userId = localStorage.getItem('bizpulse_user_id');
-  if (!userId) return;
+  if (!userId && !demoMode) return;
   try {
     let data;
     if (demoMode) {
@@ -1820,7 +1820,7 @@ async function submitEntry() {
 // ── Summary ────────────────────────────────────────────
 async function loadSummary() {
   const userId = localStorage.getItem('bizpulse_user_id');
-  if (!userId) return;
+  if (!userId && !demoMode) return;
   try {
     let data;
     if (demoMode) {
