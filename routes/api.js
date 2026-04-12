@@ -61,8 +61,8 @@ router.post('/register', async (req, res) => {
   try {
     const { name, email, bizName, bizType, state, whatsappNumber } = req.body;
 
-    if (!name || !email) {
-      return res.status(400).json({ error: 'Name and email are required.' });
+    if (!name || !email || !whatsappNumber) {
+      return res.status(400).json({ error: 'Name, email, and WhatsApp number are required.' });
     }
 
     // Check for duplicate email
@@ -71,7 +71,17 @@ router.post('/register', async (req, res) => {
       return res.status(409).json({ error: 'An account with this email already exists.', userId: existing.id });
     }
 
-    const normalizedPhone = whatsappNumber ? normalizePhone(whatsappNumber) : null;
+    const normalizedPhone = normalizePhone(whatsappNumber);
+    if (!normalizedPhone) {
+      return res.status(400).json({ error: 'Please enter a valid Nigerian WhatsApp number (e.g. 08012345678).' });
+    }
+
+    // Check for duplicate WhatsApp number
+    const existingPhone = await UserModel.findByWhatsapp(normalizedPhone);
+    if (existingPhone) {
+      return res.status(409).json({ error: 'This WhatsApp number is already registered. Please use the Login tab to access your account.' });
+    }
+
     const user = await UserModel.create({ name, email, bizName, bizType, state, whatsappNumber: normalizedPhone });
 
     // Send WhatsApp welcome message immediately on registration (non-blocking)

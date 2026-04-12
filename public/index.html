@@ -720,8 +720,8 @@
                   <input id="reg-email" class="reg-input" type="email" placeholder="you@gmail.com" />
                 </div>
                 <div style="margin-bottom:20px">
-                  <label class="reg-label" for="reg-phone">WhatsApp Number <span style="font-weight:400;color:#A0AEC0">(optional)</span></label>
-                  <input id="reg-phone" class="reg-input" type="tel" placeholder="+234 801 234 5678" />
+                  <label class="reg-label" for="reg-phone">WhatsApp Number <span style="color:#C53030">*</span></label>
+                  <input id="reg-phone" class="reg-input" type="tel" placeholder="08012345678" required />
                   <div class="reg-field-secure"><span class="reg-secure-dot"></span>We'll never share your number</div>
                 </div>
 
@@ -1115,6 +1115,10 @@
                   <option>Advertising / Marketing</option><option>WhatsApp Business</option>
                   <option>FMCG</option><option>Online Business / E-commerce</option><option>Other</option>
                 </select></div>
+              <div class="form-group"><label class="form-label">Your WhatsApp Number</label>
+                <input id="set-phone" class="form-input" type="tel" placeholder="08012345678" />
+                <div style="font-size:12px;color:var(--muted);margin-top:4px">BizPulse uses this to find your account when you send messages</div>
+              </div>
               <div id="set-account-msg" class="msg"></div>
               <button class="btn btn-blue btn-block" onclick="saveSettings()">Save Changes</button>
             </div>
@@ -1588,9 +1592,11 @@ function goToStep1() {
 function goToStep2() {
   const name  = document.getElementById('reg-name').value.trim();
   const email = document.getElementById('reg-email').value.trim();
+  const phone = document.getElementById('reg-phone').value.trim();
   const msg   = document.getElementById('reg-step1-msg');
   if (!name)  { showMsg(msg, 'error', 'Please enter your name.'); return; }
   if (!email || !email.includes('@')) { showMsg(msg, 'error', 'Please enter a valid email.'); return; }
+  if (!phone) { showMsg(msg, 'error', 'Please enter your WhatsApp number — this is how BizPulse finds your account.'); return; }
   hideMsg(msg);
   document.getElementById('reg-step-1').style.display = 'none';
   document.getElementById('reg-step-2').style.display = 'block';
@@ -1640,9 +1646,12 @@ async function registerAndEnter() {
     await loadUser(data.userId);
     enterApp();
   } catch(e) {
-    showMsg(msg, 'error', 'Something went wrong. Please try again.');
+    const isNetwork = e instanceof TypeError && e.message.toLowerCase().includes('fetch');
+    showMsg(msg, 'error', isNetwork
+      ? 'Connection error — please check your internet and try again.'
+      : 'Something went wrong. Please try again in a moment.');
     btn.disabled  = false;
-    btn.innerHTML = 'Create Account & Enter Dashboard';
+    btn.innerHTML = 'Activate BizPulse →';
   }
 }
 
@@ -1684,7 +1693,10 @@ async function loginWithEmail() {
     await loadUser(data.userId);
     enterApp();
   } catch (e) {
-    showMsg(msg, 'error', 'Something went wrong. Please try again.');
+    const isNetwork = e instanceof TypeError && e.message.toLowerCase().includes('fetch');
+    showMsg(msg, 'error', isNetwork
+      ? 'Connection error — please check your internet and try again.'
+      : 'Something went wrong. Please try again in a moment.');
     btn.disabled  = false;
     btn.innerHTML = 'Access My Account →';
   }
@@ -1813,7 +1825,10 @@ async function submitEntry() {
       document.getElementById('expense-rows').innerHTML=''; document.getElementById('stock-rows').innerHTML='';
       expenseCount=0; stockCount=0; addExpenseRow();
     }
-  } catch(e) { showMsg(msg, 'error', 'Something went wrong. Please try again.'); }
+  } catch(e) {
+    const isNet = e instanceof TypeError && e.message.toLowerCase().includes('fetch');
+    showMsg(msg, 'error', isNet ? 'Connection error — please check your internet and try again.' : 'Something went wrong. Please try again.');
+  }
   finally { btn.disabled=false; btn.innerHTML='Submit Today\'s Entry'; }
 }
 
@@ -2027,6 +2042,8 @@ async function populateSettings() {
   document.getElementById('set-biz-name').value = currentUser.biz_name  || '';
   const bt = document.getElementById('set-biz-type');
   for (const o of bt.options) { if (o.value === currentUser.biz_type) { o.selected = true; break; } }
+  const spEl = document.getElementById('set-phone');
+  if (spEl) spEl.value = currentUser.whatsapp_number || '';
   const waNum = document.getElementById('settings-wa-number');
   if (waNum) waNum.textContent = currentUser.whatsapp_number || '+2349128781426';
   // Data quality
@@ -2056,7 +2073,7 @@ async function saveSettings() {
   const userId = localStorage.getItem('bizpulse_user_id');
   hideMsg(msg);
   try {
-    const res  = await fetch('/api/user/update', { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ userId, name: document.getElementById('set-name').value.trim(), email: document.getElementById('set-email').value.trim(), bizName: document.getElementById('set-biz-name').value.trim(), bizType: document.getElementById('set-biz-type').value }) });
+    const res  = await fetch('/api/user/update', { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ userId, name: document.getElementById('set-name').value.trim(), email: document.getElementById('set-email').value.trim(), bizName: document.getElementById('set-biz-name').value.trim(), bizType: document.getElementById('set-biz-type').value, whatsappNumber: document.getElementById('set-phone')?.value.trim() || undefined }) });
     const data = await res.json();
     if (res.ok) { currentUser = data.user; updateUserUI(); showMsg(msg, 'success', '\u2705 Settings saved.'); }
     else showMsg(msg, 'error', data.error || 'Failed to save.');

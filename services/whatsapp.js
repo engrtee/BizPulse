@@ -12,6 +12,7 @@
 require('dotenv').config();
 const axios = require('axios');
 const { normalizePhone } = require('../utils/phone');
+const { MessageModel } = require('../models/db');
 
 const BASE_URL = 'https://graph.facebook.com/v19.0';
 
@@ -34,6 +35,7 @@ async function sendMessage(to, body) {
   // Dev/staging: credentials not yet filled — log instead of crash
   if (!phoneNumberId || !token) {
     console.log(`[WhatsApp DEV] → ${normalizedTo}\n${body}\n`);
+    MessageModel.logOutbound(normalizedTo, body).catch(() => {});
     return { status: 'dev_mode', to: normalizedTo, body };
   }
 
@@ -54,6 +56,8 @@ async function sendMessage(to, body) {
         },
       }
     );
+    // Non-blocking: log every outbound message for admin monitoring
+    MessageModel.logOutbound(normalizedTo, body).catch(() => {});
     return res.data;
   } catch (err) {
     console.error('[WhatsApp] Send error:', err?.response?.data || err.message);
@@ -257,7 +261,7 @@ async function sendEveningSummaryWhatsApp(to, firstName, summaryData, aiRec, low
     stockSection +
     `\n💡 *Insight:*\n${insight}\n\n` +
     `❓ Ask me anything: "Is my margin good?", "Should I raise prices?", "Show me last 7 days"\n\n` +
-    `Full report 👉 ${process.env.FRONTEND_URL || process.env.BASE_URL || 'https://mybizpulse.app'}`;
+    `Full report 👉 https://mybizpulse.app`;
 
   return sendMessage(to, body);
 }
@@ -303,8 +307,9 @@ async function sendOnboarding(to, firstName) {
 async function sendNotRegistered(to) {
   const body =
     `👋 Hi! This number isn't registered on BizPulse yet.\n\n` +
-    `Sign up at: ${process.env.BASE_URL}\n` +
-    `It takes 2 minutes. 🚀`;
+    `Already have an account? Log in at mybizpulse.app, go to Settings, and add this WhatsApp number to your profile.\n\n` +
+    `New here? Sign up free at: mybizpulse.app\n` +
+    `It only takes 2 minutes. 🚀`;
   return sendMessage(to, body);
 }
 

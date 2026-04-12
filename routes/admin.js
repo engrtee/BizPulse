@@ -124,26 +124,31 @@ router.get('/', adminAuth, async (req, res) => {
         </tr>`;
     }).join('');
 
-    // ── Message log rows ──
+    // ── Message log rows (inbound + outbound) ──
     const intentColor = { daily_entry: '#BEE3F8', inventory_in: '#C6F6D5', inventory_out: '#FED7D7',
       help: '#E2E8F0', summary: '#BEE3F8', stock_check: '#FEFCBF', onboarding: '#C6F6D5',
       unregistered: '#FED7D7', unknown: '#FED7D7', greeting: '#E2E8F0', question: '#E2E8F0' };
     const msgRows = recentMessages.map(m => {
       const ts = new Date(m.created_at).toLocaleString('en-NG', { timeZone: 'Africa/Lagos', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
-      const intent = m.intent || 'unknown';
-      const bg = intentColor[intent] || '#E2E8F0';
-      const statusDot = m.status === 'processed' ? '✅' : m.status === 'parse_error' ? '⚠️' : m.status === 'unhandled' ? '❓' : '•';
+      const isOutbound = m.direction === 'outbound';
+      const rowBg = isOutbound ? '#EBF8FF' : '#FFFFFF';
+      const dirIcon = isOutbound ? '📤' : '📥';
+      const sender = isOutbound ? '<span style="color:#1A56A4;font-weight:600">BizPulse</span>' : escHtml(m.user_name || m.phone_number);
+      const intent = isOutbound ? 'reply' : (m.intent || 'unknown');
+      const intentBg = isOutbound ? '#BEE3F8' : (intentColor[m.intent] || '#E2E8F0');
+      const statusDot = isOutbound ? '📤' : (m.status === 'processed' ? '✅' : m.status === 'parse_error' ? '⚠️' : m.status === 'unhandled' ? '❓' : '•');
       return `
-        <tr>
-          <td style="padding:8px 12px;border-bottom:1px solid #E2E8F0;font-size:0.75rem;color:#718096">${ts}</td>
-          <td style="padding:8px 12px;border-bottom:1px solid #E2E8F0;font-size:0.8rem;font-weight:600">${escHtml(m.user_name || m.phone_number)}</td>
+        <tr style="background:${rowBg}">
+          <td style="padding:8px 12px;border-bottom:1px solid #E2E8F0;font-size:0.75rem;color:#718096;white-space:nowrap">${ts}</td>
+          <td style="padding:8px 12px;border-bottom:1px solid #E2E8F0;text-align:center;font-size:1rem">${dirIcon}</td>
+          <td style="padding:8px 12px;border-bottom:1px solid #E2E8F0;font-size:0.8rem">${sender}</td>
           <td style="padding:8px 12px;border-bottom:1px solid #E2E8F0;font-size:0.8rem;word-break:break-word;max-width:280px">${escHtml(m.message_text || '—')}</td>
           <td style="padding:8px 12px;border-bottom:1px solid #E2E8F0">
-            <span style="background:${bg};padding:2px 8px;border-radius:12px;font-size:0.7rem">${intent}</span>
+            <span style="background:${intentBg};padding:2px 8px;border-radius:12px;font-size:0.7rem">${intent}</span>
           </td>
           <td style="padding:8px 12px;border-bottom:1px solid #E2E8F0;text-align:center;font-size:0.8rem">${statusDot}</td>
         </tr>`;
-    }).join('') || '<tr><td colspan="5" style="padding:16px;text-align:center;color:#718096">No messages yet</td></tr>';
+    }).join('') || '<tr><td colspan="6" style="padding:16px;text-align:center;color:#718096">No messages yet</td></tr>';
 
     // ── At-risk user rows ──
     const atRiskRows = atRisk.map(u => {
@@ -346,13 +351,16 @@ router.get('/', adminAuth, async (req, res) => {
 
 <!-- ── MESSAGES TAB ── -->
 <div id="tab-messages" class="pane">
-  <p style="font-size:.85rem;color:#718096;margin-bottom:1rem">Last 50 inbound WhatsApp messages</p>
+  <p style="font-size:.85rem;color:#718096;margin-bottom:1rem">
+    Last 50 messages — 📥 user messages &nbsp;|&nbsp; 📤 BizPulse replies (highlighted blue)
+  </p>
   <div style="overflow-x:auto">
     <table>
       <thead>
         <tr>
           <th>Time</th>
-          <th>User</th>
+          <th style="text-align:center">Dir</th>
+          <th>From</th>
           <th>Message</th>
           <th>Intent</th>
           <th>Status</th>
@@ -481,14 +489,19 @@ async function openUserDetail(userId) {
 
   const msgRows = (data.messages || []).map(m => {
     const ts  = new Date(m.created_at).toLocaleString('en-NG', { timeZone:'Africa/Lagos', day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' });
+    const isOut = m.direction === 'outbound';
+    const rowBg = isOut ? '#EBF8FF' : '#FFFFFF';
+    const dirIcon = isOut ? '📤' : '📥';
     const intentColors = { daily_entry:'#BEE3F8', nps_response:'#C6F6D5', onboarding:'#C6F6D5', unregistered:'#FED7D7', unknown:'#FED7D7' };
-    const bg  = intentColors[m.intent] || '#E2E8F0';
-    return '<tr>' +
+    const intentBg = isOut ? '#BEE3F8' : (intentColors[m.intent] || '#E2E8F0');
+    const intentLabel = isOut ? 'reply' : (m.intent || '—');
+    return '<tr style="background:' + rowBg + '">' +
       '<td style="padding:7px 10px;border-bottom:1px solid #E2E8F0;font-size:0.72rem;color:#718096;white-space:nowrap">' + esc(ts) + '</td>' +
+      '<td style="padding:7px 10px;border-bottom:1px solid #E2E8F0;text-align:center">' + dirIcon + '</td>' +
       '<td style="padding:7px 10px;border-bottom:1px solid #E2E8F0;font-size:0.82rem;word-break:break-word">' + esc(m.message_text || '—') + '</td>' +
-      '<td style="padding:7px 10px;border-bottom:1px solid #E2E8F0"><span style="background:' + bg + ';padding:2px 7px;border-radius:10px;font-size:0.7rem">' + esc(m.intent || '—') + '</span></td>' +
+      '<td style="padding:7px 10px;border-bottom:1px solid #E2E8F0"><span style="background:' + intentBg + ';padding:2px 7px;border-radius:10px;font-size:0.7rem">' + esc(intentLabel) + '</span></td>' +
       '</tr>';
-  }).join('') || '<tr><td colspan="3" style="padding:12px;text-align:center;color:#718096">No messages logged yet</td></tr>';
+  }).join('') || '<tr><td colspan="4" style="padding:12px;text-align:center;color:#718096">No messages logged yet</td></tr>';
 
   const entryRows = (data.entries || []).map(e => {
     const d   = new Date(e.date).toLocaleDateString('en-NG', { day:'numeric', month:'short' });
@@ -520,11 +533,12 @@ async function openUserDetail(userId) {
       '<button onclick="savePhone(' + u.id + ')" style="padding:5px 14px;background:#1A56A4;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:0.82rem;font-weight:600">Save</button>' +
     '</div>' +
 
-    '<h4 style="font-size:0.85rem;font-weight:600;margin:0 0 0.6rem">WhatsApp Messages (last 30)</h4>' +
+    '<h4 style="font-size:0.85rem;font-weight:600;margin:0 0 0.6rem">WhatsApp Messages — 📥 user &nbsp;|&nbsp; 📤 BizPulse reply (last 40)</h4>' +
     '<div style="overflow-x:auto;margin-bottom:1.5rem;border-radius:8px;border:1px solid #E2E8F0">' +
       '<table style="width:100%;border-collapse:collapse">' +
         '<thead><tr style="background:#0F2744;color:#fff">' +
           '<th style="padding:8px 10px;text-align:left;font-size:0.72rem;white-space:nowrap">Time (WAT)</th>' +
+          '<th style="padding:8px 10px;text-align:center;font-size:0.72rem">Dir</th>' +
           '<th style="padding:8px 10px;text-align:left;font-size:0.72rem">Message</th>' +
           '<th style="padding:8px 10px;text-align:left;font-size:0.72rem">Intent</th>' +
         '</tr></thead>' +
@@ -658,7 +672,7 @@ router.get('/user/:id', adminAuth, async (req, res) => {
     if (!user) return res.status(404).json({ error: 'User not found' });
 
     const [messages, entries] = await Promise.all([
-      MessageModel.getByUser(user.id, 30),
+      MessageModel.getByUser(user.id, user.whatsapp_number, 40),
       TransactionModel.getRawByUser(user.id, 30),
     ]);
 

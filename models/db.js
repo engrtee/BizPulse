@@ -140,6 +140,17 @@ const MessageModel = {
     return res.rows[0]?.id;
   },
 
+  /** Log an outbound message (every reply BizPulse sends). Non-blocking by design. */
+  async logOutbound(phoneNumber, messageText) {
+    try {
+      await pool.query(
+        `INSERT INTO whatsapp_messages (phone_number, direction, message_text, status)
+         VALUES ($1, 'outbound', $2, 'sent')`,
+        [phoneNumber, messageText ? messageText.slice(0, 2000) : null]
+      );
+    } catch (e) { /* non-critical — never block the send */ }
+  },
+
   /** Update the log row after processing is complete. */
   async updateLog(id, { intent, parsedData, responseSent, status = 'processed' }) {
     if (!id) return;
@@ -151,12 +162,13 @@ const MessageModel = {
     );
   },
 
-  /** Fetch the last N messages (all users) for the admin dashboard. */
-  async getRecent(limit = 50) {
+  /** Fetch the last N messages (both inbound and outbound) for the admin dashboard. */
+  async getRecent(limit = 60) {
     const res = await pool.query(
       `SELECT m.*, u.name AS user_name, u.biz_name
        FROM whatsapp_messages m
        LEFT JOIN users u ON u.id = m.user_id
+                        OR (m.direction = 'outbound' AND u.whatsapp_number = m.phone_number)
        ORDER BY m.created_at DESC
        LIMIT $1`,
       [limit]
@@ -164,14 +176,15 @@ const MessageModel = {
     return res.rows;
   },
 
-  /** Fetch all messages for a single user. */
-  async getByUser(userId, limit = 30) {
+  /** Fetch all messages (inbound + outbound) for a single user, matched by user_id or phone. */
+  async getByUser(userId, phoneNumber, limit = 40) {
     const res = await pool.query(
       `SELECT * FROM whatsapp_messages
        WHERE user_id = $1
+          OR (direction = 'outbound' AND phone_number = $2)
        ORDER BY created_at DESC
-       LIMIT $2`,
-      [userId, limit]
+       LIMIT $3`,
+      [userId, phoneNumber || '', limit]
     );
     return res.rows;
   },

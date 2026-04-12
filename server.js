@@ -65,6 +65,19 @@ app.get('*', (_req, res) => {
 });
 
 // ─────────────────────────────────────────────
+// Global JSON error handler
+// Must have exactly 4 params for Express to recognise it as an error handler.
+// Ensures every unhandled server error returns JSON — never an HTML error page.
+// ─────────────────────────────────────────────
+// eslint-disable-next-line no-unused-vars
+app.use((err, _req, res, _next) => {
+  console.error('[Server] Unhandled error:', err.message || err);
+  if (res.headersSent) return;
+  const status = err.status || err.statusCode || 500;
+  res.status(status).json({ error: err.message || 'An unexpected server error occurred. Please try again.' });
+});
+
+// ─────────────────────────────────────────────
 // Start
 // ─────────────────────────────────────────────
 async function start() {
