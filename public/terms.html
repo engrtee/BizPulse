@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+  <title>Terms of Service — BizPulse</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --navy:   #0F2744;
+      --blue:   #1A56A4;
+      --green:  #1A7A4A;
+      --bg:     #F0F4FA;
+      --card:   #FFFFFF;
+      --muted:  #718096;
+      --border: #E2E8F0;
+      --text:   #1A202C;
+      --text-sm:#4A5568;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      background: var(--bg);
+      font-family: 'DM Sans', sans-serif;
+      color: var(--text);
+      font-size: 15px;
+      line-height: 1.7;
+    }
+    h1, h2 { font-family: 'DM Serif Display', serif; }
+    a { color: var(--blue); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    /* ── Header ── */
+    .site-header {
+      background: var(--navy);
+      padding: 0 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 56px;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+    .site-header-brand {
+      font-family: 'DM Serif Display', serif;
+      font-size: 20px;
+      color: #fff;
+      text-decoration: none;
+    }
+    .site-header-brand span { color: #63B3ED; }
+    .site-header-link {
+      font-size: 13px;
+      color: rgba(255,255,255,0.75);
+      text-decoration: none;
+      font-weight: 500;
+    }
+    .site-header-link:hover { color: #fff; text-decoration: none; }
+
+    /* ── Page hero ── */
+    .page-hero {
+      background: linear-gradient(135deg, var(--navy) 0%, var(--blue) 100%);
+      padding: 40px 24px 36px;
+      color: #fff;
+      text-align: center;
+    }
+    .page-hero h1 { font-size: 32px; margin-bottom: 8px; }
+    .page-hero-sub { font-size: 14px; color: rgba(255,255,255,0.75); }
+
+    /* ── Content ── */
+    .content-wrap {
+      max-width: 760px;
+      margin: 0 auto;
+      padding: 40px 24px 60px;
+    }
+
+    /* ── Table of contents ── */
+    .toc {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 24px 28px;
+      margin-bottom: 40px;
+    }
+    .toc-title {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: var(--navy);
+      margin-bottom: 14px;
+    }
+    .toc ol {
+      padding-left: 20px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px 24px;
+    }
+    .toc li { font-size: 13px; }
+    .toc a { color: var(--blue); }
+
+    /* ── Sections ── */
+    .policy-section {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 28px 32px;
+      margin-bottom: 20px;
+    }
+    .policy-section h2 {
+      font-size: 20px;
+      color: var(--navy);
+      margin-bottom: 14px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--border);
+    }
+    .policy-section p { color: var(--text-sm); margin-bottom: 12px; }
+    .policy-section p:last-child { margin-bottom: 0; }
+    .policy-section ul {
+      margin: 8px 0 12px 18px;
+      color: var(--text-sm);
+    }
+    .policy-section ul li { margin-bottom: 5px; }
+    .policy-section .highlight {
+      background: #EBF8FF;
+      border-left: 3px solid var(--blue);
+      padding: 12px 16px;
+      border-radius: 0 8px 8px 0;
+      margin: 14px 0;
+      font-size: 14px;
+      color: var(--navy);
+    }
+    .policy-section .action-box {
+      background: #F0FFF4;
+      border: 1px solid #C6F6D5;
+      border-radius: 8px;
+      padding: 14px 18px;
+      margin-top: 14px;
+      font-size: 14px;
+      color: var(--green);
+      font-weight: 500;
+    }
+    .policy-section .warning-box {
+      background: #FFFAF0;
+      border: 1px solid #FEEBC8;
+      border-radius: 8px;
+      padding: 14px 18px;
+      margin-top: 14px;
+      font-size: 14px;
+      color: #744210;
+    }
+
+    /* ── Footer ── */
+    .site-footer {
+      background: var(--card);
+      border-top: 1px solid var(--border);
+      padding: 20px 24px;
+      text-align: center;
+    }
+    .site-footer-inner {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-wrap: wrap;
+      gap: 8px;
+      font-size: 12px;
+      color: var(--muted);
+      max-width: 760px;
+      margin: 0 auto;
+    }
+    .site-footer-inner a { color: var(--blue); }
+    .sep { color: var(--border); }
+
+    /* ── Mobile ── */
+    @media (max-width: 600px) {
+      .page-hero h1 { font-size: 26px; }
+      .content-wrap { padding: 24px 16px 48px; }
+      .policy-section { padding: 20px 18px; }
+      .toc ol { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+  <header class="site-header">
+    <a href="/" class="site-header-brand">Biz<span>Pulse</span></a>
+    <a href="/" class="site-header-link">&larr; Back to app</a>
+  </header>
+
+  <div class="page-hero">
+    <h1>Terms of Service</h1>
+    <p class="page-hero-sub">Effective date: April 2026 &nbsp;&middot;&nbsp; Last updated: April 2026</p>
+  </div>
+
+  <div class="content-wrap">
+
+    <div class="toc">
+      <div class="toc-title">Contents</div>
+      <ol>
+        <li><a href="#acceptance">Acceptance of Terms</a></li>
+        <li><a href="#service-description">Service Description</a></li>
+        <li><a href="#registration">Registration</a></li>
+        <li><a href="#acceptable-use">Acceptable Use</a></li>
+        <li><a href="#financial-disclaimer">Financial Disclaimer</a></li>
+        <li><a href="#data-ownership">Data Ownership</a></li>
+        <li><a href="#whatsapp-consent">WhatsApp Messaging Consent</a></li>
+        <li><a href="#termination">Termination</a></li>
+        <li><a href="#liability">Limitation of Liability</a></li>
+        <li><a href="#governing-law">Governing Law</a></li>
+        <li><a href="#contact">Contact</a></li>
+      </ol>
+    </div>
+
+    <!-- 1 -->
+    <div class="policy-section" id="acceptance">
+      <h2>1. Acceptance of Terms</h2>
+      <p>By registering for BizPulse, using the web dashboard at <strong>mybizpulse.app</strong>, or sending messages to the BizPulse WhatsApp number, you agree to be bound by these Terms of Service.</p>
+      <p>If you do not agree to these terms, you must not use BizPulse. These Terms of Service form a legally binding agreement between you and <strong>The Tosin Ilesanmi Data Academy</strong>, the entity that operates BizPulse.</p>
+      <p>We may update these Terms from time to time. Continued use of BizPulse after any update constitutes your acceptance of the revised Terms. We will notify you of material changes via WhatsApp at least 14 days before they take effect.</p>
+    </div>
+
+    <!-- 2 -->
+    <div class="policy-section" id="service-description">
+      <h2>2. Service Description</h2>
+      <p>BizPulse is a WhatsApp-native financial operating system for small business owners. The service includes:</p>
+      <ul>
+        <li><strong>WhatsApp financial tracking:</strong> Log your daily revenue, expenses, and customer count by sending a natural-language message to the BizPulse WhatsApp number</li>
+        <li><strong>Inventory tracking:</strong> Track stock levels by sending stock-in and stock-out messages; receive low-stock and out-of-stock alerts automatically</li>
+        <li><strong>7pm daily summary:</strong> Receive a personalised business summary every evening by WhatsApp and email, including AI-generated insights and recommendations</li>
+        <li><strong>Web dashboard:</strong> View your business performance, financial history, and inventory status at any time via the BizPulse web application</li>
+        <li><strong>On-demand reports:</strong> Request a summary of your business numbers at any time by sending "summary" to BizPulse on WhatsApp or clicking the Send Summary button on the dashboard</li>
+      </ul>
+      <p>We reserve the right to modify, suspend, or discontinue any part of the service at any time. We will provide reasonable notice where possible.</p>
+    </div>
+
+    <!-- 3 -->
+    <div class="policy-section" id="registration">
+      <h2>3. Registration</h2>
+      <p>To use BizPulse, you must create an account by providing your name, business name, business type, WhatsApp number, and email address.</p>
+      <p><strong>Accurate information:</strong> You are required to provide accurate and complete information at registration and to keep it up to date. Providing false information may result in account suspension.</p>
+      <p><strong>Account security:</strong> You are responsible for maintaining the security of your account. BizPulse is linked to your WhatsApp number — anyone with access to your WhatsApp account can send financial entries on your behalf. Keep your phone secure.</p>
+      <p><strong>One account per person:</strong> Each individual or business may hold one BizPulse account. Creating duplicate accounts is not permitted.</p>
+    </div>
+
+    <!-- 4 -->
+    <div class="policy-section" id="acceptable-use">
+      <h2>4. Acceptable Use</h2>
+      <p>You agree to use BizPulse only for lawful purposes and in accordance with these Terms. You must not:</p>
+      <ul>
+        <li><strong>Submit false or fabricated data</strong> — entries must reflect genuine business transactions</li>
+        <li><strong>Process data relating to illegal activity</strong> — BizPulse must not be used to track or facilitate transactions that are unlawful under Nigerian law or the laws of your jurisdiction</li>
+        <li><strong>Attempt to access other users' data</strong> — you may only access the account and data associated with your own registration</li>
+        <li><strong>Reverse engineer or copy the service</strong> — you may not decompile, disassemble, or reproduce any part of the BizPulse application or its underlying code</li>
+        <li><strong>Interfere with the service</strong> — you may not take any action that places an unreasonable load on our infrastructure, send automated messages, or attempt to disrupt the BizPulse system</li>
+        <li><strong>Resell or sublicense the service</strong> — BizPulse is for your own business use and may not be resold or offered to others as a service</li>
+      </ul>
+      <p>Violation of these terms may result in immediate account suspension or termination without notice.</p>
+    </div>
+
+    <!-- 5 -->
+    <div class="policy-section" id="financial-disclaimer">
+      <h2>5. Financial Disclaimer</h2>
+      <div class="highlight">
+        BizPulse is not a licensed accountant, financial advisor, tax consultant, or auditor. The insights and recommendations generated by BizPulse are informational only and do not constitute professional financial advice.
+      </div>
+      <p>The AI-generated business insights, health scores, margin calculations, and coaching responses provided by BizPulse are based solely on the data you submit. They are intended to help you understand your own numbers — they are not a substitute for advice from a qualified financial professional.</p>
+      <p>You should not make major financial decisions — such as taking on debt, signing lease agreements, or making large capital investments — based solely on BizPulse outputs without consulting a qualified accountant, financial advisor, or business consultant.</p>
+      <div class="warning-box">
+        BizPulse accepts no responsibility for any financial loss, business decision, or outcome arising from reliance on the insights, summaries, or recommendations generated by the service.
+      </div>
+    </div>
+
+    <!-- 6 -->
+    <div class="policy-section" id="data-ownership">
+      <h2>6. Data Ownership</h2>
+      <p><strong>You own your data.</strong> All financial entries, inventory records, and business information you submit to BizPulse remain your property at all times.</p>
+      <p>BizPulse holds your data on your behalf solely for the purpose of providing the service described in these Terms. We do not claim any ownership over your business data, and we do not use your individual business data for any purpose beyond operating the BizPulse service.</p>
+      <p>You may export all of your data at any time as a CSV file using the Settings screen in the web dashboard or by using the export endpoint. You may request full deletion of your data at any time — see Section 8 (Termination) for details.</p>
+    </div>
+
+    <!-- 7 -->
+    <div class="policy-section" id="whatsapp-consent">
+      <h2>7. WhatsApp Messaging Consent</h2>
+      <p>By registering for BizPulse and providing your WhatsApp number, you consent to receiving the following types of WhatsApp messages from BizPulse:</p>
+      <ul>
+        <li><strong>Entry acknowledgements:</strong> Instant reply confirming each financial entry you send, including your daily totals and streak</li>
+        <li><strong>7pm daily summaries:</strong> Automated evening summary sent every day, including your revenue, profit, margin, and AI-generated insights</li>
+        <li><strong>Retention nudges:</strong> Reminder messages sent when you have not logged for 3, 5, 7, or 14 consecutive days</li>
+        <li><strong>Milestone celebration messages:</strong> Messages sent when you reach streak or entry milestones (Day 7, Day 30, Day 100 streak; first profitable day; 10th entry)</li>
+        <li><strong>Low stock and out-of-stock alerts:</strong> Notifications when an inventory item falls below the threshold or reaches zero</li>
+        <li><strong>Welcome and onboarding messages:</strong> Messages sent when you first register your account</li>
+      </ul>
+      <div class="action-box">
+        To opt out of non-essential messages (retention nudges and milestone messages), send <strong>STOP REMINDERS</strong> to BizPulse on WhatsApp. Entry acknowledgements and daily summaries are core service messages and cannot be disabled while your account is active.
+      </div>
+      <p>Message and data rates from your mobile carrier may apply. BizPulse does not charge separately for WhatsApp messages.</p>
+    </div>
+
+    <!-- 8 -->
+    <div class="policy-section" id="termination">
+      <h2>8. Termination</h2>
+      <p><strong>You may close your account at any time</strong> by either:</p>
+      <ul>
+        <li>Sending <strong>DELETE MY ACCOUNT</strong> to BizPulse on WhatsApp</li>
+        <li>Emailing <a href="mailto:tosinilesanmi93@gmail.com">tosinilesanmi93@gmail.com</a> with a deletion request</li>
+      </ul>
+      <p>Upon receiving a deletion request, all personal data and financial entries associated with your account will be permanently deleted within <strong>30 days</strong>. We recommend exporting your data before requesting deletion if you wish to retain your records.</p>
+      <p><strong>Termination by BizPulse:</strong> We reserve the right to suspend or terminate your account if you violate these Terms, engage in fraudulent activity, or use the service in a way that harms other users or the service itself. We will attempt to notify you before suspension except where immediate action is necessary.</p>
+      <p>Termination of your account does not affect any rights or obligations that arose before termination.</p>
+    </div>
+
+    <!-- 9 -->
+    <div class="policy-section" id="liability">
+      <h2>9. Limitation of Liability</h2>
+      <p>BizPulse is provided on an "as is" and "as available" basis. To the maximum extent permitted by Nigerian law, The Tosin Ilesanmi Data Academy and its operators:</p>
+      <ul>
+        <li>Make no warranty that the service will be uninterrupted, error-free, or free of data loss</li>
+        <li>Are not liable for any indirect, incidental, special, consequential, or punitive damages arising from your use of or inability to use BizPulse</li>
+        <li>Are not liable for any loss of revenue, loss of profit, loss of data, or loss of business opportunity arising from reliance on BizPulse outputs</li>
+        <li>Are not liable for any actions taken by third-party services (Meta, Google, Anthropic, Render, Brevo) in connection with the delivery of BizPulse features</li>
+      </ul>
+      <p>Where liability cannot be excluded by law, our total liability to you for any claim arising from these Terms or your use of BizPulse shall not exceed the total amount you have paid to us in the 12 months preceding the claim (or NGN 10,000, whichever is greater).</p>
+    </div>
+
+    <!-- 10 -->
+    <div class="policy-section" id="governing-law">
+      <h2>10. Governing Law</h2>
+      <p>These Terms of Service are governed by and construed in accordance with the <strong>laws of the Federal Republic of Nigeria</strong>, including but not limited to the Nigeria Data Protection Act 2023, the Consumer Protection Council Act, and any applicable regulations of the Federal Competition and Consumer Protection Commission (FCCPC).</p>
+      <p>Any dispute arising from or in connection with these Terms that cannot be resolved informally shall be subject to the exclusive jurisdiction of the <strong>courts of Lagos State, Nigeria</strong>.</p>
+      <p>If you are using BizPulse from outside Nigeria, you are responsible for ensuring compliance with the laws of your own jurisdiction.</p>
+    </div>
+
+    <!-- 11 -->
+    <div class="policy-section" id="contact">
+      <h2>11. Contact</h2>
+      <p>For any question, concern, or request relating to these Terms of Service:</p>
+      <ul>
+        <li><strong>Email:</strong> <a href="mailto:tosinilesanmi93@gmail.com">tosinilesanmi93@gmail.com</a></li>
+        <li><strong>Website:</strong> <a href="https://mybizpulse.app" target="_blank" rel="noopener noreferrer">mybizpulse.app</a></li>
+        <li><strong>Organisation:</strong> The Tosin Ilesanmi Data Academy</li>
+        <li><strong>Location:</strong> Lagos, Nigeria</li>
+      </ul>
+      <p>We aim to respond to all enquiries within 5 business days.</p>
+    </div>
+
+  </div><!-- /.content-wrap -->
+
+  <footer class="site-footer">
+    <div class="site-footer-inner">
+      <span>BizPulse &mdash; The Tosin Ilesanmi Data Academy</span>
+      <span class="sep">&middot;</span>
+      <a href="/privacy">Privacy Policy</a>
+      <span class="sep">&middot;</span>
+      <a href="/terms">Terms of Service</a>
+      <span class="sep">&middot;</span>
+      <a href="/">Back to App</a>
+      <span class="sep">&middot;</span>
+      <span>&copy; 2026</span>
+    </div>
+  </footer>
+
+</body>
+</html>

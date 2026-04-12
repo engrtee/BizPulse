@@ -55,6 +55,10 @@ app.all('/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString(), service: 'BizPulse' });
 });
 
+// Legal pages — public, no auth required, served before the SPA catch-all
+app.get('/privacy', (_req, res) => res.sendFile(path.join(__dirname, 'public', 'privacy.html')));
+app.get('/terms',   (_req, res) => res.sendFile(path.join(__dirname, 'public', 'terms.html')));
+
 // Catch-all: serve the SPA for any non-API, non-webhook route
 app.get('*', (_req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));

@@ -119,6 +119,32 @@
     .exp-bar-track { background: var(--border); border-radius: 4px; height: 8px; overflow: hidden; }
     .exp-bar-fill  { height: 100%; background: var(--blue); border-radius: 4px; }
 
+    /* ══ APP FOOTER ══════════════════════════════════ */
+    .app-footer {
+      padding: 20px 32px;
+      border-top: 1px solid var(--border);
+      background: var(--card);
+    }
+    .app-footer-inner {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-wrap: wrap;
+      gap: 8px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .app-footer-link {
+      color: var(--blue);
+      text-decoration: none;
+    }
+    .app-footer-link:hover { text-decoration: underline; }
+    .app-footer-sep { color: var(--border); }
+    @media (max-width: 767px) {
+      .app-footer { padding: 14px 16px 24px; }
+      .app-footer-inner { gap: 6px; font-size: 11px; }
+    }
+
     /* ══ MOBILE OVERRIDES ════════════════════════════ */
     @media (max-width: 767px) {
       #sidebar { display: none; }
@@ -1139,6 +1165,19 @@
       </div>
 
     </div><!-- /.inner -->
+
+    <footer class="app-footer">
+      <div class="app-footer-inner">
+        <span>BizPulse &mdash; The Tosin Ilesanmi Data Academy</span>
+        <span class="app-footer-sep">&middot;</span>
+        <a href="/privacy" class="app-footer-link">Privacy Policy</a>
+        <span class="app-footer-sep">&middot;</span>
+        <a href="/terms" class="app-footer-link">Terms of Service</a>
+        <span class="app-footer-sep">&middot;</span>
+        <span>&copy; 2026</span>
+      </div>
+    </footer>
+
   </div><!-- /#main -->
 
   <!-- ══ MOBILE BOTTOM NAV ══════════════════════════════ -->

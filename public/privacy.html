@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+  <title>Privacy Policy — BizPulse</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --navy:   #0F2744;
+      --blue:   #1A56A4;
+      --green:  #1A7A4A;
+      --bg:     #F0F4FA;
+      --card:   #FFFFFF;
+      --muted:  #718096;
+      --border: #E2E8F0;
+      --text:   #1A202C;
+      --text-sm:#4A5568;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      background: var(--bg);
+      font-family: 'DM Sans', sans-serif;
+      color: var(--text);
+      font-size: 15px;
+      line-height: 1.7;
+    }
+    h1, h2 { font-family: 'DM Serif Display', serif; }
+    a { color: var(--blue); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    /* ── Header ── */
+    .site-header {
+      background: var(--navy);
+      padding: 0 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 56px;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+    .site-header-brand {
+      font-family: 'DM Serif Display', serif;
+      font-size: 20px;
+      color: #fff;
+      text-decoration: none;
+    }
+    .site-header-brand span { color: #63B3ED; }
+    .site-header-link {
+      font-size: 13px;
+      color: rgba(255,255,255,0.75);
+      text-decoration: none;
+      font-weight: 500;
+    }
+    .site-header-link:hover { color: #fff; text-decoration: none; }
+
+    /* ── Page hero ── */
+    .page-hero {
+      background: linear-gradient(135deg, var(--navy) 0%, var(--blue) 100%);
+      padding: 40px 24px 36px;
+      color: #fff;
+      text-align: center;
+    }
+    .page-hero h1 { font-size: 32px; margin-bottom: 8px; }
+    .page-hero-sub { font-size: 14px; color: rgba(255,255,255,0.75); }
+
+    /* ── Content ── */
+    .content-wrap {
+      max-width: 760px;
+      margin: 0 auto;
+      padding: 40px 24px 60px;
+    }
+
+    /* ── Table of contents ── */
+    .toc {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 24px 28px;
+      margin-bottom: 40px;
+    }
+    .toc-title {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: var(--navy);
+      margin-bottom: 14px;
+    }
+    .toc ol {
+      padding-left: 20px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px 24px;
+    }
+    .toc li { font-size: 13px; }
+    .toc a { color: var(--blue); }
+
+    /* ── Sections ── */
+    .policy-section {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 28px 32px;
+      margin-bottom: 20px;
+    }
+    .policy-section h2 {
+      font-size: 20px;
+      color: var(--navy);
+      margin-bottom: 14px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--border);
+    }
+    .policy-section p { color: var(--text-sm); margin-bottom: 12px; }
+    .policy-section p:last-child { margin-bottom: 0; }
+    .policy-section ul {
+      margin: 8px 0 12px 18px;
+      color: var(--text-sm);
+    }
+    .policy-section ul li { margin-bottom: 5px; }
+    .policy-section .highlight {
+      background: #EBF8FF;
+      border-left: 3px solid var(--blue);
+      padding: 12px 16px;
+      border-radius: 0 8px 8px 0;
+      margin: 14px 0;
+      font-size: 14px;
+      color: var(--navy);
+    }
+    .policy-section .action-box {
+      background: #F0FFF4;
+      border: 1px solid #C6F6D5;
+      border-radius: 8px;
+      padding: 14px 18px;
+      margin-top: 14px;
+      font-size: 14px;
+      color: var(--green);
+      font-weight: 500;
+    }
+
+    /* ── Footer ── */
+    .site-footer {
+      background: var(--card);
+      border-top: 1px solid var(--border);
+      padding: 20px 24px;
+      text-align: center;
+    }
+    .site-footer-inner {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-wrap: wrap;
+      gap: 8px;
+      font-size: 12px;
+      color: var(--muted);
+      max-width: 760px;
+      margin: 0 auto;
+    }
+    .site-footer-inner a { color: var(--blue); }
+    .sep { color: var(--border); }
+
+    /* ── Mobile ── */
+    @media (max-width: 600px) {
+      .page-hero h1 { font-size: 26px; }
+      .content-wrap { padding: 24px 16px 48px; }
+      .policy-section { padding: 20px 18px; }
+      .toc ol { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+  <header class="site-header">
+    <a href="/" class="site-header-brand">Biz<span>Pulse</span></a>
+    <a href="/" class="site-header-link">&larr; Back to app</a>
+  </header>
+
+  <div class="page-hero">
+    <h1>Privacy Policy</h1>
+    <p class="page-hero-sub">Effective date: April 2026 &nbsp;&middot;&nbsp; Last updated: April 2026</p>
+  </div>
+
+  <div class="content-wrap">
+
+    <div class="toc">
+      <div class="toc-title">Contents</div>
+      <ol>
+        <li><a href="#who-we-are">Who We Are</a></li>
+        <li><a href="#data-collected">What Data We Collect</a></li>
+        <li><a href="#how-we-use">How We Use Your Data</a></li>
+        <li><a href="#ai-processing">AI Processing</a></li>
+        <li><a href="#data-sharing">Data Sharing</a></li>
+        <li><a href="#your-rights">Your Rights Under NDPA 2023</a></li>
+        <li><a href="#retention">Data Retention</a></li>
+        <li><a href="#security">Security</a></li>
+        <li><a href="#legal-requests">Legal Requests Policy</a></li>
+        <li><a href="#cookies">Cookies</a></li>
+        <li><a href="#children">Children</a></li>
+        <li><a href="#changes">Changes to This Policy</a></li>
+        <li><a href="#contact">Contact Us</a></li>
+      </ol>
+    </div>
+
+    <!-- 1 -->
+    <div class="policy-section" id="who-we-are">
+      <h2>1. Who We Are</h2>
+      <p>BizPulse is a WhatsApp-native financial operating system for small business owners. It is operated by <strong>The Tosin Ilesanmi Data Academy</strong>, a CAC-registered entity based in Lagos, Nigeria.</p>
+      <p>For any privacy-related enquiry, contact us at <a href="mailto:tosinilesanmi93@gmail.com">tosinilesanmi93@gmail.com</a>.</p>
+    </div>
+
+    <!-- 2 -->
+    <div class="policy-section" id="data-collected">
+      <h2>2. What Data We Collect</h2>
+      <p>When you register and use BizPulse, we collect the following categories of personal and business data:</p>
+      <ul>
+        <li><strong>Identity data:</strong> Full name</li>
+        <li><strong>Business data:</strong> Business name and business type</li>
+        <li><strong>Contact data:</strong> WhatsApp phone number and email address</li>
+        <li><strong>Location data:</strong> State or region (provided at registration)</li>
+        <li><strong>Financial entries:</strong> Daily revenue, expenses and expense categories, customer counts, and inventory movements (items received and sold)</li>
+        <li><strong>Message content:</strong> The text of WhatsApp messages you send to BizPulse for the purpose of logging entries</li>
+        <li><strong>Usage data:</strong> Entry timestamps, message timestamps, and streak data</li>
+      </ul>
+      <p>We do not collect payment card details, government ID numbers, or location data beyond the state or region you provide at registration.</p>
+    </div>
+
+    <!-- 3 -->
+    <div class="policy-section" id="how-we-use">
+      <h2>3. How We Use Your Data</h2>
+      <p>We use the data we collect only for the following purposes:</p>
+      <ul>
+        <li>Parsing your WhatsApp messages to extract financial entries</li>
+        <li>Storing your entries in our secure database to build your financial history</li>
+        <li>Generating your web dashboard showing revenue, expenses, profit, and margin</li>
+        <li>Sending your 7pm daily summary every evening by WhatsApp and email</li>
+        <li>Generating AI-powered business insights using Google Gemini and Anthropic Claude</li>
+        <li>Sending retention nudges when you have not logged for 3, 5, 7, or 14 days</li>
+        <li>Sending milestone celebration messages when you reach streak or entry milestones</li>
+        <li>Providing on-demand summaries and business coaching responses when you request them</li>
+      </ul>
+      <p>We do not use your data for advertising, profiling, or any purpose not listed above.</p>
+    </div>
+
+    <!-- 4 -->
+    <div class="policy-section" id="ai-processing">
+      <h2>4. AI Processing</h2>
+      <div class="highlight">
+        BizPulse uses two AI services: <strong>Google Gemini</strong> parses your WhatsApp messages into structured financial data. <strong>Anthropic Claude</strong> generates business insights, coaching responses, and daily summary recommendations.
+      </div>
+      <p>Only aggregated financial summaries (such as total revenue, total expenses, and margin) are sent to AI services to generate insights. Raw WhatsApp message text is sent to Gemini solely for the purpose of parsing — it is not stored by Gemini or used for model training under our service agreement.</p>
+      <p>Your personal identifiers (name, phone number, email) are never sent to any AI service. AI processing is performed on anonymised numerical summaries only.</p>
+    </div>
+
+    <!-- 5 -->
+    <div class="policy-section" id="data-sharing">
+      <h2>5. Data Sharing</h2>
+      <p><strong>We do not sell your data.</strong> We do not share your data with third parties for marketing or advertising purposes.</p>
+      <p>We share limited data only with the following service providers, strictly for the purpose of delivering the BizPulse service:</p>
+      <ul>
+        <li><strong>Meta (WhatsApp Business API):</strong> Delivery of WhatsApp messages you send and receive</li>
+        <li><strong>Google Gemini:</strong> Parsing of WhatsApp message text into financial entries</li>
+        <li><strong>Anthropic Claude:</strong> Generation of business insights and coaching responses</li>
+        <li><strong>Render.com:</strong> Hosting of the BizPulse application and PostgreSQL database</li>
+        <li><strong>Brevo (formerly Sendinblue):</strong> Delivery of summary emails</li>
+      </ul>
+      <p>Each provider processes data only as necessary to perform their function and is bound by their own privacy obligations.</p>
+    </div>
+
+    <!-- 6 -->
+    <div class="policy-section" id="your-rights">
+      <h2>6. Your Rights Under NDPA 2023</h2>
+      <p>Under the Nigeria Data Protection Act 2023, you have the following rights regarding your personal data:</p>
+      <ul>
+        <li><strong>Access:</strong> Request a copy of all data we hold about you</li>
+        <li><strong>Rectification:</strong> Correct any inaccurate data we hold</li>
+        <li><strong>Erasure:</strong> Request deletion of your account and all associated data</li>
+        <li><strong>Portability:</strong> Export your financial history as a CSV file at any time via the Settings screen or the <code>/api/export/csv</code> endpoint</li>
+        <li><strong>Objection:</strong> Object to processing for specific purposes</li>
+        <li><strong>Withdrawal of consent:</strong> Withdraw consent at any time, which will result in account deactivation</li>
+      </ul>
+      <div class="action-box">
+        To exercise any right: email <a href="mailto:tosinilesanmi93@gmail.com">tosinilesanmi93@gmail.com</a> — or send the message <strong>DELETE MY DATA</strong> on WhatsApp to your BizPulse number. We will respond within 30 days.
+      </div>
+    </div>
+
+    <!-- 7 -->
+    <div class="policy-section" id="retention">
+      <h2>7. Data Retention</h2>
+      <p>Your data is retained for as long as your account remains active. If you request deletion of your account:</p>
+      <ul>
+        <li>All personal data and financial entries will be permanently deleted within <strong>30 days</strong> of your request</li>
+        <li>Anonymised, aggregated statistics (such as total user counts) that cannot be linked back to you may be retained</li>
+      </ul>
+      <p>We do not retain data longer than necessary for the purposes described in this policy.</p>
+    </div>
+
+    <!-- 8 -->
+    <div class="policy-section" id="security">
+      <h2>8. Security</h2>
+      <p>We take reasonable technical and organisational measures to protect your data:</p>
+      <ul>
+        <li>Your financial data is stored in an encrypted <strong>PostgreSQL database hosted on Render.com</strong></li>
+        <li>All data transmission between your device and our servers is encrypted using <strong>HTTPS/TLS</strong></li>
+        <li>WhatsApp messages are transmitted using Meta's end-to-end encryption</li>
+        <li>Access to the database is restricted to application code running on the same platform</li>
+      </ul>
+      <p>No security system is impenetrable. If you become aware of any security concern, please notify us immediately at <a href="mailto:tosinilesanmi93@gmail.com">tosinilesanmi93@gmail.com</a>.</p>
+    </div>
+
+    <!-- 9 -->
+    <div class="policy-section" id="legal-requests">
+      <h2>9. Legal Requests Policy</h2>
+      <p>We only disclose user data to government or law enforcement bodies in response to a <strong>valid court order or legally binding instrument</strong> issued under Nigerian law or applicable international legal cooperation frameworks.</p>
+      <p>When we receive such a request, we will:</p>
+      <ul>
+        <li>Review its legality and scope before complying</li>
+        <li>Challenge requests that are unlawful, overbroad, or procedurally defective</li>
+        <li>Disclose only the minimum data necessary to comply with the lawful order</li>
+        <li>Notify affected users of any disclosure where we are legally permitted to do so</li>
+        <li>Document all legal requests received and actions taken</li>
+      </ul>
+      <p>We will not voluntarily cooperate with informal or non-binding requests for user data.</p>
+    </div>
+
+    <!-- 10 -->
+    <div class="policy-section" id="cookies">
+      <h2>10. Cookies</h2>
+      <p>BizPulse uses <strong>essential session cookies only</strong>. These are necessary for the web dashboard to function (for example, to keep you logged in during a session).</p>
+      <p>We do not use:</p>
+      <ul>
+        <li>Advertising or tracking cookies</li>
+        <li>Google Analytics or any other analytics platform</li>
+        <li>Meta Pixel or any social media tracking</li>
+        <li>Third-party marketing or retargeting cookies</li>
+      </ul>
+      <p>You can disable cookies in your browser settings, but this may prevent the BizPulse dashboard from functioning correctly.</p>
+    </div>
+
+    <!-- 11 -->
+    <div class="policy-section" id="children">
+      <h2>11. Children</h2>
+      <p>BizPulse is not directed at persons under the age of 18. We do not knowingly collect personal data from anyone under 18. If you believe a person under 18 has provided us with personal data, please contact us at <a href="mailto:tosinilesanmi93@gmail.com">tosinilesanmi93@gmail.com</a> and we will delete it promptly.</p>
+    </div>
+
+    <!-- 12 -->
+    <div class="policy-section" id="changes">
+      <h2>12. Changes to This Policy</h2>
+      <p>We may update this Privacy Policy from time to time. For <strong>material changes</strong> (changes that affect how we use your data or your rights), we will:</p>
+      <ul>
+        <li>Notify all registered users via WhatsApp at least <strong>14 days before</strong> the change takes effect</li>
+        <li>Update the effective date at the top of this page</li>
+      </ul>
+      <p>Continued use of BizPulse after a material change takes effect constitutes acceptance of the updated policy.</p>
+    </div>
+
+    <!-- 13 -->
+    <div class="policy-section" id="contact">
+      <h2>13. Contact Us</h2>
+      <p>For any question, request, or complaint relating to this Privacy Policy or your personal data:</p>
+      <ul>
+        <li><strong>Email:</strong> <a href="mailto:tosinilesanmi93@gmail.com">tosinilesanmi93@gmail.com</a></li>
+        <li><strong>Organisation:</strong> The Tosin Ilesanmi Data Academy</li>
+        <li><strong>Location:</strong> Lagos, Nigeria</li>
+      </ul>
+      <p>If you are not satisfied with our response, you may lodge a complaint with the <strong>Nigeria Data Protection Commission (NDPC)</strong> at <a href="https://ndpb.gov.ng" target="_blank" rel="noopener noreferrer">ndpb.gov.ng</a>.</p>
+    </div>
+
+  </div><!-- /.content-wrap -->
+
+  <footer class="site-footer">
+    <div class="site-footer-inner">
+      <span>BizPulse &mdash; The Tosin Ilesanmi Data Academy</span>
+      <span class="sep">&middot;</span>
+      <a href="/privacy">Privacy Policy</a>
+      <span class="sep">&middot;</span>
+      <a href="/terms">Terms of Service</a>
+      <span class="sep">&middot;</span>
+      <a href="/">Back to App</a>
+      <span class="sep">&middot;</span>
+      <span>&copy; 2026</span>
+    </div>
+  </footer>
+
+</body>
+</html>
