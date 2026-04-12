@@ -582,6 +582,14 @@
 
   <!-- ══ MAIN ══════════════════════════════════════════ -->
   <div id="main">
+
+    <!-- ══ DEMO BANNER ══════════════════════════════════ -->
+    <div id="demo-banner" style="display:none;background:#744210;color:#fff;padding:11px 24px;text-align:center;font-size:13px;font-weight:600;position:sticky;top:0;z-index:50;line-height:1.6;border-bottom:2px solid #B7791F">
+      🔍 <strong>Demo Account — Sample Data Only</strong> &nbsp;&middot;&nbsp;
+      <span style="font-weight:400;opacity:0.9">Explore a real BizPulse dashboard. No actual business data is shown.</span>
+      &nbsp;<a href="/" style="color:#FBD38D;text-decoration:underline;font-weight:700;white-space:nowrap">Create your free account →</a>
+    </div>
+
     <div class="inner">
 
       <!-- ══════════════ REGISTER ══════════════ -->
@@ -1198,9 +1206,82 @@ let currentUser  = null;
 let currentTab   = 'home';
 let expenseCount = 0;
 let stockCount   = 0;
+let demoMode     = false;
 const isDesktop  = () => window.innerWidth >= 768;
 
 const EXPENSE_CATEGORIES = ['Stock / Inventory','Rent','Staff Wages','Transport','Utilities','Marketing','Packaging','Equipment','Food & Supplies','Professional Fees','Data / Internet','Client Entertainment','Equipment Maintenance','Uncategorised'];
+
+// ── Demo Data (hardcoded, frontend-only — no DB, no API) ─
+const DEMO_DATA = (() => {
+  const days = Array.from({ length: 7 }, (_, i) => {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    return d.toLocaleDateString('en-CA', { timeZone: 'Africa/Lagos' });
+  });
+  return {
+    user: {
+      id:              'demo',
+      name:            'Adunola Fashola',
+      biz_name:        'Adunola Fashion House',
+      biz_type:        'Fashion & Clothing',
+      state:           'Lagos',
+      streak:          7,
+      email:           'demo@bizpulse.app',
+      whatsapp_number: null,
+    },
+    summary: {
+      date:          days[0],
+      revenue:       185000,
+      totalExpenses: 112000,
+      profit:        73000,
+      margin:        39.46,
+      customers:     24,
+      topExpense:    { category: 'Stock / Inventory', amount: 68000 },
+      healthLabel:   'Good',
+      healthEmoji:   '\u2705',
+      healthKey:     'good',
+      expenseBreakdown: {
+        'Stock / Inventory': 68000,
+        'Staff Wages':       28000,
+        'Transport':          9000,
+        'Marketing':          7000,
+      },
+    },
+    history: [
+      { date: days[0], revenue: 185000, profit:  73000 },
+      { date: days[1], revenue: 142000, profit:  51200 },
+      { date: days[2], revenue: 220000, profit:  97800 },
+      { date: days[3], revenue:  98500, profit:  28300 },
+      { date: days[4], revenue: 165000, profit:  62750 },
+      { date: days[5], revenue: 177000, profit:  69500 },
+      { date: days[6], revenue: 134000, profit:  47200 },
+    ],
+    stock: [
+      { item_name: 'Ankara fabric',       current_balance:  47, total_received: 100, low_stock_threshold: 20 },
+      { item_name: 'Lace material',        current_balance:   8, total_received:  50, low_stock_threshold: 10 },
+      { item_name: 'Ready-to-wear gowns', current_balance:  15, total_received:  30, low_stock_threshold:  6 },
+      { item_name: 'Embellishment beads', current_balance:   0, total_received: 100, low_stock_threshold: 20 },
+    ],
+    lowStock: [
+      { id: 1, item_name: 'Lace material',        current_balance: 8 },
+      { id: 2, item_name: 'Embellishment beads',  current_balance: 0 },
+    ],
+    monthly: {
+      thisMonth: { revenue: 1024000, expenses: 618000, profit: 406000 },
+      lastMonth: { revenue:  887000, expenses: 548000, profit: 339000 },
+    },
+    aiRec: {
+      risk: 'Your Stock/Inventory spend at \u20A668,000 is 36.8% of today\u2019s revenue. Lace material is running low and Embellishment beads are out of stock \u2014 any pending garment orders that need finishing will be delayed. Restocking before the weekend is urgent.',
+      actions: [
+        'Lace material is down to 8 units (16% of stock received). Restock now \u2014 fashion customers walk away if their preferred fabric isn\u2019t available and go straight to your competitor.',
+        'Embellishment beads are completely out of stock. Any orders requiring beading or finishing cannot be completed. Restock today to avoid delaying customer orders and damaging your reputation.',
+        'Your 39.5% margin on \u20A6185,000 is solid for Lagos fashion retail. Set aside \u20A620,000\u2013\u20A625,000 from today\u2019s profit specifically for restocking your fastest-moving fabrics before end of week.',
+      ],
+    },
+    completeness: { percentage: 95, daysWithExpenses: 7, totalDays: 7 },
+    hasData: true,
+  };
+})();
 
 // ── Init ────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
@@ -1211,6 +1292,11 @@ document.addEventListener('DOMContentLoaded', () => {
   const auth     = params.get('auth');
   const userId   = params.get('userId');
   const name     = params.get('name');
+
+  if (params.get('demo') === 'true' || window.location.pathname === '/demo') {
+    enterDemoMode();
+    return;
+  }
 
   if (auth === 'success' && userId) {
     localStorage.setItem('bizpulse_user_id', userId);
@@ -1385,8 +1471,13 @@ async function loadHomeSnapshot() {
   const userId = localStorage.getItem('bizpulse_user_id');
   if (!userId) return;
   try {
-    const res  = await fetch('/api/summary/latest?userId=' + userId);
-    const data = await res.json();
+    let data;
+    if (demoMode) {
+      data = { hasData: true, summary: DEMO_DATA.summary, history: DEMO_DATA.history };
+    } else {
+      const res = await fetch('/api/summary/latest?userId=' + userId);
+      data = await res.json();
+    }
     const s    = data.summary;
 
     // WhatsApp hero / pill toggle — based on whether user logged today
@@ -1673,6 +1764,7 @@ async function submitEntry() {
   const userId = localStorage.getItem('bizpulse_user_id');
   const btn    = document.getElementById('entry-submit-btn');
   const msg    = document.getElementById('entry-msg');
+  if (demoMode) { showMsg(msg, 'error', '\uD83D\uDD0D Demo mode \u2014 entry submission is disabled. Create a free account to track your real numbers.'); return; }
   if (!userId) { showMsg(msg, 'error', 'Please log in first.'); return; }
   const expenses = [];
   document.querySelectorAll('#expense-rows .row-item').forEach(r => {
@@ -1730,8 +1822,13 @@ async function loadSummary() {
   const userId = localStorage.getItem('bizpulse_user_id');
   if (!userId) return;
   try {
-    const res  = await fetch('/api/summary/latest?userId=' + userId + '&ai=1');
-    const data = await res.json();
+    let data;
+    if (demoMode) {
+      data = { hasData: true, summary: DEMO_DATA.summary, history: DEMO_DATA.history, lowStock: DEMO_DATA.lowStock, monthly: DEMO_DATA.monthly, stock: DEMO_DATA.stock, aiRec: DEMO_DATA.aiRec };
+    } else {
+      const res = await fetch('/api/summary/latest?userId=' + userId + '&ai=1');
+      data = await res.json();
+    }
     // History
     if (data.history?.length > 0) {
       document.getElementById('history-empty').style.display = 'none';
@@ -1903,6 +2000,11 @@ async function loadSummary() {
 
 // ── Send summary ───────────────────────────────────────
 async function sendSummaryNow() {
+  if (demoMode) {
+    const activeMsg = currentTab === 'settings' ? document.getElementById('set-summary-msg') : document.getElementById('home-action-msg');
+    showMsg(activeMsg, 'error', '\uD83D\uDD0D Demo mode \u2014 sending is disabled. Create a free account to receive your own AI insights.');
+    return;
+  }
   const userId  = localStorage.getItem('bizpulse_user_id');
   if (!userId) return;
   const homeMsg = document.getElementById('home-action-msg');
@@ -1929,6 +2031,11 @@ async function populateSettings() {
   if (waNum) waNum.textContent = currentUser.whatsapp_number || '+2349128781426';
   // Data quality
   try {
+    if (demoMode) {
+      const compEl = document.getElementById('set-completeness-content');
+      if (compEl) compEl.innerHTML = '\uD83D\uDCCA <strong>Data quality: 95%</strong> \u2014 7 of the last 7 entries have full expense breakdown.';
+      return;
+    }
     const userId = localStorage.getItem('bizpulse_user_id');
     const res    = await fetch('/api/summary/latest?userId=' + userId);
     const data   = await res.json();
@@ -1944,8 +2051,9 @@ async function populateSettings() {
   } catch(e) {}
 }
 async function saveSettings() {
-  const userId = localStorage.getItem('bizpulse_user_id');
   const msg    = document.getElementById('set-account-msg');
+  if (demoMode) { showMsg(msg, 'error', '\uD83D\uDD0D Demo mode \u2014 settings cannot be saved. Create a free account to manage your profile.'); return; }
+  const userId = localStorage.getItem('bizpulse_user_id');
   hideMsg(msg);
   try {
     const res  = await fetch('/api/user/update', { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ userId, name: document.getElementById('set-name').value.trim(), email: document.getElementById('set-email').value.trim(), bizName: document.getElementById('set-biz-name').value.trim(), bizType: document.getElementById('set-biz-type').value }) });
@@ -1974,9 +2082,28 @@ function signOut() {
 
 // ── Export ─────────────────────────────────────────────
 function exportCSV() {
+  if (demoMode) { alert('\uD83D\uDD0D Demo mode \u2014 CSV export is disabled. Create a free account to export your real business data.'); return; }
   const userId = localStorage.getItem('bizpulse_user_id');
   if (!userId) return;
   window.location.href = '/api/export/csv?userId=' + userId;
+}
+
+// ── Demo Mode ───────────────────────────────────────────
+function enterDemoMode() {
+  demoMode    = true;
+  currentUser = Object.assign({}, DEMO_DATA.user);
+  localStorage.removeItem('bizpulse_user_id');
+  // Pre-cache the AI rec so the Home insight preview has content
+  localStorage.setItem('bizpulse_ai_rec', JSON.stringify(DEMO_DATA.aiRec));
+
+  // Show the sticky demo banner
+  document.getElementById('demo-banner').style.display = 'block';
+
+  // Enter dashboard — skip register, go straight to Home
+  showScreen('home');
+  applyLayout();
+  updateUserUI();
+  updateHomeGreeting();
 }
 
 // ── Helpers ────────────────────────────────────────────
