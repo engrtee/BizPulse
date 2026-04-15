@@ -59,12 +59,44 @@ router.get('/', adminAuth, async (req, res) => {
   try {
     const pw = req.query.password || '';
 
-    const [stats, recentRegs, allUsers, recentMessages, atRisk] = await Promise.all([
+    const [stats, recentRegs, allUsers, recentMessages, atRisk, variantStats, retentionByBiz] = await Promise.all([
       UserModel.getAdminStats(),
       UserModel.getRecentRegistrations(7),
       UserModel.findAllWithStats(),
       MessageModel.getRecent(50),
       UserModel.findAtRisk(),
+      // Nudge format conversion rates
+      query(`
+        SELECT
+          message_type,
+          variant_name,
+          COUNT(*)                                          AS times_sent,
+          COUNT(CASE WHEN user_logged_next_day THEN 1 END) AS times_converted,
+          ROUND(
+            COUNT(CASE WHEN user_logged_next_day THEN 1 END)::NUMERIC
+            / NULLIF(COUNT(*), 0) * 100, 1
+          )                                                 AS conversion_rate,
+          ROUND(AVG(days_to_next_log) FILTER (WHERE days_to_next_log IS NOT NULL), 1) AS avg_days_to_log
+        FROM message_log
+        GROUP BY message_type, variant_name
+        ORDER BY message_type, conversion_rate DESC NULLS LAST
+      `),
+      // Retention by business type
+      query(`
+        SELECT
+          COALESCE(u.biz_type, 'Unknown') AS biz_type,
+          COUNT(DISTINCT u.id)             AS total_users,
+          COUNT(DISTINCT CASE WHEN u.last_message_date >= CURRENT_DATE - INTERVAL '7 days' THEN u.id END) AS active_7d,
+          ROUND(
+            COUNT(DISTINCT CASE WHEN u.last_message_date >= CURRENT_DATE - INTERVAL '7 days' THEN u.id END)::NUMERIC
+            / NULLIF(COUNT(DISTINCT u.id), 0) * 100, 0
+          )                                AS retention_rate
+        FROM users u
+        WHERE u.first_message_date IS NOT NULL
+        GROUP BY u.biz_type
+        ORDER BY total_users DESC, retention_rate DESC
+        LIMIT 20
+      `),
     ]);
 
     const totalUsers     = parseInt(stats.total_users,      10) || 0;
@@ -172,6 +204,46 @@ router.get('/', adminAuth, async (req, res) => {
           </td>
         </tr>`;
     }).join('') || '<tr><td colspan="5" style="padding:16px;text-align:center;color:#718096">No at-risk users — great retention! 🎉</td></tr>';
+
+    // ── Variant conversion rows ──
+    const variantRows = (variantStats.rows || []).map(v => {
+      const rate    = v.conversion_rate !== null ? `${v.conversion_rate}%` : '—';
+      const rateBg  = v.conversion_rate >= 40 ? '#C6F6D5' : v.conversion_rate >= 20 ? '#FEFCBF' : '#FED7D7';
+      const rateClr = v.conversion_rate >= 40 ? '#1A7A4A' : v.conversion_rate >= 20 ? '#B7791F' : '#C53030';
+      const formatLabel = { A: '🔴 Loss Aversion', B: '🟢 Identity', C: '🔵 Milestone', D: '🟡 Peer', fallback: '⚪ Fallback' };
+      return `
+        <tr>
+          <td style="padding:9px 12px;border-bottom:1px solid #E2E8F0;font-size:0.82rem;white-space:nowrap">${escHtml(v.message_type)}</td>
+          <td style="padding:9px 12px;border-bottom:1px solid #E2E8F0;font-size:0.82rem">${formatLabel[v.variant_name] || escHtml(v.variant_name)}</td>
+          <td style="padding:9px 12px;border-bottom:1px solid #E2E8F0;text-align:center;font-size:0.82rem">${v.times_sent}</td>
+          <td style="padding:9px 12px;border-bottom:1px solid #E2E8F0;text-align:center;font-size:0.82rem">${v.times_converted}</td>
+          <td style="padding:9px 12px;border-bottom:1px solid #E2E8F0;text-align:center">
+            <span style="background:${rateBg};color:${rateClr};padding:3px 10px;border-radius:12px;font-size:0.8rem;font-weight:600">${rate}</span>
+          </td>
+          <td style="padding:9px 12px;border-bottom:1px solid #E2E8F0;text-align:center;font-size:0.82rem;color:#718096">${v.avg_days_to_log !== null ? v.avg_days_to_log + 'd' : '—'}</td>
+        </tr>`;
+    }).join('') || '<tr><td colspan="6" style="padding:16px;text-align:center;color:#718096">No nudges sent yet — data will appear after the first retention job runs.</td></tr>';
+
+    // ── Retention by biz type rows ──
+    const bizRetentionRows = (retentionByBiz.rows || []).map(r => {
+      const rate    = r.retention_rate !== null ? parseInt(r.retention_rate) : 0;
+      const barW    = Math.min(rate, 100);
+      const barClr  = rate >= 60 ? '#1A7A4A' : rate >= 30 ? '#B7791F' : '#C53030';
+      return `
+        <tr>
+          <td style="padding:9px 12px;border-bottom:1px solid #E2E8F0;font-size:0.82rem">${escHtml(r.biz_type)}</td>
+          <td style="padding:9px 12px;border-bottom:1px solid #E2E8F0;text-align:center;font-size:0.82rem">${r.total_users}</td>
+          <td style="padding:9px 12px;border-bottom:1px solid #E2E8F0;text-align:center;font-size:0.82rem">${r.active_7d}</td>
+          <td style="padding:9px 12px;border-bottom:1px solid #E2E8F0">
+            <div style="display:flex;align-items:center;gap:8px">
+              <div style="flex:1;background:#E2E8F0;border-radius:4px;height:8px">
+                <div style="width:${barW}%;background:${barClr};border-radius:4px;height:8px"></div>
+              </div>
+              <span style="font-size:0.8rem;font-weight:600;color:${barClr};min-width:36px;text-align:right">${rate}%</span>
+            </div>
+          </td>
+        </tr>`;
+    }).join('') || '<tr><td colspan="4" style="padding:16px;text-align:center;color:#718096">No activated users yet.</td></tr>';
 
     // ── Recent registrations ──
     const regRows = recentRegs.length > 0
@@ -294,6 +366,7 @@ router.get('/', adminAuth, async (req, res) => {
   <div class="tab" onclick="showTab('users')">Users (${totalUsers})</div>
   <div class="tab" onclick="showTab('messages')">Messages</div>
   <div class="tab" onclick="showTab('atrisk')">At-Risk (${atRiskCount})</div>
+  <div class="tab" onclick="showTab('variants')">Nudge Analytics</div>
   <div class="tab" onclick="showTab('health')">System Health</div>
 </div>
 
@@ -388,6 +461,48 @@ router.get('/', adminAuth, async (req, res) => {
         </tr>
       </thead>
       <tbody>${atRiskRows}</tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ── NUDGE ANALYTICS TAB ── -->
+<div id="tab-variants" class="pane">
+  <p class="section-title">Nudge Format Conversion Rates</p>
+  <p style="font-size:.82rem;color:#718096;margin-bottom:1rem">
+    Conversion = user logged an entry within 48 hours of receiving the nudge.
+    Format A = Loss Aversion &nbsp;|&nbsp; B = Identity &nbsp;|&nbsp; C = Future Milestone &nbsp;|&nbsp; D = Peer Comparison.
+  </p>
+  <div style="overflow-x:auto;margin-bottom:2rem">
+    <table>
+      <thead>
+        <tr>
+          <th>Message Type</th>
+          <th>Format</th>
+          <th style="text-align:center">Sent</th>
+          <th style="text-align:center">Converted</th>
+          <th style="text-align:center">Conversion Rate</th>
+          <th style="text-align:center">Avg Days to Log</th>
+        </tr>
+      </thead>
+      <tbody>${variantRows}</tbody>
+    </table>
+  </div>
+
+  <p class="section-title">7-Day Retention by Business Type</p>
+  <p style="font-size:.82rem;color:#718096;margin-bottom:1rem">
+    % of activated users (at least 1 message sent) who sent a message in the last 7 days.
+  </p>
+  <div style="overflow-x:auto">
+    <table>
+      <thead>
+        <tr>
+          <th>Business Type</th>
+          <th style="text-align:center">Total Users</th>
+          <th style="text-align:center">Active (7d)</th>
+          <th>Retention Rate</th>
+        </tr>
+      </thead>
+      <tbody>${bizRetentionRows}</tbody>
     </table>
   </div>
 </div>

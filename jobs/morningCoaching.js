@@ -2,11 +2,15 @@
  * jobs/morningCoaching.js
  * Daily 6am WAT morning message to all active users with a WhatsApp number.
  *
- * Each message contains:
- *   1. Warm personal greeting
- *   2. Yesterday's profit result (with celebration or encouragement)
- *   3. One simple, rotating business coaching tip (by business type, day of week)
- *   4. Prompt to log today's numbers
+ * Each message is personalised using:
+ *   1. Business persona  (craft_identity, craft_emoji, key_metric, peak_season)
+ *   2. Yesterday's actual numbers (revenue, profit, margin %, top expense, customers)
+ *   3. User's location   (state — referenced in tip where relevant)
+ *   4. Performance-aware tip selection:
+ *        - margin < 15%          → margin improvement tip
+ *        - expenses > 60% rev    → expense control tip
+ *        - otherwise             → rotating tip by day of week + biz type
+ *   5. New user reminder for first 7 days (no logged data yet — build the habit)
  *
  * Runs every day at 6:00 AM Africa/Lagos timezone.
  */
@@ -19,9 +23,10 @@ const cron = require('node-cron');
 const UserModel        = require('../models/user');
 const TransactionModel = require('../models/transaction');
 const WhatsAppService  = require('../services/whatsapp');
+const { getPersona }   = require('../services/personaEngine');
+const { query }        = require('../models/db');
 
-// ── Rotating coaching tips by business type ─────────────
-// 7 tips per category — one per day of the week (Sunday=0 … Saturday=6)
+// ── Rotating tips by business type (7 per category — one per day of week) ──
 const TIPS = {
   fashion: [
     'Note which items sold fastest this week. Your best sellers deserve priority restocking before you run out.',
@@ -50,6 +55,15 @@ const TIPS = {
     'One reliable supplier relationship beats ten unreliable ones. Protect the good relationships you have.',
     'The best time to restock is before you run out — not after. Watch your fast movers daily.',
   ],
+  beauty: [
+    'Your repeat clients are your most reliable income. Keep a list of who comes every 2–4 weeks.',
+    'Premium service justifies premium pricing. If your clients never complain about price, you may be charging too little.',
+    'A before-and-after photo from a satisfied client is worth more than any paid advert.',
+    'Know your busiest hours and make sure you are never short-staffed or out of products then.',
+    'Product cost eats margin quietly. Review what you spend on consumables vs what you earn per client.',
+    'Wedding season and festive periods fill your calendar fast — plan your pricing and capacity now.',
+    'A client who books again within 2 weeks is your most valuable customer. Track who does this.',
+  ],
   services: [
     'Under-promise and over-deliver. It is the fastest way to build a reputation that brings referrals.',
     'Your time is your product. Are you charging enough for it? Review your rates against your quality.',
@@ -70,62 +84,191 @@ const TIPS = {
   ],
 };
 
-/**
- * Pick the right tip set for a business type, then return today's tip.
- */
-function getCoachingTip(businessType) {
-  const dayOfWeek = new Date().getDay(); // 0=Sun … 6=Sat
-  const biz = (businessType || '').toLowerCase();
+// ── Performance-aware tips (override day-of-week rotation when triggered) ──
+const MARGIN_TIPS = {
+  fashion:  'Your margin is tight right now. Review your fabric cost per outfit — even ₦500 off per unit adds up significantly across your week.',
+  food:     'Your margin is tight right now. Check your cost per plate — portion size or ingredient cost may have crept up without a matching price increase.',
+  retail:   'Your margin is tight right now. Look at which items have the best markup and push those. Slow-moving stock at full price hurts twice.',
+  beauty:   'Your margin is tight right now. Review what you spend on products per client vs what you charge. Small leaks add up.',
+  services: 'Your margin is tight right now. Check if you are spending hours on low-paying work that crowds out better clients.',
+  default:  'Your margin is tight right now. Review your biggest expense category — even a 10% reduction there could transform your profitability this week.',
+};
 
-  let tipSet = TIPS.default;
-  if (/fashion|cloth/i.test(biz))                                          tipSet = TIPS.fashion;
-  else if (/food|restaurant|bakery|beverage|catering/i.test(biz))          tipSet = TIPS.food;
-  else if (/retail|trading|fmcg|e-commerce|online|whatsapp business/i.test(biz)) tipSet = TIPS.retail;
-  else if (/service|consult|technology|advertising|education|photo|project/i.test(biz)) tipSet = TIPS.services;
+const EXPENSE_TIPS = {
+  fashion:  'Your expenses were very high yesterday relative to sales. Check your fabric and material spend — are you buying ahead of confirmed orders or restocking from actual demand?',
+  food:     'Your expenses were very high yesterday relative to sales. Ingredient and prep costs may be outpacing revenue. Track your cost per plate against your selling price.',
+  retail:   'Your expenses were very high yesterday relative to sales. Review what you restocked yesterday — was it for confirmed demand or just habit?',
+  beauty:   'Your expenses were very high yesterday relative to sales. Product spend for a single day should not exceed 30% of revenue. Check yesterday\'s consumable usage.',
+  services: 'Your expenses were very high yesterday relative to sales. Service businesses with high expenses often have untracked overhead — staff time, transport, data.',
+  default:  'Your expenses were very high yesterday relative to sales. Identify your top spending category and ask: can this be reduced or negotiated this week?',
+};
 
+// ── Helpers ───────────────────────────────────────────────────────────────
+function getTipCategory(bizType) {
+  const b = (bizType || '').toLowerCase();
+  if (/fashion|cloth|sewing|tailor|ankara|fabric|garment/i.test(b)) return 'fashion';
+  if (/food|restaurant|bakery|catering|cook|buka|canteen|pastry|cake|eatery/i.test(b)) return 'food';
+  if (/retail|shop|trading|fmcg|supermarket|provisions|store/i.test(b)) return 'retail';
+  if (/beauty|hair|nail|makeup|salon|spa|barb|wig|lace|braid|cosmetic/i.test(b)) return 'beauty';
+  if (/service|consult|tech|advertis|education|photo|project|media/i.test(b)) return 'services';
+  return 'default';
+}
+
+/** Merge expense_breakdown JSONBs and return the top category name */
+function getTopExpense(breakdowns) {
+  const merged = {};
+  for (const b of (breakdowns || [])) {
+    if (!b) continue;
+    for (const [cat, amt] of Object.entries(b)) {
+      merged[cat] = (merged[cat] || 0) + parseFloat(amt || 0);
+    }
+  }
+  if (!Object.keys(merged).length) return null;
+  return Object.entries(merged).sort((a, b) => b[1] - a[1])[0][0];
+}
+
+/** ₦ short format */
+function nairaShort(amount) {
+  const n = parseFloat(amount) || 0;
+  if (n >= 1_000_000) return `₦${(n / 1_000_000).toFixed(1).replace(/\.0$/, '')}m`;
+  if (n >= 1_000)     return `₦${Math.round(n / 1_000)}k`;
+  return `₦${Math.round(n)}`;
+}
+
+/** Select the right coaching tip based on performance data */
+function selectTip(bizType, margin, expenseRatio, persona) {
+  const cat = getTipCategory(bizType);
+
+  // Performance-aware overrides
+  if (margin > 0 && margin < 15) {
+    return MARGIN_TIPS[cat] || MARGIN_TIPS.default;
+  }
+  if (expenseRatio > 0.6) {
+    return EXPENSE_TIPS[cat] || EXPENSE_TIPS.default;
+  }
+
+  // Rotating tip by day of week
+  const dayOfWeek = new Date().getDay();
+  const tipSet    = TIPS[cat] || TIPS.default;
   return tipSet[dayOfWeek % tipSet.length];
 }
 
-/**
- * Build the morning message for one user.
- */
-function buildMorningMessage(firstName, businessType, yesterdayRevenue, yesterdayProfit) {
-  const tip = getCoachingTip(businessType);
+/** How many days since user registered */
+async function getDaysSinceRegistration(userId) {
+  const res = await query(
+    `SELECT created_at FROM users WHERE id = $1`,
+    [userId]
+  );
+  if (!res.rows.length) return 999;
+  const diff = Date.now() - new Date(res.rows[0].created_at).getTime();
+  return Math.floor(diff / (1000 * 60 * 60 * 24));
+}
 
-  if (yesterdayRevenue === 0) {
-    // No entry logged yesterday
+// ── Message builders ──────────────────────────────────────────────────────
+
+/**
+ * Message for users with no entry logged yesterday.
+ * Personalised by persona + location + new-user status.
+ */
+function buildNoDataMessage(firstName, bizType, state, persona, isNewUser, daysSinceReg) {
+  const emoji    = persona.craft_emoji    || '📊';
+  const identity = persona.craft_identity || 'a Nigerian business owner building something real';
+  const metric   = persona.key_metric     || 'daily profit';
+  const exAmt    = nairaShort(persona.example_amount || 30000);
+  const exExp    = nairaShort((persona.example_amount || 30000) * 0.3);
+  const exItem   = persona.example_expense || 'operations';
+  const location = state ? ` in ${state}` : '';
+
+  const tip = selectTip(bizType, 0, 0, persona);
+
+  if (isNewUser && daysSinceReg <= 3) {
+    // Very new user — build the habit
     return (
-      `🌅 Good morning, ${firstName}! ☀️\n\n` +
-      `A new day, a fresh chance to push your business forward.\n\n` +
-      `💡 *Today's tip:*\n${tip}\n\n` +
-      `When you close today, send me your numbers and I'll give you your full breakdown:\n` +
-      `_"Made 50k today, spent 15k stock, 3k transport"_\n\n` +
-      `Let's make today count! 📈`
+      `🌅 Good morning, ${firstName}! ${emoji}\n\n` +
+      `Welcome to BizPulse. You are now among the smart ${bizType || 'business'} owners${location} who track their numbers daily.\n\n` +
+      `To become *${identity}*, you need one habit above everything else — *knowing your numbers every day*.\n\n` +
+      `Today is your chance to start. Just send:\n` +
+      `_"made ${exAmt} today spent ${exExp} on ${exItem}"_\n\n` +
+      `I will calculate your *${metric}* instantly. 📈`
     );
   }
 
-  // They had data yesterday — show the result warmly
-  const profitFormatted = '₦' + Number(Math.abs(yesterdayProfit)).toLocaleString('en-NG');
-  let profitLine;
-  if (yesterdayProfit > 0) {
-    profitLine = `Yesterday you made *${profitFormatted} profit* 💰 That's real money in your pocket. Keep it going!`;
-  } else if (yesterdayProfit === 0) {
-    profitLine = `Yesterday you broke even — your revenue covered your expenses exactly. Push for profit today! 💪`;
-  } else {
-    profitLine = `Yesterday was tough — *${profitFormatted} loss*. Today is a fresh start. Every successful business has days like that. 💪`;
+  if (isNewUser && daysSinceReg <= 7) {
+    // Early days — reinforce the habit with a tip
+    return (
+      `🌅 Good morning, ${firstName}! ${emoji}\n\n` +
+      `A new day — another chance to build the habit that separates growing businesses from ones that guess.\n\n` +
+      `💡 *Today's insight for your ${bizType || 'business'}${location}:*\n${tip}\n\n` +
+      `Send me today's numbers when you close:\n` +
+      `_"made ${exAmt} today spent ${exExp} on ${exItem}"_\n\n` +
+      `Your *${metric}* breakdown will be ready instantly. 📊`
+    );
   }
 
+  // Regular user with no yesterday data
   return (
     `🌅 Good morning, ${firstName}! ☀️\n\n` +
-    `${profitLine}\n\n` +
-    `💡 *Today's tip:*\n${tip}\n\n` +
-    `Send me today's numbers when you close and I'll break it all down for you. 📊`
+    `A new day, a fresh chance to push your ${bizType || 'business'} forward.\n\n` +
+    `💡 *Today's insight:*\n${tip}\n\n` +
+    `When you close today, send me your numbers:\n` +
+    `_"made ${exAmt} today spent ${exExp} on ${exItem}"_\n\n` +
+    `Let's make today count! 📈`
   );
 }
 
 /**
- * Main job — send morning message to every active user with a WhatsApp number.
+ * Message for users who had data yesterday.
+ * Personalised by actual profit, margin, top expense, customers, location + persona.
  */
+function buildDataMessage(firstName, bizType, state, persona, revenue, profit, margin, customers, topExpense) {
+  const emoji    = persona.craft_emoji || '📊';
+  const metric   = persona.key_metric  || 'daily profit';
+  const exAmt    = nairaShort(persona.example_amount || 30000);
+  const exExp    = nairaShort((persona.example_amount || 30000) * 0.3);
+  const exItem   = persona.example_expense || 'operations';
+  const location = state ? ` in ${state}` : '';
+
+  const expenseRatio = revenue > 0 ? (revenue - profit) / revenue : 0;
+  const tip          = selectTip(bizType, margin, expenseRatio, persona);
+
+  // Profit line
+  let profitLine;
+  if (profit > 0) {
+    const marginStr = margin > 0 ? ` (${margin.toFixed(1)}% margin)` : '';
+    profitLine = `Yesterday you made *${nairaShort(profit)} profit*${marginStr} 💰`;
+    if (margin >= 30) {
+      profitLine += ` That is a strong margin for a ${bizType || 'business'}${location}. Keep it going!`;
+    } else if (margin >= 15) {
+      profitLine += ` Solid result — watch your *${topExpense || metric}* to push that margin higher.`;
+    } else {
+      profitLine += ` Your margin is tighter than ideal — today's tip addresses that directly.`;
+    }
+  } else if (profit === 0) {
+    profitLine = `Yesterday you broke even — revenue covered expenses exactly. Push for profit today! 💪`;
+  } else {
+    profitLine = `Yesterday was tough — *${nairaShort(Math.abs(profit))} loss*. Every successful ${bizType || 'business'}${location} has days like that. Today is a fresh start. 💪`;
+  }
+
+  // Customer line (only if logged)
+  const customerLine = customers > 0
+    ? `\nCustomers yesterday: *${customers}* — that is your audience for today.`
+    : '';
+
+  // Top expense line (only if available)
+  const expenseLine = topExpense
+    ? `\nTop expense yesterday: *${topExpense}* — keep an eye on this category.`
+    : '';
+
+  return (
+    `🌅 Good morning, ${firstName}! ${emoji}\n\n` +
+    `${profitLine}${customerLine}${expenseLine}\n\n` +
+    `💡 *Today's insight for your ${bizType || 'business'}${location}:*\n${tip}\n\n` +
+    `Send me today's numbers when you close and I'll break it all down. 📊\n` +
+    `_"made ${exAmt} today spent ${exExp} on ${exItem}"_`
+  );
+}
+
+// ── Main job ──────────────────────────────────────────────────────────────
 async function runMorningCoaching() {
   console.log(`[Morning Coaching] 🌟 Starting at ${new Date().toISOString()}`);
 
@@ -145,19 +288,37 @@ async function runMorningCoaching() {
       try {
         const firstName = user.name.split(' ')[0];
 
-        // Get yesterday's totals
+        // Get yesterday's date in WAT
         const yesterday = new Date();
         yesterday.setDate(yesterday.getDate() - 1);
         const yesterdayStr = yesterday.toLocaleDateString('en-CA', { timeZone: 'Africa/Lagos' });
 
-        const totals = await TransactionModel.getDailyTotals(user.id, yesterdayStr);
-        const yesterdayRevenue = parseFloat(totals.revenue) || 0;
-        const yesterdayProfit  = parseFloat(totals.profit)  || 0;
+        // Fetch persona + daily totals + expense breakdowns in parallel
+        const [persona, totals, breakdowns, daysSinceReg] = await Promise.all([
+          getPersona(user),
+          TransactionModel.getDailyTotals(user.id, yesterdayStr),
+          TransactionModel.getExpenseBreakdowns(user.id, yesterdayStr),
+          getDaysSinceRegistration(user.id),
+        ]);
 
-        const msg = buildMorningMessage(firstName, user.biz_type, yesterdayRevenue, yesterdayProfit);
+        const revenue   = parseFloat(totals?.revenue)  || 0;
+        const profit    = parseFloat(totals?.profit)   || 0;
+        const customers = parseInt(totals?.customers,10) || 0;
+        const margin    = revenue > 0
+          ? parseFloat(((profit / revenue) * 100).toFixed(2))
+          : 0;
+        const topExpense = getTopExpense(breakdowns);
+        const isNewUser  = daysSinceReg <= 7;
+
+        let msg;
+        if (revenue === 0) {
+          msg = buildNoDataMessage(firstName, user.biz_type, user.state, persona, isNewUser, daysSinceReg);
+        } else {
+          msg = buildDataMessage(firstName, user.biz_type, user.state, persona, revenue, profit, margin, customers, topExpense);
+        }
 
         await WhatsAppService.sendMessage(user.whatsapp_number, msg);
-        console.log(`[Morning Coaching] ✅ Sent to ${user.name}`);
+        console.log(`[Morning Coaching] ✅ Sent to ${user.name} (margin: ${margin}%, isNew: ${isNewUser})`);
       } catch (err) {
         console.error(`[Morning Coaching] ❌ Failed for ${user.name}:`, err.message);
       }
@@ -169,7 +330,7 @@ async function runMorningCoaching() {
   }
 }
 
-// ── Schedule: 6:00 AM WAT every day ─────────────────────
+// ── Schedule: 6:00 AM WAT every day ──────────────────────────────────────
 cron.schedule('0 6 * * *', async () => {
   console.log('[Cron] 🌟 Morning coaching firing:', new Date().toISOString());
   try {

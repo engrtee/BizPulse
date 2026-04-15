@@ -24,14 +24,15 @@ const TransactionModel= require('../models/transaction');
 const { MessageModel }= require('../models/db');
 const { normalizePhone } = require('../utils/phone');
 
-const ParserService   = require('../services/parser');
-const GeminiService   = require('../services/gemini');
-const ClaudeService   = require('../services/claude');
-const WhatsAppService = require('../services/whatsapp');
-const InventoryService= require('../services/inventory');
-const CustomerService = require('../services/customers');
-const SheetsService   = require('../services/sheets');
-const EmailService    = require('../services/email');
+const ParserService      = require('../services/parser');
+const GeminiService      = require('../services/gemini');
+const ClaudeService      = require('../services/claude');
+const WhatsAppService    = require('../services/whatsapp');
+const InventoryService   = require('../services/inventory');
+const CustomerService    = require('../services/customers');
+const SheetsService      = require('../services/sheets');
+const EmailService       = require('../services/email');
+const { trackOutcome }   = require('../services/messageVariants');
 
 const { calcHealthScore, healthLabel, topExpenseCategory, todayWAT } = require('../utils/formatter');
 const { calcMargin } = require('../utils/naira');
@@ -333,6 +334,9 @@ async function handleDailyEntry(user, from, data, rawMessage, entryMethod = 'tex
 
   // Update last_entry_date and streak
   const newStreak = await UserModel.touchLastEntry(user.id);
+
+  // Attribute any pending retention nudge to this entry (non-blocking)
+  trackOutcome(user.id).catch(() => {});
 
   // Append to Google Sheets (non-blocking — failure must not block the WhatsApp reply)
   if (user.sheet_id) {
