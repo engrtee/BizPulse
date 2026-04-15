@@ -28,6 +28,8 @@ const InventoryService = require('../services/inventory');
 const ClaudeService    = require('../services/claude');
 const EmailService     = require('../services/email');
 const WhatsAppService  = require('../services/whatsapp');
+const { getPersona }   = require('../services/personaEngine');
+const { nairaShort }   = require('../services/nudgeBuilder');
 
 const { calcHealthScore, healthLabel, topExpenseCategory, todayWAT } = require('../utils/formatter');
 const { calcMargin } = require('../utils/naira');
@@ -184,6 +186,35 @@ async function runDailySummary() {
  * Send WhatsApp reminder to users who haven't logged today.
  * Runs at 5:00 PM UTC = 6:00 PM WAT.
  */
+/**
+ * Build a persona-aware 6pm reminder for a user who hasn't logged today.
+ * Softer tone than the retention nudge — it's same-day, not re-engagement.
+ */
+function buildEveningReminder(firstName, persona, streak) {
+  const emoji   = persona.craft_emoji    || '📊';
+  const metric  = persona.key_metric     || 'daily profit';
+  const bizType = persona.business_type  || 'business';
+  const exAmt   = nairaShort(persona.example_amount || 30000);
+  const exExp   = nairaShort((persona.example_amount || 30000) * 0.3);
+  const exItem  = persona.example_expense || 'operations';
+
+  const s = parseInt(streak, 10) || 0;
+  const streakLine = s >= 3
+    ? `\n\n🔥 Your ${s}-day streak is on the line — one message keeps it alive.`
+    : s >= 1
+    ? `\n\n📈 Day ${s} — keep the habit going!`
+    : '';
+
+  return (
+    `${firstName} ${emoji}\n\n` +
+    `Have you logged today's ${bizType} numbers?\n\n` +
+    `Your *${metric}* for today is waiting to be recorded. Just send:\n` +
+    `_"made ${exAmt} today spent ${exExp} on ${exItem}"_\n\n` +
+    `I'll handle the full breakdown instantly. 📊` +
+    streakLine
+  );
+}
+
 async function runReminderJob() {
   console.log(`[Cron] 🔔 Reminder job started at ${new Date().toISOString()}`);
   try {
@@ -199,7 +230,19 @@ async function runReminderJob() {
       }
       try {
         const firstName = user.name.split(' ')[0];
-        await WhatsAppService.sendReminder(user.whatsapp_number, firstName, user.streak || 0);
+        const persona   = await getPersona(user).catch(() => null);
+
+        let msg;
+        if (persona) {
+          msg = buildEveningReminder(firstName, persona, user.streak || 0);
+        } else {
+          // Fallback if persona lookup fails
+          const s = parseInt(user.streak, 10) || 0;
+          const streakLine = s >= 3 ? `\n\n🔥 ${s}-day streak on the line — don't break it now!` : '';
+          msg = `Hey ${firstName} 👋 Have you logged today's numbers?\n\nJust send: "Made 50k, spent 15k on stock"\nI'll handle the rest. 📊${streakLine}`;
+        }
+
+        await WhatsAppService.sendMessage(user.whatsapp_number, msg);
         console.log(`[Cron] 🔔 Reminder sent to ${user.name}`);
       } catch (err) {
         console.error(`[Cron] Reminder failed for ${user.name}:`, err.message);
