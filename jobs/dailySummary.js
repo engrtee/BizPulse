@@ -22,14 +22,15 @@
 require('dotenv').config();
 const cron = require('node-cron');
 
-const UserModel        = require('../models/user');
-const TransactionModel = require('../models/transaction');
-const InventoryService = require('../services/inventory');
-const ClaudeService    = require('../services/claude');
-const EmailService     = require('../services/email');
-const WhatsAppService  = require('../services/whatsapp');
-const { getPersona }   = require('../services/personaEngine');
-const { nairaShort }   = require('../services/nudgeBuilder');
+const UserModel            = require('../models/user');
+const TransactionModel     = require('../models/transaction');
+const InventoryService     = require('../services/inventory');
+const ClaudeService        = require('../services/claude');
+const EmailService         = require('../services/email');
+const WhatsAppService      = require('../services/whatsapp');
+const { getPersona }       = require('../services/personaEngine');
+const { nairaShort }       = require('../services/nudgeBuilder');
+const ConfirmationService  = require('../services/confirmationService');
 
 const { calcHealthScore, healthLabel, topExpenseCategory, todayWAT } = require('../utils/formatter');
 const { calcMargin } = require('../utils/naira');
@@ -81,6 +82,16 @@ async function sendEveningNudge(user) {
  */
 async function processUser(user) {
   try {
+    // Feature 6: summary frequency gate
+    const freq = user.summary_frequency || 'daily';
+    if (freq === 'weekly') {
+      const dayOfWeek = new Date().toLocaleDateString('en-US', { timeZone: 'Africa/Lagos', weekday: 'short' });
+      if (dayOfWeek !== 'Sun') {
+        console.log(`[Cron] ⏭ Skipping ${user.name} (weekly summary, not Sunday)`);
+        return;
+      }
+    }
+
     const date      = todayWAT();
     const totals    = await TransactionModel.getDailyTotals(user.id, date);
     const breakdowns= await TransactionModel.getExpenseBreakdowns(user.id, date);
@@ -254,6 +265,44 @@ async function runReminderJob() {
 }
 
 // ── Schedule all jobs — fires automatically when this module is required ──
+
+// Every 30 minutes — expire stale pending entries (> 4h old)
+cron.schedule('*/30 * * * *', async () => {
+  try {
+    const expired = await ConfirmationService.expireOldEntries();
+    if (expired.length > 0) {
+      console.log(`[Cron] ⏰ Expired ${expired.length} pending entries`);
+    }
+  } catch (err) {
+    console.error('[Cron] Expiry job error:', err.message);
+  }
+});
+
+// Every 30 minutes — send 2h reminder for entries that haven't had one
+cron.schedule('*/30 * * * *', async () => {
+  try {
+    const pending = await ConfirmationService.getPendingNeedingReminder();
+    for (const entry of pending) {
+      try {
+        const parsedData = typeof entry.parsed_data === 'string'
+          ? JSON.parse(entry.parsed_data)
+          : entry.parsed_data;
+        const preview = ConfirmationService.buildConfirmationMessage(entry.entry_type, parsedData);
+        await WhatsAppService.sendMessage(entry.whatsapp_number,
+          `⏰ Hey ${entry.name.split(' ')[0]}, you still have a pending entry waiting for confirmation:\n\n${preview}\n\n` +
+          `Reply *YES* to log it or *EDIT* if something's wrong.`
+        );
+        await ConfirmationService.markReminderSent(entry.id);
+        console.log(`[Cron] ⏰ Confirmation reminder sent to ${entry.name}`);
+      } catch (e) {
+        console.error(`[Cron] Reminder failed for pending ${entry.id}:`, e.message);
+      }
+    }
+  } catch (err) {
+    console.error('[Cron] Confirmation reminder job error:', err.message);
+  }
+});
+console.log('[Cron] Pending entry expiry + 2h reminder scheduled (every 30 min).');
 
 // 6:00 AM WAT — morning coaching now handled by dedicated jobs/morningCoaching.js
 // (removed from here to avoid duplicate messages)

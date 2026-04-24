@@ -857,23 +857,23 @@
           <!-- Desktop stat row -->
           <div class="home-stats-row">
             <div class="stat-card">
-              <div class="stat-label">Today's Revenue</div>
+              <div class="stat-label">Sold Today</div>
               <div class="stat-value c-blue" id="ds-revenue">—</div>
-              <div class="stat-sub">Daily total</div>
+              <div class="stat-sub">Total cash in</div>
             </div>
             <div class="stat-card">
-              <div class="stat-label">Your Profit Today</div>
+              <div class="stat-label">Profit After Stock Cost</div>
               <div class="stat-value" id="ds-profit">—</div>
               <div class="stat-sub" id="ds-margin">—</div>
               <div id="ds-margin-explain" style="display:none;font-size:11px;color:var(--muted);margin-top:4px;line-height:1.4"></div>
             </div>
             <div class="stat-card">
-              <div class="stat-label">Biggest Cost</div>
+              <div class="stat-label">Biggest Expense</div>
               <div class="stat-value c-muted" style="font-size:20px" id="ds-expense">—</div>
-              <div class="stat-sub">Highest category</div>
+              <div class="stat-sub">Highest category today</div>
             </div>
             <div class="stat-card">
-              <div class="stat-label">Customers</div>
+              <div class="stat-label">Customers Served</div>
               <div class="stat-value c-navy" id="ds-customers">—</div>
               <div class="stat-sub">Daily total</div>
             </div>
@@ -881,6 +881,18 @@
 
           <!-- Plain English profit sentence (below stat cards) -->
           <div id="home-plain-english" style="display:none;font-size:14px;color:var(--text-sm);margin-bottom:16px;padding:12px 16px;background:var(--card);border-radius:10px;border:1px solid var(--border);line-height:1.5"></div>
+
+          <!-- Stock Status Panel -->
+          <div id="home-stock-panel" style="display:none;margin-bottom:20px">
+            <div class="card">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+                <div class="card-title" style="margin:0">📦 Stock Status</div>
+                <span onclick="switchTab('summary')" style="font-size:12px;color:var(--blue);cursor:pointer;font-weight:600">View all →</span>
+              </div>
+              <div id="home-stock-list" style="font-size:14px;line-height:2"></div>
+              <div id="home-stock-empty" style="font-size:14px;color:var(--muted);display:none">No stock logged yet. <span onclick="switchTab('entry')" style="color:var(--blue);cursor:pointer;font-weight:600">Log your opening stock →</span></div>
+            </div>
+          </div>
 
           <!-- Today's Insight (AI preview) -->
           <div class="card" style="margin-bottom:20px">
@@ -926,9 +938,9 @@
             </div>
             <div id="home-snapshot-data" style="display:none">
               <div class="metric-grid">
-                <div class="metric"><div class="metric-label">Revenue</div><div class="metric-value c-blue" id="snap-revenue">—</div></div>
+                <div class="metric"><div class="metric-label">Sold Today</div><div class="metric-value c-blue" id="snap-revenue">—</div></div>
                 <div class="metric"><div class="metric-label">Profit</div><div class="metric-value" id="snap-profit">—</div></div>
-                <div class="metric"><div class="metric-label">Top Expense</div><div class="metric-value c-muted" style="font-size:14px" id="snap-expense">—</div></div>
+                <div class="metric"><div class="metric-label">Biggest Expense</div><div class="metric-value c-muted" style="font-size:14px" id="snap-expense">—</div></div>
                 <div class="metric"><div class="metric-label">Customers</div><div class="metric-value c-navy" id="snap-customers">—</div></div>
               </div>
             </div>
@@ -1024,9 +1036,9 @@
             </div>
             <div id="summary-data" style="display:none">
               <div class="grid-3" style="gap:10px;margin-bottom:10px">
-                <div class="stat-card" style="padding:14px"><div class="stat-label">Revenue</div><div class="stat-value c-blue" id="sum-revenue" style="font-size:20px">—</div></div>
-                <div class="stat-card" style="padding:14px"><div class="stat-label">Expenses</div><div class="stat-value c-red" id="sum-expenses" style="font-size:20px">—</div></div>
-                <div class="stat-card" style="padding:14px"><div class="stat-label">Your Profit Today</div><div class="stat-value" id="sum-profit" style="font-size:20px">—</div></div>
+                <div class="stat-card" style="padding:14px"><div class="stat-label">Sold Today</div><div class="stat-value c-blue" id="sum-revenue" style="font-size:20px">—</div></div>
+                <div class="stat-card" style="padding:14px"><div class="stat-label">Stock Cost</div><div class="stat-value c-red" id="sum-expenses" style="font-size:20px">—</div></div>
+                <div class="stat-card" style="padding:14px"><div class="stat-label">Profit After Stock Cost</div><div class="stat-value" id="sum-profit" style="font-size:20px">—</div></div>
               </div>
               <div class="grid-3" style="gap:10px;margin-bottom:14px">
                 <div class="stat-card" style="padding:14px"><div class="stat-label">Margin</div><div class="stat-value c-gold" id="sum-margin" style="font-size:20px">—</div><div id="sum-margin-explain" style="display:none;font-size:11px;color:var(--muted);margin-top:4px;line-height:1.4"></div></div>
@@ -1071,6 +1083,12 @@
           <div class="card" id="sum-inventory-card" style="display:none;margin-bottom:20px">
             <div class="card-title">Your Stock</div>
             <div id="sum-inventory-list"></div>
+          </div>
+
+          <!-- Product Performance — Last 7 Days (hidden if no product data) -->
+          <div class="card" id="sum-product-perf-card" style="display:none;margin-bottom:20px">
+            <div class="card-title">Product Performance — Last 7 Days</div>
+            <div id="sum-product-perf-list"></div>
           </div>
 
           <!-- GROUP 6 — Your History -->
@@ -1129,6 +1147,15 @@
               <p style="font-size:14px;color:var(--muted);margin-bottom:16px">
                 You receive automatic daily summaries every evening at 7pm WAT. Request one anytime below.
               </p>
+              <div class="form-group">
+                <label class="form-label">Summary Frequency</label>
+                <select id="set-summary-freq" class="form-input">
+                  <option value="daily">Daily — every evening at 7pm</option>
+                  <option value="weekly">Weekly — Sunday evenings only</option>
+                </select>
+                <div style="font-size:12px;color:var(--muted);margin-top:4px">Weekly mode skips Mon–Sat and sends one summary on Sunday night</div>
+              </div>
+              <button class="btn btn-outline-blue btn-block" onclick="saveSummaryFrequency()" style="margin-bottom:10px">Save Frequency</button>
               <button class="btn btn-outline-blue btn-block" onclick="sendSummaryNow()">📩 Send Summary Now</button>
               <div id="set-summary-msg" class="msg"></div>
             </div>
@@ -1581,6 +1608,43 @@ async function loadHomeSnapshot() {
     sp.className   = 'metric-value ' + (parseFloat(s.profit) >= 0 ? 'c-green' : 'c-red');
     document.getElementById('snap-expense').textContent   = s.topExpense?.category || '—';
     document.getElementById('snap-customers').textContent = s.customers || 0;
+
+    // Stock status panel (non-blocking)
+    if (!demoMode && userId) loadHomeStockPanel(userId);
+  } catch(e) {}
+}
+
+async function loadHomeStockPanel(userId) {
+  try {
+    const res      = await fetch('/api/products/' + userId);
+    const data     = await res.json();
+    const products = (data.products || []).filter(p => parseFloat(p.total_ever_received) > 0);
+    const panel    = document.getElementById('home-stock-panel');
+    const list     = document.getElementById('home-stock-list');
+    const empty    = document.getElementById('home-stock-empty');
+    if (!panel) return;
+    if (!products.length) { panel.style.display = 'none'; return; }
+    panel.style.display = 'block';
+    empty.style.display = 'none';
+    list.innerHTML = products.slice(0, 5).map(p => {
+      const stock    = parseFloat(p.current_stock)      || 0;
+      const received = parseFloat(p.total_ever_received) || 0;
+      const velocity = parseFloat(p.velocity_per_day)   || 0;
+      let emoji = '🟢';
+      let label = stock.toLocaleString('en-NG') + ' ' + (p.unit || 'units');
+      if (stock === 0) {
+        emoji = '🔴'; label = 'Out of Stock';
+      } else if (velocity > 0 && stock / velocity <= 2) {
+        const d = Math.round(stock / velocity);
+        emoji = '🟡'; label = 'Low — ~' + d + ' day' + (d === 1 ? '' : 's') + ' left';
+      } else if (received > 0 && stock / received < 0.20) {
+        emoji = '🟡'; label = 'Low — ' + stock.toLocaleString('en-NG') + ' ' + (p.unit || 'units') + ' left';
+      }
+      return '<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border)">' +
+        '<span>' + emoji + ' <span style="font-weight:500">' + p.product_name + '</span></span>' +
+        '<span style="font-size:13px;color:var(--muted)">' + label + '</span>' +
+        '</div>';
+    }).join('');
   } catch(e) {}
 }
 
@@ -2010,6 +2074,32 @@ async function loadSummary() {
     } else if (invCard) {
       invCard.style.display = 'none';
     }
+
+    // Product Performance — Last 7 Days
+    const perfCard = document.getElementById('sum-product-perf-card');
+    const perfList = document.getElementById('sum-product-perf-list');
+    if (perfCard && !demoMode && userId) {
+      try {
+        const perfRes  = await fetch('/api/products/' + userId + '/performance');
+        const perfData = await perfRes.json();
+        const perfs    = (perfData.performance || []).filter(p => parseFloat(p.revenue_7d) > 0 || parseFloat(p.units_sold_7d) > 0);
+        if (perfs.length > 0) {
+          perfCard.style.display = 'block';
+          perfList.innerHTML =
+            '<div style="display:grid;grid-template-columns:1fr auto auto;gap:8px;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;padding:0 0 6px;border-bottom:1px solid var(--border)">' +
+              '<span>Product</span><span style="text-align:right">Units</span><span style="text-align:right">Revenue</span>' +
+            '</div>' +
+            perfs.map(p => {
+              const units = parseFloat(p.units_sold_7d) || 0;
+              return '<div style="display:grid;grid-template-columns:1fr auto auto;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);font-size:14px">' +
+                '<span style="font-weight:500">' + p.product_name + '</span>' +
+                '<span style="text-align:right;color:var(--muted)">' + units.toLocaleString('en-NG') + '</span>' +
+                '<span style="text-align:right;font-weight:700;color:var(--navy)">' + fmtNaira(p.revenue_7d) + '</span>' +
+              '</div>';
+            }).join('');
+        }
+      } catch(e) {}
+    }
   } catch(e) {}
 }
 
@@ -2046,6 +2136,8 @@ async function populateSettings() {
   if (spEl) spEl.value = currentUser.whatsapp_number || '';
   const waNum = document.getElementById('settings-wa-number');
   if (waNum) waNum.textContent = currentUser.whatsapp_number || '+2349128781426';
+  const freqEl = document.getElementById('set-summary-freq');
+  if (freqEl) freqEl.value = currentUser.summary_frequency || 'daily';
   // Data quality
   try {
     if (demoMode) {
@@ -2076,6 +2168,30 @@ async function saveSettings() {
     const res  = await fetch('/api/user/update', { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ userId, name: document.getElementById('set-name').value.trim(), email: document.getElementById('set-email').value.trim(), bizName: document.getElementById('set-biz-name').value.trim(), bizType: document.getElementById('set-biz-type').value, whatsappNumber: document.getElementById('set-phone')?.value.trim() || undefined }) });
     const data = await res.json();
     if (res.ok) { currentUser = data.user; updateUserUI(); showMsg(msg, 'success', '\u2705 Settings saved.'); }
+    else showMsg(msg, 'error', data.error || 'Failed to save.');
+  } catch(e) { showMsg(msg, 'error', 'Something went wrong.'); }
+}
+async function saveSummaryFrequency() {
+  const msg = document.getElementById('set-summary-msg');
+  if (demoMode) { showMsg(msg, 'error', '🔍 Demo mode — settings cannot be saved.'); return; }
+  if (!currentUser) return;
+  const userId = localStorage.getItem('bizpulse_user_id');
+  const freq   = document.getElementById('set-summary-freq')?.value || 'daily';
+  try {
+    const res  = await fetch('/api/user/update', {
+      method: 'PUT', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({
+        userId,
+        name:            currentUser.name,
+        email:           currentUser.email,
+        bizName:         currentUser.biz_name,
+        bizType:         currentUser.biz_type,
+        state:           currentUser.state,
+        summaryFrequency: freq,
+      })
+    });
+    const data = await res.json();
+    if (res.ok) { currentUser = data.user; showMsg(msg, 'success', '✅ Frequency updated.'); }
     else showMsg(msg, 'error', data.error || 'Failed to save.');
   } catch(e) { showMsg(msg, 'error', 'Something went wrong.'); }
 }

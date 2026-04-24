@@ -71,28 +71,36 @@ async function sendMessage(to, body) {
  * @param {string} firstName   User's first name
  * @param {object} data        { revenue, totalExpenses, profit, margin, customers, streak, topExpense }
  */
-async function sendEntryAck(to, firstName, { revenue, totalExpenses, profit, margin, customers, streak, topExpense, entryMethod }) {
+async function sendEntryAck(to, firstName, { revenue, totalExpenses, profit, margin, customers, streak, topExpense, entryMethod, stockSummary }) {
   const fmt = (n) => Number(n).toLocaleString('en-NG');
   const marginStr = `${parseFloat(margin).toFixed(1)}%`;
   const profitAbs = Math.abs(profit);
   const s = parseInt(streak, 10) || 1;
 
-  // Streak in header line
-  let streakHeader = '';
-  if (s === 1)    streakHeader = ' 🌱 Day 1 streak';
-  else            streakHeader = ` 🔥 Day ${s} streak`;
-
+  const streakHeader = s === 1 ? ' 🌱 Day 1 streak' : ` 🔥 Day ${s} streak`;
   const prefix = entryMethod === 'voice' ? '🎤 Voice note logged' : '✅ Logged';
+
+  // Stock lines — show per-product update if available
+  let stockLines = '';
+  if (Array.isArray(stockSummary) && stockSummary.length > 0) {
+    stockLines = '\n' + stockSummary.map(s =>
+      `${s.name}: ${s.stock} ${s.unit} remaining ${s.emoji}`
+    ).join('\n') + '\n';
+  }
+
+  const profitLine = profit >= 0
+    ? `Profit:    ₦${fmt(profitAbs)}`
+    : `Loss:      ₦${fmt(profitAbs)}`;
 
   const body =
     `${prefix} ${firstName}!${streakHeader}\n\n` +
     `Revenue:   ₦${fmt(revenue)}\n` +
     `Expenses:  ₦${fmt(totalExpenses)}\n` +
-    `Profit:    ${profit < 0 ? '-' : ''}₦${fmt(profitAbs)}\n` +
+    `${profitLine}\n` +
     `Margin:    ${marginStr}\n` +
-    (customers > 0 ? `\nCustomers today: ${customers}\n` : '\n') +
-    (topExpense ? `Top expense: ${topExpense.category}\n` : '') +
-    `\nYour full summary hits your inbox at 7pm 🎯`;
+    (customers > 0 ? `\nCustomers: ${customers}\n` : '') +
+    stockLines +
+    `\nFull breakdown in your inbox at 7pm 🎯`;
 
   return sendMessage(to, body);
 }
@@ -173,20 +181,23 @@ async function sendStockReply(to, items) {
 async function sendHelp(to) {
   const body =
     `📘 BizPulse Commands\n\n` +
-    `💰 Daily Sales:\n` +
-    `"sales 45000 rent 5000 stock 12000"\n` +
-    `"made 30k today, spent 10k on stock"\n\n` +
-    `📦 Inventory Received:\n` +
-    `"received 50 bags rice at 900 each"\n\n` +
-    `📦 Inventory Sold:\n` +
+    `📦 Set opening stock:\n` +
+    `"I have 20 oud oil, 15 rose, 5 musk"\n` +
+    `Or send a photo of your shelf\n\n` +
+    `📦 Stock received from supplier:\n` +
+    `"received 50 bags rice at 900 each"\n` +
+    `Or send a photo of the receipt\n\n` +
+    `📦 Stock sold:\n` +
     `"sold 12 bags rice today"\n\n` +
-    `🔍 Stock Check:\n` +
-    `"stock?" or "inventory?"\n\n` +
-    `👥 Customers:\n` +
-    `"customers 15" or "served 20 today"\n\n` +
+    `💰 Daily sales + expenses:\n` +
+    `"made 45k today, spent 10k on stock"\n\n` +
+    `🔍 Check stock levels:\n` +
+    `"stock?"\n\n` +
+    `📊 Buying calculator:\n` +
+    `Send a receipt photo with caption: "35% margin"\n\n` +
     `📊 Summary:\n` +
-    `"summary" or "report"\n\n` +
-    `Your daily summary email arrives at 7pm every evening. 🎯`;
+    `"summary" or "last 7 days"\n\n` +
+    `Your full breakdown hits your inbox at 7pm. 🎯`;
 
   return sendMessage(to, body);
 }
@@ -220,48 +231,52 @@ async function sendMorningBroadcast(to, firstName, bizName, quote, streak) {
  */
 async function sendEveningSummaryWhatsApp(to, firstName, summaryData, aiRec, lowStock = []) {
   const fmt  = (n) => Number(n || 0).toLocaleString('en-NG');
-  const { revenue, totalExpenses, profit, margin, customers, topExpense, date, inventory = [] } = summaryData;
+  const { revenue, totalExpenses, profit, margin, customers, topExpense, topProducts, date } = summaryData;
 
-  const profitLine = profit >= 0
-    ? `✅ Profit:    ₦${fmt(profit)}`
-    : `⚠️ Loss:      ₦${fmt(Math.abs(profit))}`;
-
-  const dateLabel = new Date(date).toLocaleDateString('en-NG', {
-    weekday: 'short', day: 'numeric', month: 'short', timeZone: 'Africa/Lagos',
-  });
-
-  // AI insight: prefer the risk sentence (most urgent), fall back to first action
-  const insight = (aiRec?.risk) || (aiRec?.actions?.[0]) || 'Keep tracking — consistency is what builds profitable businesses.';
-
-  // Stock section — show all items with counts, flag low/out-of-stock
-  let stockSection = '';
-  if (inventory.length > 0) {
-    const lowStockIds = new Set((lowStock || []).map(i => i.id));
-    const stockLines = inventory.map(item => {
-      const bal = parseFloat(item.current_balance);
-      const isOut = bal === 0;
-      const isLow = lowStockIds.has(item.id);
-      const flag = isOut ? ' ❌' : isLow ? ' ⚠️' : '';
-      return `  • ${item.item_name}: ${bal.toLocaleString('en-NG')} units${flag}`;
-    });
-    stockSection = `\n📦 *Stock levels:*\n${stockLines.join('\n')}\n`;
-    if (lowStock.length > 0) {
-      stockSection += `(⚠️ = low stock, ❌ = out of stock)\n`;
+  // Lead with top selling product if available
+  let topLine = '';
+  if (Array.isArray(topProducts) && topProducts.length > 0) {
+    const top = topProducts[0];
+    topLine = `Top seller: ${top.product_name} — ${top.units_sold || '?'} ${top.unit || 'units'} · ₦${fmt(top.revenue_today)}\n`;
+    if (topProducts.length > 1) {
+      topLine += topProducts.slice(1).map(p =>
+        `${p.product_name} — ${p.units_sold || '?'} ${p.unit || 'units'} · ₦${fmt(p.revenue_today)}`
+      ).join('\n') + '\n';
     }
+    topLine += '\n';
+  } else if (topExpense) {
+    topLine = `Top cost: ${topExpense.category} · ₦${fmt(topExpense.amount)}\n\n`;
   }
 
+  const profitLine = profit >= 0
+    ? `Profit: ₦${fmt(profit)} · Margin: ${parseFloat(margin).toFixed(1)}%`
+    : `Loss: ₦${fmt(Math.abs(profit))} · Margin: ${parseFloat(margin).toFixed(1)}%`;
+
+  // Stock status for any low/critical items
+  let stockNote = '';
+  if (lowStock && lowStock.length > 0) {
+    const alerts = lowStock.map(i => {
+      const bal = parseFloat(i.current_balance || 0);
+      return bal === 0
+        ? `📦 ${i.item_name} — OUT OF STOCK`
+        : `📦 ${i.item_name} — ${bal} units left (restock soon)`;
+    });
+    stockNote = '\n' + alerts.join('\n') + '\n';
+  }
+
+  // One specific action from AI
+  const action = (aiRec?.actions?.[0]) || (aiRec?.risk) || null;
+
   const body =
-    `📊 *${firstName}, here's your ${dateLabel} summary*\n\n` +
-    `Revenue:    ₦${fmt(revenue)}\n` +
-    `Expenses:   ₦${fmt(totalExpenses)}\n` +
+    `📊 *${firstName}, today's summary*\n\n` +
+    topLine +
+    `Revenue: ₦${fmt(revenue)}\n` +
+    `Stock cost: ₦${fmt(totalExpenses)}\n` +
     `${profitLine}\n` +
-    `Margin:     ${parseFloat(margin).toFixed(1)}%\n` +
-    (customers > 0 ? `Customers:  ${customers}\n` : '') +
-    (topExpense ? `Top cost:   ${topExpense.category} (₦${fmt(topExpense.amount)})\n` : '') +
-    stockSection +
-    `\n💡 *Insight:*\n${insight}\n\n` +
-    `❓ Ask me anything: "Is my margin good?", "Should I raise prices?", "Show me last 7 days"\n\n` +
-    `Full report 👉 https://mybizpulse.app`;
+    (customers > 0 ? `Customers: ${customers}\n` : '') +
+    stockNote +
+    (action ? `\n${action}\n` : '') +
+    `\nFull report 👉 mybizpulse.app`;
 
   return sendMessage(to, body);
 }
@@ -275,28 +290,106 @@ async function sendEveningReminder(to, firstName, streak) {
 }
 
 /**
- * Send the first-time welcome + command guide to a new user.
+ * Send the first-time welcome to a new user.
  * Fires once — the moment they send their very first WhatsApp message.
  */
 async function sendOnboarding(to, firstName) {
   const body =
-    `Welcome to BizPulse, ${firstName}! 🎉\n\n` +
-    `I'm your business assistant. Just message me your daily numbers and I'll track everything for you.\n\n` +
-    `Here's what you can send me:\n\n` +
-    `💰 Daily sales + expenses:\n` +
-    `"Made 45k today, spent 10k on stock and 5k transport"\n\n` +
-    `📦 Received stock:\n` +
-    `"Received 50 bags rice at 900 each"\n\n` +
-    `📦 Sold stock:\n` +
-    `"Sold 12 bags rice today"\n\n` +
-    `🔍 Check your stock:\n` +
-    `"stock?" or "inventory?"\n\n` +
-    `📊 Get your full report:\n` +
-    `"summary" or "report"\n\n` +
-    `❓ See all commands:\n` +
-    `"help"\n\n` +
-    `Your full summary email arrives every evening at 7pm. 🎯\n\n` +
-    `Ready when you are — send me today's numbers! 💪`;
+    `Your BizPulse account is live, ${firstName}.\n\n` +
+    `I track your stock, your sales, and your profit — all from WhatsApp. No apps to download.\n\n` +
+    `First: tell me what stock you have right now.\n` +
+    `• Voice note: _"I have 20 oud oil, 15 rose, 5 musk"_\n` +
+    `• Photo of your shelf or stock list\n` +
+    `• Or just type it out\n\n` +
+    `Once I know your stock, I'll alert you before anything runs out.\n\n` +
+    `After that, message me your daily sales. I'll send you a full profit breakdown every evening.\n\n` +
+    `Ready when you are. 🚀`;
+
+  return sendMessage(to, body);
+}
+
+/**
+ * Send the opening stock request message.
+ * Called after onboarding if opening_stock_logged is still false.
+ * Personalised by biz_type if available.
+ */
+async function sendOpeningStockRequest(to, firstName, bizType) {
+  const b = (bizType || '').toLowerCase();
+  let example = '"I have [product] [quantity], [product] [quantity]"';
+  let emoji = '📦';
+
+  if (/fragrance|perfume|oil|scent/i.test(b)) {
+    example = '"I have 20 oud oil, 15 rose, 5 musk oil"';
+    emoji = '🧴';
+  } else if (/retail|provision|fmcg|store|shop/i.test(b)) {
+    example = '"I have 50 indomie, 30 peak milk, 20 cabin, 40 eva water"';
+    emoji = '🏪';
+  } else if (/fashion|cloth|tailor|fabric|ankara/i.test(b)) {
+    example = '"I have 40 yards ankara, 20 yards lace, 30 yards george"';
+    emoji = '👗';
+  } else if (/food|restaurant|bakery|cook/i.test(b)) {
+    example = '"I have 10 bags rice, 5 litres palm oil, 20 cartons eggs"';
+    emoji = '🍲';
+  } else if (/beauty|hair|salon|nail|makeup/i.test(b)) {
+    example = '"I have 15 wigs, 10 relaxer packs, 20 hair cream"';
+    emoji = '💅';
+  }
+
+  const body =
+    `I need your current stock before I can watch anything for you. ${emoji}\n\n` +
+    `Voice note, photo of your shelf, or type:\n${example}\n\n` +
+    `One message. That's all it takes to switch on your stock alerts.`;
+
+  return sendMessage(to, body);
+}
+
+/**
+ * Send the morning stock briefing (Message 6).
+ * Called by morningCoaching.js when opening_stock_logged = true.
+ */
+async function sendMorningStockBriefing(to, firstName, bizEmoji, products, lastUpdateDaysAgo) {
+  if (!products || products.length === 0) return;
+
+  const lines = products.map(p => {
+    const stock    = parseFloat(p.current_stock) || 0;
+    const velocity = parseFloat(p.velocity_per_day) || 0;
+    let emoji = '🟢';
+    let daysNote = '';
+
+    if (stock === 0) {
+      emoji = '🔴';
+      daysNote = ' · OUT OF STOCK';
+    } else if (velocity > 0) {
+      const daysLeft = stock / velocity;
+      if (daysLeft < 1)  { emoji = '🔴'; daysNote = ` · less than 1 day left`; }
+      else if (daysLeft < 3) { emoji = '🟡'; daysNote = ` · ~${Math.round(daysLeft)} days left`; }
+    } else if (stock < 5) {
+      emoji = '🟡';
+    }
+
+    return `${emoji} ${p.product_name} — ${stock} ${p.unit || 'units'}${daysNote}`;
+  });
+
+  const staleness = lastUpdateDaysAgo >= 2
+    ? `\n⚠️ Last update: ${lastUpdateDaysAgo} day${lastUpdateDaysAgo === 1 ? '' : 's'} ago. If you've sold or restocked since then, send me the update.\n`
+    : '';
+
+  // Find most urgent item for the action line
+  const critical = products.find(p => {
+    const s = parseFloat(p.current_stock) || 0;
+    const v = parseFloat(p.velocity_per_day) || 0;
+    return s === 0 || (v > 0 && s / v < 1);
+  });
+  const actionLine = critical
+    ? `Reorder ${critical.product_name} today — you'll sell through before close.` +
+      (critical.last_purchase_price ? ` Last purchase: ₦${Number(critical.last_purchase_price).toLocaleString('en-NG')}.` : '')
+    : `Log today's sales whenever you're ready. 📊`;
+
+  const body =
+    `Morning ${firstName}! ${bizEmoji}\n\n` +
+    `Your stock now:\n${lines.join('\n')}\n` +
+    staleness +
+    `\n${actionLine}`;
 
   return sendMessage(to, body);
 }
@@ -313,4 +406,18 @@ async function sendNotRegistered(to) {
   return sendMessage(to, body);
 }
 
-module.exports = { sendMessage, sendEntryAck, sendMilestone, sendStockReply, sendHelp, sendNotRegistered, sendOnboarding, sendReminder, sendMorningBroadcast, sendEveningReminder, sendEveningSummaryWhatsApp };
+module.exports = {
+  sendMessage,
+  sendEntryAck,
+  sendMilestone,
+  sendStockReply,
+  sendHelp,
+  sendNotRegistered,
+  sendOnboarding,
+  sendOpeningStockRequest,
+  sendMorningStockBriefing,
+  sendReminder,
+  sendMorningBroadcast,
+  sendEveningReminder,
+  sendEveningSummaryWhatsApp,
+};

@@ -353,11 +353,13 @@ router.get('/summary/latest', async (req, res) => {
 // ─────────────────────────────────────────────
 router.put('/user/update', async (req, res) => {
   try {
-    const { userId, name, email, bizName, bizType, state, whatsappNumber } = req.body;
+    const { userId, name, email, bizName, bizType, state, whatsappNumber, summaryFrequency } = req.body;
     if (!userId) return res.status(400).json({ error: 'userId is required.' });
 
     const normalizedPhone = whatsappNumber ? normalizePhone(whatsappNumber) : undefined;
-    const updated = await UserModel.update(userId, { name, email, bizName, bizType, state, whatsappNumber: normalizedPhone });
+    const validFrequencies = ['daily', 'weekly'];
+    const freq = validFrequencies.includes(summaryFrequency) ? summaryFrequency : undefined;
+    const updated = await UserModel.update(userId, { name, email, bizName, bizType, state, whatsappNumber: normalizedPhone, summaryFrequency: freq });
     res.json({ success: true, user: updated });
   } catch (err) {
     console.error('[API] /user/update error:', err.message);
@@ -665,6 +667,95 @@ router.get('/test/evening-reminder', async (req, res) => {
   } catch (err) {
     console.error('[Test] evening-reminder error:', err.message);
     res.status(500).json({ error: err.message, detail: err?.response?.data });
+  }
+});
+
+// ─────────────────────────────────────────────
+// GET /api/products/:userId
+// All active products with health status + velocity.
+// ─────────────────────────────────────────────
+router.get('/products/:userId', async (req, res) => {
+  try {
+    const userId = parseInt(req.params.userId, 10);
+    const ProductModel = require('../models/product');
+    const products = await ProductModel.getWithHealth(userId);
+    res.json({ success: true, products });
+  } catch (err) {
+    console.error('[API] /products error:', err.message);
+    res.status(500).json({ error: 'Could not load products.' });
+  }
+});
+
+// ─────────────────────────────────────────────
+// GET /api/products/:userId/performance
+// 7d and 30d revenue + units sold per product.
+// ─────────────────────────────────────────────
+router.get('/products/:userId/performance', async (req, res) => {
+  try {
+    const userId = parseInt(req.params.userId, 10);
+    const ProductModel = require('../models/product');
+    const performance = await ProductModel.getPerformance(userId);
+    res.json({ success: true, performance });
+  } catch (err) {
+    console.error('[API] /products/performance error:', err.message);
+    res.status(500).json({ error: 'Could not load product performance.' });
+  }
+});
+
+// ─────────────────────────────────────────────
+// GET /api/products/:userId/alerts
+// Products with low stock or out-of-stock status.
+// ─────────────────────────────────────────────
+router.get('/products/:userId/alerts', async (req, res) => {
+  try {
+    const userId = parseInt(req.params.userId, 10);
+    const ProductModel = require('../models/product');
+    const products = await ProductModel.getWithHealth(userId);
+
+    const alerts = products
+      .map(p => {
+        const stock    = parseFloat(p.current_stock)      || 0;
+        const received = parseFloat(p.total_ever_received) || 0;
+        const velocity = parseFloat(p.velocity_per_day)   || 0;
+
+        let status = 'HEALTHY';
+        let daysRemaining = null;
+
+        if (stock === 0) {
+          status = 'OUT_OF_STOCK';
+        } else if (velocity > 0) {
+          daysRemaining = stock / velocity;
+          if (daysRemaining <= 2)   status = 'CRITICAL';
+          else if (daysRemaining <= 5) status = 'LOW';
+        } else if (received > 0 && stock / received < 0.20) {
+          status = 'LOW';
+        }
+
+        return { ...p, status, daysRemaining };
+      })
+      .filter(p => p.status !== 'HEALTHY');
+
+    res.json({ success: true, alerts });
+  } catch (err) {
+    console.error('[API] /products/alerts error:', err.message);
+    res.status(500).json({ error: 'Could not load stock alerts.' });
+  }
+});
+
+// ─────────────────────────────────────────────
+// GET /api/stock-movements/:userId
+// Last 20 product transactions (stock movements log).
+// ─────────────────────────────────────────────
+router.get('/stock-movements/:userId', async (req, res) => {
+  try {
+    const userId = parseInt(req.params.userId, 10);
+    const limit  = parseInt(req.query.limit, 10) || 20;
+    const ProductModel = require('../models/product');
+    const movements = await ProductModel.getRecentMovements(userId, limit);
+    res.json({ success: true, movements });
+  } catch (err) {
+    console.error('[API] /stock-movements error:', err.message);
+    res.status(500).json({ error: 'Could not load stock movements.' });
   }
 });
 

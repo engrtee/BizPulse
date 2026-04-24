@@ -66,26 +66,38 @@ Message: "${message}"
 Classify as EXACTLY ONE of these types:
 
 1. daily_entry — they are logging sales, revenue, income, or expenses for the day
-   Return: { "type": "daily_entry", "revenue": number, "totalExpenses": number, "expenseBreakdown": {category: amount}, "customers": number, "notes": string }
+   Return: { "type": "daily_entry", "revenue": number, "totalExpenses": number, "expenseBreakdown": {category: amount}, "expenseItems": [ { "name": string, "amount": number } ], "customers": number, "notes": string, "products": [ { "product_name": string, "transaction_type": "sale"|"stock_in", "quantity": number|null, "unit_price": number|null, "total_amount": number, "unit": string, "channel": "retail"|"wholesale" } ] }
+   expenseBreakdown groups expenses by category (e.g. {"Stock / Inventory": 8000}) — used for charts.
+   expenseItems lists each individual expense separately (e.g. [{"name":"Tomatoes","amount":6000},{"name":"Palm oil","amount":2000}]) — used for confirmation display.
+   If no expenses, set expenseBreakdown to {} and expenseItems to [].
+   The products array must list every named item with a quantity or price. Include stock received in the same message too (transaction_type: "stock_in"). Set products to [] if no specific products are named.
+   channel: set to "wholesale" if the message contains keywords like "wholesale", "bulk", "bulk order", "for traders", "market price", "trade price". Otherwise set to "retail".
 
 2. inventory_in — they received, bought, or restocked physical goods
-   Return: { "type": "inventory_in", "item": string, "quantity": number, "unitPrice": number, "totalValue": number }
+   Return: { "type": "inventory_in", "item": string, "quantity": number, "unitPrice": number, "totalValue": number, "products": [ { "product_name": string, "transaction_type": "stock_in", "quantity": number, "unit_price": number|null, "total_amount": number, "unit": string, "channel": "retail" } ] }
 
 3. inventory_out — they sold specific inventory items (not revenue logging)
-   Return: { "type": "inventory_out", "item": string, "quantity": number }
+   Return: { "type": "inventory_out", "item": string, "quantity": number, "products": [ { "product_name": string, "transaction_type": "sale", "quantity": number, "unit_price": number|null, "total_amount": number|null, "unit": string, "channel": "retail"|"wholesale" } ] }
 
-4. customer_log — they are only reporting a customer count, with no financial figures
+4. opening_stock — they are declaring what stock they currently have (not a sale or purchase)
+   Trigger phrases: "I have", "I get", "my stock is", "currently have", "na this I get",
+   "for my shop I have", "I have in my store", "my products are"
+   Return: { "type": "opening_stock", "products": [ { "product_name": string, "quantity": number|null, "unit": string } ] }
+   Example: "I have 20 oud oil 15 rose and 5 musk" → opening_stock with 3 products
+   Do NOT classify as opening_stock if the message also contains prices in a sale/purchase context.
+
+5. customer_log — they are only reporting a customer count, with no financial figures
    Return: { "type": "customer_log", "count": number, "notes": string }
 
-5. greeting — hello, good morning, how are you, general pleasantries
+6. greeting — hello, good morning, how are you, general pleasantries
    Return: { "type": "greeting", "message": string }
    The message must be a warm, encouraging reply (2-3 sentences max) as their personal business assistant. Reference their business type or name naturally.
 
-6. question — asking for advice, explanation, or help about their business, BizPulse features, or finances
+7. question — asking for advice, explanation, or help about their business, BizPulse features, or finances
    Return: { "type": "question", "message": string }
    The message must be a helpful, specific answer (2-3 sentences max) grounded in Nigerian business context.
 
-7. unknown — completely off-topic, cannot be classified
+8. unknown — completely off-topic, cannot be classified
    Return: { "type": "unknown" }
 
 Expense categories to use: Stock / Inventory, Rent, Staff Wages, Transport, Utilities, Marketing, Packaging, Equipment, Food & Supplies, Professional Fees, Data / Internet, Uncategorised
@@ -149,6 +161,50 @@ Recognize as REVENUE when:
 
 In these cases: revenue = total provided by user (or calculated from qty × price)
 
+════ PRODUCT EXTRACTION RULES ════
+Always populate the products array for daily_entry, inventory_in, and inventory_out.
+
+For each distinct product mentioned:
+- product_name: the item name as the user wrote it (do NOT normalise — keep raw)
+- transaction_type: "sale" if they sold it, "stock_in" if they received/bought it
+- quantity: number of units (null if not mentioned)
+- unit_price: price per unit (null if not mentioned)
+- total_amount: quantity × unit_price, or the total stated by user
+- unit: "bags", "cartons", "pieces", "yards", "bottles", "units" etc. (default "units")
+
+Examples:
+- "sold 3 bags of rice at 25k each" → { product_name: "rice", transaction_type: "sale", quantity: 3, unit_price: 25000, total_amount: 75000, unit: "bags" }
+- "received 10 ankara at 4500 each" → { product_name: "ankara", transaction_type: "stock_in", quantity: 10, unit_price: 4500, total_amount: 45000, unit: "yards" }
+- "indomie 80 carton 3800 each = 304000" → { product_name: "indomie", transaction_type: "sale", quantity: 80, unit_price: 3800, total_amount: 304000, unit: "cartons" }
+- "sold shoes for 15k" (no quantity) → { product_name: "shoes", transaction_type: "sale", quantity: null, unit_price: null, total_amount: 15000, unit: "units" }
+
+If only total revenue is mentioned with no product breakdown (e.g. "made 45k today"), return products: [].
+
+════ INGREDIENT vs RESALE CONTEXT ════
+The same item (e.g. tomatoes, palm oil, yam) can be either:
+  a) An ingredient/raw material the user buys to make something else (→ put in expenseItems, NOT products)
+  b) A finished good the user buys and resells directly (→ put in products as stock_in)
+
+Use the business type to decide:
+
+FOOD / RESTAURANT business type:
+  Tomatoes, pepper, palm oil, onions, seasoning, crayfish, stock fish,
+  flour, eggs, butter, sugar, vegetable oil, spices → INGREDIENTS (expenseItems only)
+  The finished dish (pepper soup, fried rice, jollof, shawarma, cake) → products (sale)
+
+RETAIL / FMCG / WHOLESALE business type:
+  The same tomatoes, palm oil, yam, rice, flour → RESALE GOODS (products as stock_in)
+  Because a market trader buys to resell, not to cook.
+
+FASHION / TAILORING business type:
+  Thread, buttons, zips, interfacing, lining → raw materials (expenseItems only)
+  Ankara, lace, george (if bought to resell as fabric) → products (stock_in)
+  Finished gown, dress, suit → products (sale)
+
+When biz_type is ambiguous or not listed above: use context clues.
+If the user says "I use [item] to make [other item]" → ingredient (expenseItems).
+If the user says "I sell [item]" or quantity × price implies resale → product.
+
 ════ GENERAL RULES ════
 - All amounts must be numbers. "k" = thousands (30k = 30000). "m" = millions (1.5m = 1500000).
 - Natural language is normal: "Today was good, made 45k from customers, paid 10k stock and 3k transport" → daily_entry
@@ -176,6 +232,14 @@ In these cases: revenue = total provided by user (or calculated from qty × pric
         ? parseFloat(((parsed.profit / parsed.revenue) * 100).toFixed(2))
         : 0;
       parsed.customers     = parseInt(parsed.customers, 10) || 0;
+      parsed.products      = Array.isArray(parsed.products)      ? parsed.products      : [];
+      parsed.expenseItems  = Array.isArray(parsed.expenseItems)  ? parsed.expenseItems  : [];
+    }
+    if (parsed.type === 'inventory_in' || parsed.type === 'inventory_out') {
+      parsed.products = Array.isArray(parsed.products) ? parsed.products : [];
+    }
+    if (parsed.type === 'opening_stock') {
+      parsed.products = Array.isArray(parsed.products) ? parsed.products : [];
     }
 
     return parsed;
@@ -325,4 +389,90 @@ Return ONLY valid JSON — no markdown, no explanation:
   }
 }
 
-module.exports = { parseWithAI, generateRecommendation, transcribeAudio };
+/**
+ * Analyse a photo (shelf, invoice, handwritten list) using Gemini Vision.
+ * Returns a structured product array with confidence levels.
+ *
+ * @param {Buffer} imageBuffer  Raw image bytes downloaded from Meta
+ * @param {string} mimeType     e.g. 'image/jpeg'
+ * @param {object} user         User record (for biz_type context)
+ * @param {string} intent       'opening_stock' | 'stock_in' | 'sale'
+ * @returns {{ products: Array, rawResponse: string }}
+ */
+async function analyzePhoto(imageBuffer, mimeType, user, intent = 'opening_stock') {
+  const intentDesc = {
+    opening_stock: 'declaring current stock levels',
+    stock_in:      'logging stock just received from a supplier',
+    sale:          'recording sales made today',
+  }[intent] || 'declaring current stock levels';
+
+  const prompt = `You are analyzing a photo from a Nigerian small business owner.
+They run a "${user.biz_type || 'retail'}" business and are ${intentDesc}.
+
+The photo may show:
+A) A shelf or storage area with products
+B) A delivery receipt or invoice
+C) A handwritten stock list
+D) Products laid out on a table or floor
+
+For shelf/storage photos:
+  Identify all clearly visible products. Estimate quantities only if clearly countable.
+
+For receipts and invoices:
+  Extract all line items: product name, quantity, unit, price.
+  Handle handwritten text carefully. Nigerian currency is ₦ (naira).
+
+For handwritten stock lists:
+  Extract all product names and quantities listed.
+
+Nigerian products to recognise:
+  Oud oil, Rose oil, Musk oil, Amber oil, Sandalwood oil,
+  Ankara fabric, Lace fabric,
+  Indomie noodles, Peak Milk, Cowbell Milk, Golden Morn, Caprisonne,
+  Garri, Rice, Beans, Palm oil, Groundnut oil, Tomatoes, Pepper, Onions,
+  Cabin Biscuits, Digestive biscuits, Crackers
+
+Return ONLY valid JSON array — no explanation, no markdown:
+[
+  {
+    "product": string,
+    "quantity": number or null,
+    "unit": string or null,
+    "price": number or null,
+    "confidence": "high" | "medium" | "low",
+    "notes": string or null
+  }
+]
+
+confidence:
+  "high"   — clearly visible text/label, quantity countable
+  "medium" — partially visible or slightly unclear
+  "low"    — guessed or very unclear
+
+If the image is too dark, blurry, or contains no product information: return []`;
+
+  try {
+    const model = getClient().getGenerativeModel({ model: 'gemini-2.5-flash' });
+    const result = await model.generateContent([
+      {
+        inlineData: {
+          mimeType: mimeType || 'image/jpeg',
+          data: imageBuffer.toString('base64'),
+        },
+      },
+      { text: prompt },
+    ]);
+    const text   = result.response.text().trim();
+    const clean  = text.replace(/^```json\s*/i, '').replace(/```$/i, '').trim();
+    const parsed = JSON.parse(clean);
+    return {
+      products: Array.isArray(parsed) ? parsed : [],
+      rawResponse: clean,
+    };
+  } catch (err) {
+    console.error('[Gemini] analyzePhoto error:', err.message);
+    return { products: [], rawResponse: '' };
+  }
+}
+
+module.exports = { parseWithAI, generateRecommendation, transcribeAudio, analyzePhoto };

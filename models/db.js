@@ -190,6 +190,176 @@ async function initDb() {
     ('retention_day7', 'variant_c', '[name], 7 days. A full week of your business ran without any record. That data is gone. But today is recoverable. Send your numbers now.')
   ON CONFLICT (message_type, variant_name) DO NOTHING`, 'SEED message_variants');
 
+  // ── Task 1: Opening stock flag on users ──────────────────────────────
+  await run(`ALTER TABLE users ADD COLUMN IF NOT EXISTS opening_stock_logged    BOOLEAN   DEFAULT false`, 'ADD opening_stock_logged');
+  await run(`ALTER TABLE users ADD COLUMN IF NOT EXISTS opening_stock_logged_at TIMESTAMPTZ`,             'ADD opening_stock_logged_at');
+
+  // ── Task 1: Pending entries (parse confirmation before writing to DB) ─
+  await run(`CREATE TABLE IF NOT EXISTS pending_entries (
+    id               SERIAL PRIMARY KEY,
+    user_id          INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    entry_type       VARCHAR(50) NOT NULL,
+    parsed_data      JSONB NOT NULL,
+    original_message TEXT NOT NULL,
+    status           VARCHAR(20) DEFAULT 'pending',
+    reminder_sent    BOOLEAN DEFAULT false,
+    created_at       TIMESTAMPTZ DEFAULT NOW(),
+    confirmed_at     TIMESTAMPTZ,
+    expires_at       TIMESTAMPTZ DEFAULT NOW() + INTERVAL '4 hours'
+  )`, 'CREATE pending_entries');
+  await run(`CREATE INDEX IF NOT EXISTS idx_pending_user_status ON pending_entries(user_id, status, created_at DESC)`, 'INDEX pending_entries');
+
+  // ── Task 2: Products ──────────────────────────────────────────────────
+  await run(`CREATE TABLE IF NOT EXISTS products (
+    id                     SERIAL PRIMARY KEY,
+    user_id                INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    product_name           VARCHAR(200) NOT NULL,
+    product_name_normalized VARCHAR(200) NOT NULL,
+    unit                   VARCHAR(50) DEFAULT 'units',
+    last_purchase_price    NUMERIC(12,2),
+    last_sale_price        NUMERIC(12,2),
+    current_stock          NUMERIC(12,2) DEFAULT 0,
+    total_ever_received    NUMERIC(12,2) DEFAULT 0,
+    is_active              BOOLEAN DEFAULT true,
+    created_at             TIMESTAMPTZ DEFAULT NOW(),
+    updated_at             TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(user_id, product_name_normalized)
+  )`, 'CREATE products');
+  await run(`CREATE INDEX IF NOT EXISTS idx_products_user ON products(user_id, is_active)`, 'INDEX products');
+
+  // ── Task 2: Product transactions ──────────────────────────────────────
+  await run(`CREATE TABLE IF NOT EXISTS product_transactions (
+    id               SERIAL PRIMARY KEY,
+    user_id          INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    product_id       INTEGER REFERENCES products(id) ON DELETE CASCADE,
+    transaction_type VARCHAR(20) NOT NULL,
+    quantity         NUMERIC(12,2),
+    unit_price       NUMERIC(12,2),
+    total_amount     NUMERIC(12,2),
+    transaction_date DATE NOT NULL DEFAULT CURRENT_DATE,
+    daily_entry_id   INTEGER,
+    notes            VARCHAR(500),
+    created_at       TIMESTAMPTZ DEFAULT NOW()
+  )`, 'CREATE product_transactions');
+  await run(`CREATE INDEX IF NOT EXISTS idx_pt_user_date    ON product_transactions(user_id, transaction_date DESC)`,   'INDEX pt_user_date');
+  await run(`CREATE INDEX IF NOT EXISTS idx_pt_product_date ON product_transactions(product_id, transaction_date DESC)`, 'INDEX pt_product');
+
+  // ── Task 2: Stock alerts sent (one alert per product per day) ─────────
+  await run(`CREATE TABLE IF NOT EXISTS stock_alerts_sent (
+    id         SERIAL PRIMARY KEY,
+    user_id    INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    product_id INTEGER REFERENCES products(id) ON DELETE CASCADE,
+    alert_date DATE NOT NULL DEFAULT CURRENT_DATE,
+    alert_type VARCHAR(50),
+    created_at TIMESTAMPTZ DEFAULT NOW()
+  )`, 'CREATE stock_alerts_sent');
+  await run(`CREATE UNIQUE INDEX IF NOT EXISTS idx_stock_alert_daily ON stock_alerts_sent(user_id, product_id, alert_date, alert_type)`, 'UNIQUE INDEX stock_alerts_sent');
+
+  // ── Task 3: Product name dictionary ──────────────────────────────────
+  await run(`CREATE TABLE IF NOT EXISTS product_name_dictionary (
+    id          SERIAL PRIMARY KEY,
+    variant     VARCHAR(200) NOT NULL UNIQUE,
+    normalised  VARCHAR(200) NOT NULL,
+    category    VARCHAR(100),
+    created_at  TIMESTAMPTZ DEFAULT NOW()
+  )`, 'CREATE product_name_dictionary');
+
+  await run(`INSERT INTO product_name_dictionary (variant, normalised, category) VALUES
+    -- Perfume / fragrance oils
+    ('oud',             'Oud oil',         'fragrance'),
+    ('ud oil',          'Oud oil',         'fragrance'),
+    ('oudh',            'Oud oil',         'fragrance'),
+    ('aoud',            'Oud oil',         'fragrance'),
+    ('rose oil',        'Rose oil',        'fragrance'),
+    ('rose water oil',  'Rose oil',        'fragrance'),
+    ('musk oil',        'Musk oil',        'fragrance'),
+    ('white musk',      'Musk oil',        'fragrance'),
+    ('musk',            'Musk oil',        'fragrance'),
+    ('amber oil',       'Amber oil',       'fragrance'),
+    ('ambergris',       'Amber oil',       'fragrance'),
+    ('sandalwood',      'Sandalwood oil',  'fragrance'),
+    ('sandal oil',      'Sandalwood oil',  'fragrance'),
+    ('lavender oil',    'Lavender oil',    'fragrance'),
+    -- Fashion / fabric
+    ('ankara',          'Ankara fabric',   'fashion'),
+    ('ankara fabric',   'Ankara fabric',   'fashion'),
+    ('ankara cloth',    'Ankara fabric',   'fashion'),
+    ('ankara print',    'Ankara fabric',   'fashion'),
+    ('lace',            'Lace fabric',     'fashion'),
+    ('lace fabric',     'Lace fabric',     'fashion'),
+    ('lace material',   'Lace fabric',     'fashion'),
+    ('french lace',     'Lace fabric',     'fashion'),
+    ('thread',          'Thread',          'fashion'),
+    ('sewing thread',   'Thread',          'fashion'),
+    ('buttons',         'Buttons',         'fashion'),
+    ('button',          'Buttons',         'fashion'),
+    ('zip',             'Zipper',          'fashion'),
+    ('zipper',          'Zipper',          'fashion'),
+    -- Food / groceries
+    ('indomie',         'Indomie',         'food'),
+    ('noodles',         'Indomie',         'food'),
+    ('indomie noodles', 'Indomie',         'food'),
+    ('rice',            'Rice',            'food'),
+    ('bag of rice',     'Rice',            'food'),
+    ('beans',           'Beans',           'food'),
+    ('black eyed beans','Beans',           'food'),
+    ('garri',           'Garri',           'food'),
+    ('gari',            'Garri',           'food'),
+    ('palm oil',        'Palm oil',        'food'),
+    ('red oil',         'Palm oil',        'food'),
+    ('groundnut oil',   'Vegetable oil',   'food'),
+    ('veg oil',         'Vegetable oil',   'food'),
+    ('vegetable oil',   'Vegetable oil',   'food'),
+    ('tomatoes',        'Tomatoes',        'food'),
+    ('fresh tomatoes',  'Tomatoes',        'food'),
+    ('pepper',          'Pepper',          'food'),
+    ('tatashe',         'Pepper',          'food'),
+    ('rodo',            'Pepper',          'food'),
+    ('onions',          'Onions',          'food'),
+    ('onion',           'Onions',          'food'),
+    -- Beverages / dairy
+    ('peak',            'Peak Milk',       'beverage'),
+    ('peak milk',       'Peak Milk',       'beverage'),
+    ('peak tin',        'Peak Milk',       'beverage'),
+    ('cowbell',         'Cowbell Milk',    'beverage'),
+    ('cow bell',        'Cowbell Milk',    'beverage'),
+    ('cowbell milk',    'Cowbell Milk',    'beverage'),
+    ('milo',            'Milo',            'beverage'),
+    ('milo tin',        'Milo',            'beverage'),
+    ('bournvita',       'Bournvita',       'beverage'),
+    ('capri',           'Caprisonne',      'beverage'),
+    ('caprisonne',      'Caprisonne',      'beverage'),
+    ('capri sun',       'Caprisonne',      'beverage'),
+    ('eva water',       'Eva Water',       'beverage'),
+    ('eva',             'Eva Water',       'beverage'),
+    ('swan water',      'Swan Water',      'beverage'),
+    -- Biscuits / snacks
+    ('cabin',           'Cabin Biscuits',  'snacks'),
+    ('cabin biscuit',   'Cabin Biscuits',  'snacks'),
+    ('digestive',       'Digestive',       'snacks'),
+    ('crackers',        'Crackers',        'snacks'),
+    -- Golden Morn
+    ('golden morn',     'Golden Morn',     'food'),
+    ('goldenmorn',      'Golden Morn',     'food')
+  ON CONFLICT (variant) DO NOTHING`, 'SEED product_name_dictionary');
+
+  // ── Task 3: Media processing log ─────────────────────────────────────
+  await run(`CREATE TABLE IF NOT EXISTS media_log (
+    id            SERIAL PRIMARY KEY,
+    user_id       INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    media_type    VARCHAR(20) NOT NULL,
+    intent        VARCHAR(50),
+    parse_success BOOLEAN,
+    product_count INTEGER DEFAULT 0,
+    created_at    TIMESTAMPTZ DEFAULT NOW()
+  )`, 'CREATE media_log');
+
+  // ── Feature 6: Summary frequency preference ───────────────────────────
+  await run(`ALTER TABLE users ADD COLUMN IF NOT EXISTS summary_frequency VARCHAR(20) DEFAULT 'daily'`, 'ADD summary_frequency');
+
+  // ── Feature 8: Wholesale channel on product transactions ──────────────
+  await run(`ALTER TABLE product_transactions ADD COLUMN IF NOT EXISTS channel VARCHAR(20) DEFAULT 'retail'`, 'ADD pt.channel');
+
   console.log('✅ Database tables ready.');
 }
 

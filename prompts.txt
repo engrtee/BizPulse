@@ -1,0 +1,1190 @@
+Read CLAUDE.md completely before starting.
+Show each file before changing it.
+Preserve the entry aggregation INSERT-only rule.
+
+TASK: Add voice note and photo processing 
+to BizPulse for opening stock setup and 
+ongoing stock logging.
+
+CONTEXT:
+Nigerian traders are extremely comfortable 
+with voice notes on WhatsApp. Asking them 
+to type 20 to 30 product names during 
+onboarding creates too much friction and 
+causes drop-off before they ever log 
+their first entry.
+
+Voice notes and photos remove this barrier 
+entirely. A trader speaks or snaps and 
+BizPulse handles the rest.
+
+This feature serves two purposes:
+1. Opening stock onboarding — new user 
+   declares their full stock in one 
+   voice note or photo
+2. Ongoing logging — any user can send 
+   a voice note or photo to log 
+   stock received or sales made
+
+PART 1 — Opening stock onboarding flow
+
+Every new user who registers at 
+mybizpulse.app needs to log their 
+opening stock before BizPulse can 
+track anything meaningful for them.
+
+Add a flag to the users table:
+opening_stock_logged BOOLEAN DEFAULT false
+opening_stock_logged_at TIMESTAMP
+
+After the welcome message BizPulse 
+sends this onboarding prompt:
+
+"Before I can watch your stock for you 
+I need to know what you currently have.
+
+You can tell me three ways:
+
+🎤 *Voice note* — just say it out loud:
+'I have 20 bottles oud oil, 
+15 rose oil, 5 musk oil...'
+
+📸 *Photo* — snap your shelf or 
+products and send it
+
+✍️ *Type it* — 
+'I have 20 oud oil 15 rose 5 musk'
+
+Which is easiest? Send whenever ready. 📦"
+
+Once opening stock is confirmed and logged:
+Set opening_stock_logged = true
+Set opening_stock_logged_at = NOW()
+
+Only begin morning briefings after 
+opening_stock_logged = true.
+
+If user tries to log a sale before 
+opening stock is logged send:
+
+"Before I track your sales I need to 
+know your starting stock.
+
+Send me what you have right now — 
+voice note, photo, or just type it.
+
+Example: 'I have 20 oud oil 15 rose 5 musk'"
+
+PART 2 — Voice note processing
+
+Trigger: user sends an audio message 
+(content type audio/ogg or audio/mpeg)
+
+Processing flow:
+
+Step 1 — Receive audio via WhatsApp webhook
+Extract media_id from message object
+
+Step 2 — Download audio from Meta:
+GET https://graph.facebook.com/v18.0/
+{media_id}
+Headers: Authorization Bearer {token}
+Returns: download URL
+
+Download the audio file to temporary 
+storage
+
+Step 3 — Send to Gemini multimodal:
+
+System prompt:
+"You are processing a voice note from 
+a Nigerian small business owner. 
+They may speak in English, Nigerian 
+Pidgin, Yoruba-inflected English, 
+Igbo-inflected English, or Hausa-
+inflected English.
+
+They are either:
+A) Declaring their current stock 
+   (what they have right now)
+B) Logging stock they just received 
+   from a supplier
+C) Logging sales they just made
+
+Listen carefully and extract every 
+product mentioned with:
+- Product name (normalise to standard 
+  English where possible)
+- Quantity (number + unit)
+- Price per unit if mentioned
+- Transaction type: 
+  opening_stock / stock_in / sale
+
+Nigerian product names to watch for:
+Oud oil, rose oil, musk oil, 
+ankara fabric, lace fabric,
+Indomie noodles, Peak Milk, 
+Cowbell milk, Golden Morn,
+Caprisonne, Cabin biscuits,
+garri, rice, beans, palm oil,
+tomatoes, pepper, onions
+
+Return ONLY valid JSON array.
+No explanation. No markdown.
+No text before or after the JSON.
+
+Format:
+[{
+  product: string,
+  quantity: number or null,
+  unit: string or null,
+  price: number or null,
+  type: opening_stock|stock_in|sale
+}]
+
+If you cannot extract any clear 
+product information return: []"
+
+Step 4 — Parse JSON response
+If array is empty: send cannot 
+understand message (see Part 5)
+
+If array has items: continue to 
+confirmation step
+
+Step 5 — Apply Nigerian product 
+name normalisation (same dictionary 
+as product fuzzy matching in 
+Option C prompt)
+
+Step 6 — Send confirmation message:
+
+"Here is what I heard 🎤
+
+[For opening_stock type:]
+📦 *Your current stock:*
+- [Product]: [quantity] [unit]
+- [Product]: [quantity] [unit]
+[repeat for all products]
+
+Reply *YES* to set this as your 
+starting stock ✅
+Reply *EDIT* if something is wrong ❌
+Or send a correction"
+
+[For stock_in type:]
+"📦 *Stock received:*
+- [Product]: [quantity] [unit] 
+  at ₦[price] each
+  Total cost: ₦[amount]
+[repeat]
+
+Reply *YES* to log ✅
+Reply *EDIT* if wrong ❌"
+
+[For sale type:]
+"💰 *Sales logged:*
+- [Product]: [quantity] at ₦[price]
+  Revenue: ₦[amount]
+[repeat]
+
+Reply *YES* to log ✅
+Reply *EDIT* if wrong ❌"
+
+Step 7 — On YES:
+If opening_stock: set current_stock 
+for each product in products table
+Set opening_stock_logged = true
+
+If stock_in or sale: log as 
+product_transaction (same flow 
+as text-based entries)
+
+PART 3 — Photo processing
+
+Trigger: user sends an image
+Content type: image/jpeg or image/png
+
+Determine intent from caption:
+Caption contains "stock"/"received"/
+"delivery"/"new stock"/"I get" 
+→ treat as stock receipt
+
+Caption contains "my products"/
+"what I have"/"my stock" or 
+no caption + new user 
+→ treat as opening stock declaration
+
+Caption contains "sold"/"sales" 
+→ treat as sale entry
+
+No caption + existing user 
+→ treat as opening stock update 
+  and ask to confirm
+
+Processing flow:
+
+Step 1 — Receive image via webhook
+Extract media_id
+
+Step 2 — Download from Meta media endpoint
+
+Step 3 — Send to Gemini Vision:
+
+System prompt:
+"You are analyzing a photo from a 
+Nigerian small business owner.
+
+The photo may show:
+A) A shelf or storage area with products
+B) A delivery receipt or invoice
+C) A handwritten stock list
+D) Products on a table or floor
+
+For shelf/storage photos:
+Identify all clearly visible products.
+Estimate quantities only if clearly 
+countable. Mark uncertain items.
+
+For receipts and invoices:
+Extract all line items including 
+product name, quantity, unit, price.
+Handle handwritten text carefully.
+Nigerian currency is naira (₦ or N).
+
+For handwritten stock lists:
+Extract all product names and 
+quantities listed.
+
+Return ONLY valid JSON array.
+No explanation. No markdown.
+
+Format:
+[{
+  product: string,
+  quantity: number or null,
+  unit: string or null,
+  price: number or null,
+  confidence: high|medium|low,
+  notes: string or null
+}]
+
+Mark confidence as:
+high — clearly visible and readable
+medium — visible but partially unclear
+low — guessed or unclear
+
+If image is too dark, blurry, or 
+contains no product information: 
+return []"
+
+Step 4 — Parse JSON response
+
+Step 5 — Apply product normalisation
+
+Step 6 — Send confirmation with 
+confidence indicators:
+
+"Here is what I can see in your photo 📸
+
+✅ Clear:
+- [Product]: [quantity] [unit]
+  at ₦[price]
+[repeat for high confidence items]
+
+❓ Not sure about these:
+- [Product]?: [quantity] [unit]
+[repeat for low confidence items]
+
+Reply *YES* to log everything ✅
+Reply *EDIT* to make changes ❌
+Or tell me what I got wrong"
+
+Step 7 — On YES:
+Log all items regardless of confidence.
+Log was confirmed by user so 
+responsibility is theirs.
+
+PART 4 — Cannot understand fallback
+
+When voice note or photo returns 
+empty array or processing fails:
+
+"I could not make that out clearly.
+
+For voice notes — try:
+Speak closer to your phone mic in 
+a quieter place. Say each product 
+clearly: 'I have twenty bottles 
+oud oil, fifteen rose oil'
+
+For photos — try:
+Better lighting, get closer to 
+the products or receipt, make sure 
+labels are visible.
+
+Or just type it:
+'I have 20 oud oil 15 rose 5 musk'
+
+That works too 😊"
+
+PART 5 — Nigerian product dictionary
+
+Create product_name_dictionary table:
+
+CREATE TABLE product_name_dictionary (
+  id SERIAL PRIMARY KEY,
+  variant VARCHAR(200) NOT NULL,
+  normalised VARCHAR(200) NOT NULL,
+  category VARCHAR(100),
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+Populate with initial entries:
+
+Perfume/fragrance oils:
+oud, ud oil, oudh, aoud → Oud oil
+rose oil, rose water oil → Rose oil
+musk oil, white musk, musk → Musk oil
+amber oil, ambergris → Amber oil
+sandalwood, sandal oil → Sandalwood oil
+lavender oil → Lavender oil
+
+Fashion:
+ankara, ankara fabric, ankara cloth, 
+  ankara print → Ankara fabric
+lace, lace fabric, lace material,
+  french lace → Lace fabric
+thread, sewing thread → Thread
+buttons, button → Buttons
+zip, zipper → Zipper
+
+Food/groceries:
+indomie, noodles, indomie noodles → Indomie
+rice, bag of rice → Rice
+beans, black eyed beans → Beans
+garri, gari → Garri
+palm oil, red oil → Palm oil
+groundnut oil, veg oil → Vegetable oil
+tomatoes, fresh tomatoes → Tomatoes
+pepper, tatashe, rodo → Pepper
+onions, onion → Onions
+
+Beverages/dairy:
+peak, peak milk, peak tin → Peak Milk
+cowbell, cow bell → Cowbell Milk
+milo, milo tin → Milo
+bournvita → Bournvita
+capri, caprisonne, capri sun → Caprisonne
+eva water, eva → Eva Water
+swan water → Swan Water
+
+Biscuits/snacks:
+cabin, cabin biscuit → Cabin Biscuits
+digestive, digestive biscuit → Digestive
+crackers → Crackers
+
+This table is expandable — Claude Code 
+should add new entries as new product 
+types appear in user messages.
+
+PART 6 — Data freshness warning
+
+After opening stock is logged track 
+when it was last updated.
+
+If no stock transactions in 48 hours 
+add this to stock check replies:
+
+"⚠️ Last updated [X] hours ago.
+Log today's sales to keep this accurate."
+
+If no transactions in 72+ hours:
+
+"⚠️ Your stock is 3+ days out of date.
+Send today's numbers to update.
+Stale numbers could mislead your 
+reorder decisions."
+
+PART 7 — Admin tracking
+
+Add to /admin dashboard:
+
+Voice note and photo section:
+- Voice notes received this week
+- Voice notes successfully parsed (%)
+- Voice notes failed to parse (%)
+- Photos received this week  
+- Photos successfully parsed (%)
+- Photos failed to parse (%)
+- Users who completed opening stock 
+  via voice note vs photo vs text
+- Average time from registration to 
+  opening stock logged (minutes)
+- Most common failed product names
+  (to improve dictionary)
+
+SHOW ME BEFORE IMPLEMENTING:
+
+1. The full onboarding conversation 
+   rendered as a WhatsApp chat for 
+   a perfume oil seller — from welcome 
+   message through opening stock 
+   voice note confirmation to 
+   first stock update
+
+2. A voice note confirmation message 
+   showing 4 products extracted 
+   (oud, rose, musk, amber oil)
+
+3. A photo confirmation message showing 
+   3 high confidence and 2 low 
+   confidence products from a 
+   shelf photo
+
+4. The cannot understand fallback 
+   message rendered as it would 
+   appear in WhatsApp
+
+I must approve all four before any 
+code is written.
+
+Do not change any existing text 
+message parsing logic.
+Voice note and photo processing 
+is purely additive.
+All existing WhatsApp message 
+handling continues working exactly 
+as before.\\\
+
+
+Read CLAUDE.md completely before starting.
+Show each file before changing it.
+Preserve the entry aggregation INSERT-only rule.
+Do not change any backend logic or 
+database queries in this prompt.
+Frontend restructure only.
+
+TASK: Restructure the BizPulse web dashboard 
+to reflect the stock intelligence product 
+positioning.
+
+BizPulse is no longer a financial tracker.
+It is a stock and sales intelligence tool 
+for Nigerian traders who buy and sell 
+physical goods daily.
+
+The dashboard must communicate this from 
+the first second a trader opens it.
+
+Design system unchanged:
+Navy #0F2744, Blue #1A56A4, 
+Green #1A7A4A, Red #C53030, 
+Gold #B7791F, Background #F0F4FA
+Fonts: DM Serif Display (headings), 
+DM Sans (body)
+Golden rule: would a tired market trader 
+in Oshodi understand this at 8pm on 
+their phone? If no — simplify it.
+
+HOME PAGE RESTRUCTURE:
+
+Remove: current layout
+Build: five sections in this exact order
+
+SECTION 1 — Four metric cards
+
+Card 1: "Sold Today"
+Value: today's total revenue (₦)
+Subtext: "[X] products sold"
+If no data: "Nothing logged yet today"
+
+Card 2: "Today's Profit"
+Value: today's profit (₦)
+Subtext: "After stock costs"
+Color: green if profit > 0
+       red if loss
+If no cost data logged:
+Subtext: "Log stock costs to see this"
+
+Card 3: "Stock Alerts"
+Value: number of products needing attention
+Subtext: "[X] running low or out of stock"
+Color: red if any out of stock
+       gold if any low stock
+       green if all healthy
+       grey if no stock data yet
+
+Card 4: "Top Seller Today"
+Value: name of top revenue product today
+Subtext: "₦[amount] — [margin]% margin"
+If no product data:
+Value: "Log products to see this"
+Subtext: "e.g. 'sold ankara 15k lace 8k'"
+
+SECTION 2 — One line profit summary
+
+Keep existing plain English sentence 
+but update format:
+
+If stock cost data exists:
+"You sold ₦[revenue] today. 
+Stock cost: ₦[cost]. 
+You kept ₦[profit]."
+
+If no stock cost data:
+"You made ₦[revenue] today. 
+Log your stock receipts to see 
+your real profit per product."
+
+If no data at all today:
+"Nothing logged today yet. 
+Send your numbers on WhatsApp 
+to see your daily picture here."
+
+SECTION 3 — Stock status panel (NEW)
+
+Title: "Your stock right now"
+
+Show up to 5 products sorted by urgency:
+🔴 [Product] — Out of stock
+🔴 [Product] — Less than 1 day left
+🟡 [Product] — [X] days remaining
+🟢 [Product] — Healthy ([X] units)
+
+Below list:
+"Send 'stock?' on WhatsApp for full update 📱"
+
+If no stock data:
+Show grey placeholder card:
+"No stock logged yet.
+
+Send this on WhatsApp to start:
+'received [product] [qty] at [price] each'
+
+Example:
+'received 20 oud oil at 3500 each'"
+
+SECTION 4 — Product performance table (NEW)
+
+Title: "Today's products"
+
+Table columns:
+Product | Sold | Revenue | Margin | Stock left
+
+Sort by revenue descending.
+Maximum 5 rows shown.
+Link below: "See all products →" 
+→ goes to Summary Products tab
+
+Margin column:
+Show % if both purchase and sale 
+price are known for this product
+Show "—" if not enough data yet
+
+Stock left column:
+Show number + unit + health emoji
+🔴 if critical/out
+🟡 if low
+🟢 if healthy
+⚪ if unknown
+
+If fewer than 3 product transactions:
+Hide table entirely.
+Show prompt card instead:
+
+"📦 See which products make you 
+the most money.
+
+Mention product names when you log:
+'sold oud oil 5 bottles 8k each,
+sold rose oil 2 bottles 6k each'
+
+BizPulse will rank them by profit 
+automatically."
+
+SECTION 5 — Recent activity
+
+Title: "Recent activity"
+(renamed from "Last 5 days")
+
+Keep existing functionality.
+Show last 5 days with date, 
+revenue, and profit/loss.
+
+SUMMARY PAGE RESTRUCTURE:
+
+Add three tabs at top of Summary page.
+Tab 1 is default (shown when page opens).
+
+TAB 1 — Stock
+
+Four sections:
+
+Section A — Traffic light overview
+Three coloured stat boxes in a row:
+🔴 [X] out of stock
+🟡 [X] running low  
+🟢 [X] healthy
+
+Section B — Full stock table
+All products sorted by urgency 
+(critical first, healthy last)
+
+Columns:
+Product | Current stock | Days left | 
+Last buy price | Status
+
+Days left calculation:
+= current_stock / avg_daily_sales (7 day)
+Round to 1 decimal
+If no recent sales show: "No sales data"
+
+Status column shows coloured badge:
+🔴 Reorder now (< 1 day)
+🟡 Reorder soon (1-3 days)
+🟢 Healthy (3+ days)
+⚪ Unknown (no velocity data)
+
+Section C — Reorder intelligence
+
+Auto-generated paragraph below table:
+
+If critical/low items exist:
+"Based on your sales rate:
+- Reorder [product] today — 
+  [X] left, selling [Y] per day
+- Reorder [product] within [X] days — 
+  [Y] left at [Z] per day
+At your last prices: 
+₦[calculated reorder cost]"
+
+If all healthy:
+"All your stock looks healthy.
+Your next reorder decisions 
+will appear here as stock 
+levels drop."
+
+Section D — Stock movement log
+
+Title: "Stock movements"
+Last 20 stock_in and sale 
+product_transactions in reverse order:
+
+[Time] — Sold [qty] [product] (-[qty])
+[Time] — Received [qty] [product] (+[qty])
+
+TAB 2 — Products
+
+Four sections:
+
+Section A — Performance ranking
+
+Title: "Your products ranked by margin"
+
+Table:
+Rank | Product | Margin | 7-day revenue | 
+30-day revenue | Trend
+
+Sort by margin % descending.
+
+Trend column:
+↑ if this week revenue > last week
+↓ if this week revenue < last week
+→ if within 10% of last week
+
+Margin color:
+Green if > 50%
+Gold if 30-50%
+Red if < 30%
+
+Section B — AI insight card
+
+One specific recommendation based 
+on actual product data.
+
+Format:
+"💡 [Product] insight
+
+[One specific observation about 
+their top or bottom performer]
+
+[One specific recommended action]"
+
+Example:
+"💡 Oud oil insight
+
+Oud oil is your highest volume product 
+but sandalwood has better margin (78% vs 71%).
+
+Consider increasing your next sandalwood 
+order to maximise profit per naira spent."
+
+Section C — Margin comparison
+
+Simple horizontal bar chart.
+One bar per product.
+Bar length = margin percentage.
+Color coded by margin level.
+Label shows product name and % on bar.
+
+Section D — Products to review
+
+Show only products meeting this criteria:
+- Margin below 30% OR
+- Revenue declining for 14+ consecutive days
+
+For each flagged product show:
+"⚠️ [Product] — [X]% margin
+[Specific observation]
+Options: raise price / find cheaper 
+supplier / reduce next order"
+
+If no products flagged:
+"No products flagged for review.
+Keep logging to build more data."
+
+TAB 3 — Finances
+
+Move all existing Summary page content here:
+- Revenue/expenses/profit cards
+- Month vs last month comparison  
+- Expense breakdown bar chart
+- Entry history
+
+Add at top: period selector toggle
+Today | This week | This month | Last month
+
+Add below month comparison:
+Profit trend line chart
+X axis: dates in selected period
+Y axis: daily profit
+Simple line, no fill
+Color: green if trending up
+       red if trending down
+
+NAVIGATION UPDATE:
+
+Mobile bottom navigation:
+Remove: Home | Daily Entry | Summary | Settings
+Add: Home | Stock | Products | Settings
+
+Stock tab → Summary page Stock tab
+Products tab → Summary page Products tab
+Settings → unchanged
+
+Daily Entry moves to floating action button:
+Fixed position bottom right of every page
+Green circle button (#1A7A4A)
+White plus icon
+Label: "Log entry"
+Tapping opens the existing Daily Entry page
+
+Desktop sidebar navigation:
+Same changes as mobile.
+Replace Daily Entry with Stock and Products.
+Add floating Log Entry button.
+
+EMPTY STATES:
+
+Every section with no data must show 
+a specific actionable prompt.
+
+No stock data empty state:
+Card with grey border, light background:
+"📦 Start tracking your stock
+
+Send this on WhatsApp:
+'received [product] [qty] at [price] each'
+
+Example for a perfume seller:
+'received 20 oud oil at 3500 each'"
+
+No product sales empty state:
+"🏆 See your best sellers
+
+Mention products by name when logging:
+'sold oud oil 5 bottles 8k each'
+
+BizPulse ranks them by profit 
+automatically."
+
+No financial data empty state:
+"💰 See your profit here
+
+Log today's sales on WhatsApp:
+'sold [product] [qty] at [price]'
+
+Your daily profit appears here 
+within seconds."
+
+TAGLINE UPDATE:
+
+Current: "Financial OS for Nigerian SMEs"
+
+New: "Know your stock. Know your profit."
+
+Update this tagline everywhere it appears:
+- Sidebar/header in web app
+- Browser tab title
+- Registration page
+- Any meta tags
+
+SHOW ME BEFORE IMPLEMENTING:
+
+1. Home page wireframe — all five sections, 
+   desktop and mobile layout
+
+2. Summary Stock tab — full stock table 
+   with sample data for perfume oil 
+   seller (oud, rose, musk, amber, 
+   sandalwood — mix of red yellow green)
+
+3. Summary Products tab — ranking table 
+   with AI insight card for same seller
+
+4. Summary Finances tab — showing 
+   period selector and profit trend line
+
+5. Empty state home page — brand new 
+   user who has not logged anything
+
+6. Mobile navigation — new bottom bar 
+   with floating log entry button
+
+I must approve all six before any 
+code is written.
+
+Do not change any backend API endpoints.
+Do not change any database queries.
+Do not change any WhatsApp logic.
+Frontend and navigation only.
+All existing data continues to 
+display correctly — just reorganised.
+
+
+Read CLAUDE.md completely before starting.
+Show each file before changing it.
+Preserve the entry aggregation INSERT-only rule.
+
+TASK: Replace the current evening retention 
+nudge with a morning stock briefing system.
+
+CONTEXT:
+BizPulse is now a stock intelligence tool 
+not a financial habit tracker. The product 
+delivers operational value before the 
+trader's day starts — not after it ends.
+
+A morning message showing a trader their 
+stock position before they open their shop 
+is more valuable than an evening message 
+asking them to remember what they sold.
+
+The morning briefing is proactive and 
+operational. It tells traders what they 
+need to know to run their business today.
+
+PART 1 — Morning briefing schedule
+
+Send at 7:30am WAT every day.
+
+Only send to users where:
+opening_stock_logged = true
+AND user has at least one product 
+with stock data
+
+Do NOT send to:
+- Users with no stock data at all
+- Users who have been inactive 
+  for more than 30 days
+
+PART 2 — Morning briefing content
+
+Build the message dynamically based 
+on each user's actual stock data.
+
+Morning briefing format:
+
+"Good morning [first_name] [business_emoji] 📦
+
+*Your stock this morning:*
+
+[For each product sorted by urgency:]
+🔴 [Product]: Out of stock — reorder today
+🔴 [Product]: [X] left — less than 1 day
+🟡 [Product]: [X] left — [Y] days remaining
+🟢 [Product]: [X] left — healthy
+
+[If any critical/low stock items:]
+*Action needed today:*
+Reorder [product1] and [product2] 
+before your first customer arrives.
+
+[If all stock healthy:]
+*All good this morning* ✅
+Stock levels are healthy.
+
+[Data freshness check:]
+[If last log was yesterday:]
+"Updated yesterday. Log today's 
+sales to keep this accurate."
+
+[If last log was 2+ days ago:]
+"⚠️ Last updated [X] days ago.
+Your actual stock may be lower 
+than shown here."
+
+Log today's sales as you go:
+'sold [product] [qty] at [price]'
+
+mybizpulse.app 📊"
+
+Business emoji by type:
+Fashion: 👗
+Food/Restaurant: 🍲
+Retail: 🏪
+Perfume/Beauty: 💎
+Photography: 📸
+Online Business: 💻
+Agriculture: 🌾
+Manufacturing: 🏭
+Default: 📦
+
+PART 3 — Data freshness indicator
+
+The morning briefing must always 
+show when stock was last updated.
+
+Calculate: hours since last 
+product_transaction for this user
+
+If < 24 hours: 
+"Updated [X] hours ago"
+No warning needed
+
+If 24-48 hours:
+"Updated yesterday"
+Add: "Log today's sales to keep 
+this current"
+
+If 48-72 hours:
+"⚠️ 2 days since last update"
+Add: "Your actual stock may be 
+lower than shown"
+
+If 72+ hours:
+"⚠️ [X] days since last update"
+Add: "These numbers may not 
+reflect recent sales. 
+Update before confirming orders."
+
+PART 4 — Morning briefing for 
+new users with no stock data
+
+If opening_stock_logged = false:
+Do NOT send morning briefing.
+Instead send this one-time message 
+at 8am after registration day:
+
+"Good morning [name]! 👋
+
+Ready to start tracking your stock?
+
+Tell me what you currently have — 
+voice note, photo, or just type it.
+
+Example:
+'I have 20 oud oil 15 rose 5 musk'
+
+Once I know your starting stock 
+I will brief you every morning 
+before your day starts. 📦"
+
+Only send this once. If no response 
+after 3 days send reminder:
+
+"[name], your morning stock briefing 
+is waiting.
+
+Just tell me what stock you have 
+right now and I will take it from there.
+
+Voice note is easiest — just speak 
+your products out loud and send. 🎤"
+
+PART 5 — Evening profit summary
+
+Keep the 7pm summary but update 
+its purpose.
+
+The 7pm summary is no longer a 
+retention nudge. It is an end-of-day 
+performance review.
+
+Only send to users who logged 
+at least one entry today.
+
+Do NOT send a 7pm summary to 
+users who did not log today.
+The morning briefing handles 
+inactive users — not the evening.
+
+Updated 7pm summary format:
+
+"[Name]'s end of day 📊
+[Date]
+
+*Today's performance:*
+🏆 Top seller: [product] 
+   ₦[revenue] — [margin]% margin
+
+💰 Today's profit: ₦[profit]
+   Revenue: ₦[revenue]
+   Stock cost: ₦[stock_cost]
+
+*Stock update after today's sales:*
+🔴 [Product]: [qty] left — reorder tomorrow
+🟡 [Product]: [qty] left — watch this
+🟢 [Product]: [qty] left — healthy
+
+*Tomorrow:*
+[One specific action based on data]
+Example: 'Reorder musk oil before 
+you open — you have less than 
+half a day of stock left'
+
+Full report: mybizpulse.app 📱"
+
+PART 6 — Retention nudge update
+
+The old retention nudge system 
+sent messages to inactive users 
+at day 3, 5, 7, 14.
+
+Replace with this new logic:
+
+The morning briefing IS the daily 
+engagement mechanism for active users.
+
+For inactive users who have stock data 
+but have not logged in 2+ days:
+
+Add staleness warning to their 
+morning briefing (already in Part 3).
+Do not send a separate nudge.
+
+For inactive users who have been 
+completely silent for 7+ days:
+
+Day 7 — one re-engagement message:
+
+"[Name] [emoji] — your stock briefing 
+has been going out every morning 
+but your numbers are [X] days old.
+
+Your [product] stock may be getting 
+low — I cannot tell without your sales.
+
+Send today's numbers:
+'sold [product] [qty]'
+
+Or check your stock: 'stock?'"
+
+Day 14 — final re-engagement:
+
+"[Name] — it has been 2 weeks.
+
+Your last logged stock may no longer 
+be accurate. One quick update and 
+your morning briefings will be 
+relevant again.
+
+Send: 'stock update' and I will 
+walk you through it."
+
+After day 14: stop all outbound 
+messages to this user except 
+the morning briefing.
+Never message more than once per day.
+
+PART 7 — Conversation window optimisation
+
+Check before every morning briefing:
+Did this user send a message 
+in the last 23 hours?
+
+If YES: send within their free window.
+Cost: ₦0
+
+If NO: this is a business-initiated 
+conversation.
+Cost: approximately $0.05
+
+Track in message_log:
+window_type: free or paid
+
+Add to admin dashboard:
+Morning briefings sent today: [X]
+  Free (within user window): [X] ([Y]%)
+  Paid (business initiated): [X] ([Y]%)
+Estimated cost today: ₦[X]
+Estimated monthly cost at 
+current rate: ₦[X]
+
+PART 8 — Cron job setup
+
+Schedule: 7:30am WAT daily
+(WAT = UTC+1, so 6:30am UTC)
+
+Cron expression: 30 6 * * *
+
+Processing order:
+1. Get all users with opening_stock_logged = true
+2. For each user get their stock data
+3. Build personalised message
+4. Check conversation window
+5. Send message
+6. Log in message_log
+
+Processing order for 7pm summary:
+Cron expression: 0 18 * * *
+(6pm UTC = 7pm WAT)
+
+1. Get users who logged today
+2. Build end of day summary
+3. Send only to today's active users
+
+SHOW ME BEFORE IMPLEMENTING:
+
+1. Morning briefing for perfume oil 
+   seller with mixed stock health:
+   - Musk oil: 2 bottles (critical)
+   - Oud oil: 8 bottles (low — 2 days)
+   - Rose oil: 34 bottles (healthy)
+   - Amber oil: 12 bottles (healthy)
+   Last log: yesterday
+
+2. Morning briefing for same seller 
+   when all stock is healthy
+
+3. Morning briefing with 3-day 
+   staleness warning
+
+4. Evening 7pm summary for fashion 
+   trader who sold ankara and lace 
+   today with one low stock alert
+
+5. Day 7 re-engagement message for 
+   inactive retail shop owner
+
+I must approve all five before 
+any code is written.
+
+Do not delete the existing 7pm 
+cron job — modify it.
+Do not remove any existing 
+message templates — update them.
+The morning briefing is a new 
+cron job added alongside 
+existing scheduled jobs.

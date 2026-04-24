@@ -33,6 +33,8 @@ const CustomerService    = require('../services/customers');
 const SheetsService      = require('../services/sheets');
 const EmailService       = require('../services/email');
 const { trackOutcome }   = require('../services/messageVariants');
+const ConfirmationService = require('../services/confirmationService');
+const ProductService      = require('../services/productService');
 
 const { calcHealthScore, healthLabel, topExpenseCategory, todayWAT } = require('../utils/formatter');
 const { calcMargin } = require('../utils/naira');
@@ -72,8 +74,8 @@ router.post('/', async (req, res) => {
     const msg     = value.messages[0];
     const contact = value.contacts?.[0];
 
-    // Only handle text and audio (voice note) messages
-    if (msg.type !== 'text' && msg.type !== 'audio') return;
+    // Handle text, audio (voice note), and image messages
+    if (msg.type !== 'text' && msg.type !== 'audio' && msg.type !== 'image') return;
 
     const from = normalizePhone(msg.from); // canonical 234XXXXXXXXXX format
     const name = contact?.profile?.name || 'there';
@@ -127,6 +129,102 @@ router.post('/', async (req, res) => {
       }
     }
 
+    if (msg.type === 'image') {
+      // ── Photo / image ──
+      entryMethod = 'photo';
+      const mediaId = msg.image?.id;
+      const caption = (msg.image?.caption || '').trim();
+      console.log(`[Webhook] Image from ${from}, media_id: ${mediaId}`);
+
+      const photoUser = await UserModel.findByWhatsapp(from);
+      if (!photoUser) {
+        await WhatsAppService.sendNotRegistered(from);
+        return;
+      }
+
+      await WhatsAppService.sendMessage(from,
+        `📸 Got your photo, ${photoUser.name.split(' ')[0]}! Analyzing it...`
+      ).catch(() => {});
+
+      try {
+        const { buffer, mimeType } = await downloadWhatsAppAudio(mediaId);
+
+        // ── Buying calculator mode: caption contains a margin target ──
+        const marginCaption = caption.match(/(\d+)\s*%|(\d+)\s*margin|margin\s*(\d+)|sell.*?(\d+)|what.*?(\d+)/i);
+        if (marginCaption) {
+          const targetMargin = parseInt(
+            marginCaption[1] || marginCaption[2] || marginCaption[3] ||
+            marginCaption[4] || marginCaption[5]
+          );
+          const { products: receiptItems } = await GeminiService.analyzePhoto(buffer, mimeType, photoUser, 'stock_in');
+          const normalizedCalc = (receiptItems || []).map(p => ({
+            product_name: p.product || p.product_name || 'Unknown',
+            unit_price:   p.price   || p.unit_price   || null,
+            unit:         p.unit    || 'units',
+          }));
+          const calcReply = buildCalcReply(normalizedCalc, targetMargin);
+          await WhatsAppService.sendMessage(from, calcReply);
+          await ConfirmationService.savePending(
+            photoUser.id, 'calc_context',
+            { products: normalizedCalc, lastMargin: targetMargin },
+            caption
+          );
+          return;
+        }
+
+        // ── Stock photo mode: opening stock or inventory receipt ──
+        const isOpeningStock = !photoUser.opening_stock_logged ||
+          /\bopening\b|\bi have\b|\bi get\b|\bmy stock\b/i.test(caption);
+        const intent = isOpeningStock ? 'opening_stock' : 'inventory_in';
+        const { products: rawProducts } = await GeminiService.analyzePhoto(buffer, mimeType, photoUser, intent);
+
+        // Normalise field names from analyzePhoto format → system format
+        const normalized = (rawProducts || []).map(p => ({
+          product_name: p.product    || p.product_name || 'Unknown',
+          quantity:     p.quantity   || null,
+          unit:         p.unit       || 'units',
+          unit_price:   p.price      || p.unit_price   || null,
+          confidence:   p.confidence || 'medium',
+        }));
+
+        // Derive overall confidence from item-level values
+        const overallConf = normalized.some(p => p.confidence === 'low') ? 'low'
+          : normalized.every(p => p.confidence === 'high') ? 'high' : 'medium';
+
+        // Log media attempt (non-blocking)
+        const { query: dbQuery } = require('../models/db');
+        dbQuery(
+          `INSERT INTO media_log (user_id, media_type, intent, parse_success, product_count)
+           VALUES ($1, 'image', $2, $3, $4)`,
+          [photoUser.id, intent, normalized.length > 0, normalized.length]
+        ).catch(() => {});
+
+        if (normalized.length === 0) {
+          await WhatsAppService.sendMessage(from,
+            `📸 I couldn't identify any products in that photo, ${photoUser.name.split(' ')[0]}.\n\n` +
+            `Try a clearer photo of your stock shelf or handwritten list, ` +
+            `or type it out:\n_"I have 50 bags rice, 20 packs indomie"_`);
+          return;
+        }
+
+        const confNote = overallConf === 'low'
+          ? `\n\n⚠️ I'm not 100% certain about some items — check the numbers carefully.`
+          : '';
+
+        const entryType   = isOpeningStock ? 'opening_stock' : 'inventory_in';
+        const pendingData = { products: normalized, source: 'photo' };
+        await ConfirmationService.savePending(photoUser.id, entryType, pendingData, caption || '[photo]');
+        const confirmMsg = ConfirmationService.buildConfirmationMessage(entryType, pendingData) + confNote;
+        await WhatsAppService.sendMessage(from, confirmMsg);
+      } catch (err) {
+        console.error('[Webhook] Image processing failed:', err.message);
+        await WhatsAppService.sendMessage(from,
+          `📸 Sorry, I had trouble reading that photo, ${photoUser.name.split(' ')[0]}.\n\n` +
+          `You can type your stock instead:\n_"I have 50 bags rice, 20 packs indomie"_`);
+      }
+      return;
+    }
+
     // ── Look up user ──
     const user = await UserModel.findByWhatsapp(from);
     if (!user) {
@@ -145,6 +243,15 @@ router.post('/', async (req, res) => {
     if (!user.first_message_date) {
       const firstName = user.name.split(' ')[0];
       await WhatsAppService.sendOnboarding(from, firstName);
+      // Prompt for opening stock immediately after welcome
+      await WhatsAppService.sendMessage(from,
+        `📦 *First step:* Tell me what stock you have right now.\n\n` +
+        `You can:\n` +
+        `• Voice note: _"I have 20 oud oil, 15 rose, 5 musk"_\n` +
+        `• Photo of your shelf or stock list\n` +
+        `• Or just type it out\n\n` +
+        `Once I know your stock, I'll alert you before anything runs out. 🎯`
+      ).catch(() => {});
       // Mark first_message_date so this never fires again
       await UserModel.touchLastEntry(user.id);
       await MessageModel.updateLog(msgLogId, { intent: 'onboarding', status: 'processed' }).catch(() => {});
@@ -163,6 +270,48 @@ router.post('/', async (req, res) => {
       );
       return;
     }
+
+    // ── Confirmation intercept (YES / EDIT) ──────────────────────────────────
+    const upperText = text.trim().toUpperCase();
+    if (upperText === 'YES' || upperText === 'Y' || upperText === 'CONFIRM') {
+      const pending = await ConfirmationService.getPendingEntry(user.id);
+      if (pending) {
+        await ConfirmationService.confirmEntry(pending.id);
+        await handleConfirmedEntry(user, from, pending);
+        await MessageModel.updateLog(msgLogId, { intent: 'confirm_yes', status: 'processed' }).catch(() => {});
+        return;
+      }
+      // No pending entry — fall through to normal parse
+    } else if (upperText === 'EDIT' || upperText === 'NO' || upperText === 'N') {
+      const pending = await ConfirmationService.getPendingEntry(user.id);
+      if (pending) {
+        await ConfirmationService.editEntry(pending.id);
+        await WhatsAppService.sendMessage(from,
+          `No problem, ${user.name.split(' ')[0]}! 📝\n\nSend me the corrected numbers and I'll log them.`);
+        await MessageModel.updateLog(msgLogId, { intent: 'confirm_edit', status: 'processed' }).catch(() => {});
+        return;
+      }
+      // No pending entry — fall through to normal parse
+    }
+    // ────────────────────────────────────────────────────────────────────────
+
+    // ── Margin recalculation intercept (user replied with just a % number) ──
+    const reCalcMatch = text.trim().match(/^(\d+)\s*%?$/);
+    if (reCalcMatch) {
+      const pending = await ConfirmationService.getPendingEntry(user.id);
+      if (pending && pending.entry_type === 'calc_context') {
+        const parsedCalc = typeof pending.parsed_data === 'string'
+          ? JSON.parse(pending.parsed_data) : pending.parsed_data;
+        const newMargin = parseInt(reCalcMatch[1]);
+        const replyMsg  = buildCalcReply(parsedCalc.products || [], newMargin);
+        await WhatsAppService.sendMessage(from, replyMsg);
+        await ConfirmationService.savePending(user.id, 'calc_context',
+          { ...parsedCalc, lastMargin: newMargin }, text);
+        await MessageModel.updateLog(msgLogId, { intent: 'calc_recalculate', status: 'processed' }).catch(() => {});
+        return;
+      }
+    }
+    // ────────────────────────────────────────────────────────────────────────
 
     // ── Parse intent ──
     let { type, data, needsAI } = ParserService.parseMessage(text);
@@ -201,6 +350,23 @@ router.post('/', async (req, res) => {
       case 'stock_check': {
         const items = await InventoryService.getStock(user.id);
         await WhatsAppService.sendStockReply(from, items);
+        // Data freshness warning — alert if products haven't been updated in 48+ hours
+        const { query: dbQuery } = require('../models/db');
+        const freshnessRes = await dbQuery(
+          `SELECT MAX(updated_at) AS last_update FROM products WHERE user_id = $1`,
+          [user.id]
+        ).catch(() => null);
+        const lastUpdate = freshnessRes?.rows?.[0]?.last_update;
+        if (lastUpdate) {
+          const hoursSince = (Date.now() - new Date(lastUpdate).getTime()) / 3600000;
+          if (hoursSince >= 48) {
+            const daysSince = Math.floor(hoursSince / 24);
+            WhatsAppService.sendMessage(from,
+              `⚠️ These numbers are ${daysSince} day${daysSince === 1 ? '' : 's'} old.\n\n` +
+              `If you've bought or sold stock since then, send me the update to keep this accurate.`
+            ).catch(() => {});
+          }
+        }
         await MessageModel.updateLog(msgLogId, { intent: 'stock_check', status: 'processed' }).catch(() => {});
         break;
       }
@@ -224,44 +390,44 @@ router.post('/', async (req, res) => {
       }
 
       case 'daily_entry': {
-        await handleDailyEntry(user, from, data, text, entryMethod);
+        const pendingId = await ConfirmationService.savePending(user.id, 'daily_entry', data, text);
+        const confirmMsg = ConfirmationService.buildConfirmationMessage('daily_entry', data);
+        await WhatsAppService.sendMessage(from, confirmMsg);
         await MessageModel.updateLog(msgLogId, {
           intent: 'daily_entry',
           parsedData: { revenue: data.revenue, totalExpenses: data.totalExpenses, profit: data.profit },
-          status: 'processed',
+          status: 'pending_confirm',
         }).catch(() => {});
         break;
       }
 
       case 'inventory_in': {
-        if (!data.item || !data.quantity) {
+        const hasProducts = Array.isArray(data.products) && data.products.length > 0;
+        if (!hasProducts && (!data.item || !data.quantity)) {
           await WhatsAppService.sendMessage(from,
             "I couldn't quite get the item details. Try:\n\"received 50 bags rice at 900 each\"");
           await MessageModel.updateLog(msgLogId, { intent: 'inventory_in', status: 'parse_error' }).catch(() => {});
           break;
         }
-        const rowIn = await InventoryService.receiveStock(user, data);
-        await WhatsAppService.sendMessage(from,
-          `✅ Stock updated!\n\n` +
-          `📦 ${data.item}: +${data.quantity} units received\n` +
-          `Balance: ${parseFloat(rowIn.current_balance).toLocaleString('en-NG')} units`);
-        await MessageModel.updateLog(msgLogId, { intent: 'inventory_in', parsedData: data, status: 'processed' }).catch(() => {});
+        await ConfirmationService.savePending(user.id, 'inventory_in', data, text);
+        const confirmMsgIn = ConfirmationService.buildConfirmationMessage('inventory_in', data);
+        await WhatsAppService.sendMessage(from, confirmMsgIn);
+        await MessageModel.updateLog(msgLogId, { intent: 'inventory_in', parsedData: data, status: 'pending_confirm' }).catch(() => {});
         break;
       }
 
       case 'inventory_out': {
-        if (!data.item || !data.quantity) {
+        const hasProductsOut = Array.isArray(data.products) && data.products.length > 0;
+        if (!hasProductsOut && (!data.item || !data.quantity)) {
           await WhatsAppService.sendMessage(from,
             "I couldn't quite get the details. Try:\n\"sold 12 bags rice today\"");
           await MessageModel.updateLog(msgLogId, { intent: 'inventory_out', status: 'parse_error' }).catch(() => {});
           break;
         }
-        const rowOut = await InventoryService.sellStock(user, data);
-        await WhatsAppService.sendMessage(from,
-          `✅ Sale recorded!\n\n` +
-          `📦 ${data.item}: -${data.quantity} units sold\n` +
-          `Balance: ${parseFloat(rowOut.current_balance).toLocaleString('en-NG')} units`);
-        await MessageModel.updateLog(msgLogId, { intent: 'inventory_out', parsedData: data, status: 'processed' }).catch(() => {});
+        await ConfirmationService.savePending(user.id, 'inventory_out', data, text);
+        const confirmMsgOut = ConfirmationService.buildConfirmationMessage('inventory_out', data);
+        await WhatsAppService.sendMessage(from, confirmMsgOut);
+        await MessageModel.updateLog(msgLogId, { intent: 'inventory_out', parsedData: data, status: 'pending_confirm' }).catch(() => {});
         break;
       }
 
@@ -313,13 +479,83 @@ router.post('/', async (req, res) => {
 });
 
 // ─────────────────────────────────────────────
+// Internal: commit a confirmed pending entry
+// ─────────────────────────────────────────────
+async function handleConfirmedEntry(user, from, pending) {
+  const { entry_type, parsed_data: data, original_message } = pending;
+  const parsedData = typeof data === 'string' ? JSON.parse(data) : data;
+
+  if (entry_type === 'daily_entry') {
+    await handleDailyEntry(user, from, parsedData, original_message, 'text');
+    return;
+  }
+
+  if (entry_type === 'inventory_in') {
+    const hasProducts = Array.isArray(parsedData.products) && parsedData.products.length > 0;
+    if (hasProducts) {
+      const date = todayWAT();
+      const summary = await ProductService.processProductTransactions(user.id, user, parsedData.products, null, date, WhatsAppService).catch(() => []);
+      const lines = summary.length > 0
+        ? summary.map(s => `📦 ${s.name}: ${s.stock} ${s.unit} now in stock`)
+        : parsedData.products.map(p => `📦 ${p.product_name}: +${p.quantity || '?'} ${p.unit || 'units'} received`);
+      await WhatsAppService.sendMessage(from, `✅ Stock updated!\n\n${lines.join('\n')}`);
+    } else {
+      const rowIn = await InventoryService.receiveStock(user, parsedData);
+      await WhatsAppService.sendMessage(from,
+        `✅ Stock updated!\n\n` +
+        `📦 ${parsedData.item}: +${parsedData.quantity} units received\n` +
+        `Balance: ${parseFloat(rowIn.current_balance).toLocaleString('en-NG')} units`);
+    }
+    return;
+  }
+
+  if (entry_type === 'inventory_out') {
+    const hasProducts = Array.isArray(parsedData.products) && parsedData.products.length > 0;
+    if (hasProducts) {
+      const date = todayWAT();
+      const summary = await ProductService.processProductTransactions(user.id, user, parsedData.products, null, date, WhatsAppService).catch(() => []);
+      const lines = summary.length > 0
+        ? summary.map(s => `📦 ${s.name}: ${s.stock} ${s.unit} remaining  ${s.emoji} ${s.status.replace('_', ' ').toLowerCase()}`)
+        : parsedData.products.map(p => `📦 ${p.product_name}: -${p.quantity || '?'} ${p.unit || 'units'} sold`);
+      await WhatsAppService.sendMessage(from, `✅ Sale recorded!\n\n${lines.join('\n')}`);
+    } else {
+      const rowOut = await InventoryService.sellStock(user, parsedData);
+      await WhatsAppService.sendMessage(from,
+        `✅ Sale recorded!\n\n` +
+        `📦 ${parsedData.item}: -${parsedData.quantity} units sold\n` +
+        `Balance: ${parseFloat(rowOut.current_balance).toLocaleString('en-NG')} units`);
+    }
+    return;
+  }
+
+  if (entry_type === 'opening_stock') {
+    const products = parsedData.products || [];
+    if (products.length === 0) {
+      await WhatsAppService.sendMessage(from,
+        `No products found, ${user.name.split(' ')[0]}. Try typing: _"I have 20 oud oil, 15 rose, 5 musk"_`);
+      return;
+    }
+    await ProductService.setOpeningStock(user.id, products);
+    await UserModel.markOpeningStockLogged(user.id);
+    const lines = products.map(p =>
+      `📦 ${p.product_name || 'Unknown'}: ${p.quantity || '?'} ${p.unit || 'units'}`
+    ).join('\n');
+    await WhatsAppService.sendMessage(from,
+      `✅ Stock set, ${user.name.split(' ')[0]}!\n\n${lines}\n\n` +
+      `I'll alert you before anything runs low. Send your daily sales whenever you're ready. 🚀`
+    );
+    return;
+  }
+}
+
+// ─────────────────────────────────────────────
 // Internal: handle daily_entry messages
 // ─────────────────────────────────────────────
 async function handleDailyEntry(user, from, data, rawMessage, entryMethod = 'text') {
   const { revenue, totalExpenses, expenseBreakdown, profit, margin, customers, notes } = data;
 
   // Save to PostgreSQL
-  await TransactionModel.create({
+  const txRow = await TransactionModel.create({
     userId: user.id,
     revenue,
     totalExpenses,
@@ -337,6 +573,15 @@ async function handleDailyEntry(user, from, data, rawMessage, entryMethod = 'tex
 
   // Attribute any pending retention nudge to this entry (non-blocking)
   trackOutcome(user.id).catch(() => {});
+
+  // Process product-level transactions extracted by Gemini
+  let stockSummary = [];
+  if (Array.isArray(data.products) && data.products.length > 0) {
+    const prodDate = todayWAT();
+    stockSummary = await ProductService.processProductTransactions(
+      user.id, user, data.products, txRow?.id || null, prodDate, WhatsAppService
+    ).catch(e => { console.error('[Products] processProductTransactions error:', e.message); return []; });
+  }
 
   // Append to Google Sheets (non-blocking — failure must not block the WhatsApp reply)
   if (user.sheet_id) {
@@ -380,10 +625,26 @@ async function handleDailyEntry(user, from, data, rawMessage, entryMethod = 'tex
     entryMethod,
   });
 
+  // Stock update lines (Part 8) — sent as a separate message after the main ACK
+  if (stockSummary.length > 0) {
+    const lines = stockSummary.map(s =>
+      `- ${s.name}: ${s.stock} ${s.unit} remaining  ${s.emoji} ${s.status.replace('_', ' ').toLowerCase()}`
+    );
+    WhatsAppService.sendMessage(from, `📦 Stock update:\n${lines.join('\n')}`).catch(() => {});
+  }
+
   // Milestone celebrations (non-blocking)
   const firstName = user.name.split(' ')[0];
   const totalMsgs = await UserModel.getTotalMessages(user.id);
   const s = parseInt(newStreak, 10) || 1;
+
+  // Soft gate — nudge once on first entry if opening stock hasn't been logged
+  if (!user.opening_stock_logged && totalMsgs === 1) {
+    WhatsAppService.sendMessage(from,
+      `📦 One more thing — tell me what stock you currently have so I can alert you before anything runs out.\n\n` +
+      `Just say: _"I have 20 oud oil, 15 rose, 5 musk"_ or send a photo of your shelf. 📸`
+    ).catch(() => {});
+  }
 
   if (s === 1 && totalMsgs === 1) {
     WhatsAppService.sendMilestone(from, 'day1', { firstName }).catch(() => {});
@@ -628,6 +889,34 @@ async function gatherUserFinancialData(userId) {
     avgMetrics: { avgRevenue, avgExpenses, avgMargin },
     inventory: inventoryRes.rows || [],
   };
+}
+
+// ─────────────────────────────────────────────
+// Buying calculator: compute selling prices at target margin
+// ─────────────────────────────────────────────
+function buildCalcReply(products, targetMarginPct) {
+  const fmt = n => Number(n || 0).toLocaleString('en-NG');
+  const lines = (products || [])
+    .filter(p => p.unit_price)
+    .map(p => {
+      const cost   = parseFloat(p.unit_price);
+      const sellAt = Math.ceil(cost / (1 - targetMarginPct / 100));
+      const unit   = p.unit && p.unit !== 'units' ? ` (per ${p.unit.replace(/s$/, '')})` : '';
+      return `*${p.product_name}*${unit}\n  Cost: ₦${fmt(cost)} → Sell at: *₦${fmt(sellAt)}*`;
+    });
+
+  if (lines.length === 0) {
+    return (
+      `I couldn't read cost prices from that receipt.\n\n` +
+      `Try a clearer photo or type the items:\n_"Indomie 3800, Peak Milk 7200"_ + "35% margin"`
+    );
+  }
+
+  return (
+    `📊 *Selling prices at ${targetMarginPct}% margin*\n\n` +
+    lines.join('\n\n') +
+    `\n\nWant a different margin? Just reply with the number.\n_Example: "40"_`
+  );
 }
 
 module.exports = router;

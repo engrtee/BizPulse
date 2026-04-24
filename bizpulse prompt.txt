@@ -1,0 +1,546 @@
+Read CLAUDE.md completely before starting.
+Show each file before changing it.
+Preserve the entry aggregation INSERT-only rule.
+Do not change any database schema without 
+showing me first.
+
+MISSION: Full BizPulse product audit and 
+implementation check. You are verifying what 
+has already been built, identifying what is 
+missing, and implementing what is not yet done.
+
+Work through each section completely before 
+moving to the next. Show me the audit report 
+first. Fix nothing until I approve.
+
+═══════════════════════════════════════
+SECTION 1 — AUDIT: WHAT HAS BEEN BUILT
+═══════════════════════════════════════
+
+Check the codebase and tell me the status 
+of each item below. Status options:
+✅ BUILT — fully implemented and working
+⚠️ PARTIAL — started but incomplete
+❌ MISSING — not implemented at all
+
+FEATURE 1 — Confirmation loop
+- pending_entries table exists
+- Parser does NOT immediately write to DB
+- Confirmation message sent before logging
+- YES/EDIT/expire logic working
+- Correction rate tracked in admin
+
+FEATURE 2 — Product performance foundation
+- products table exists
+- product_transactions table exists
+- Parser extracts individual product names
+- stock_in vs sale correctly classified
+- Stock levels update on every transaction
+- Sales velocity calculated (7-day average)
+- Low stock alert fires when <= 2 days left
+- stock_alerts_sent table exists (prevents 
+  duplicate alerts same day)
+- Product fuzzy matching working
+- Nigerian product name dictionary exists
+
+FEATURE 3 — Voice note and photo onboarding
+- Webhook receives audio messages (ogg/mpeg)
+- Audio downloaded from Meta media endpoint
+- Audio sent to Gemini for transcription
+- Products extracted from transcription
+- Confirmation message sent after voice note
+- Webhook receives image messages
+- Image downloaded from Meta media endpoint
+- Image sent to Gemini Vision for analysis
+- Receipt line items extracted from photo
+- Confidence levels shown in confirmation
+- opening_stock_logged flag on users table
+- Onboarding flow triggered for new users
+- Cannot-understand fallback message exists
+- product_name_dictionary table populated
+
+FEATURE 4 — Dashboard restructure
+- Home page: "Sold Today" card (not Revenue)
+- Home page: "Stock Alerts" card exists
+- Home page: "Top Seller Today" card exists
+- Home page: Stock status panel exists
+- Home page: Product performance table exists
+- Summary page has three tabs: 
+  Stock / Products / Finances
+- Stock tab: traffic light overview
+- Stock tab: full stock table with Days left
+- Stock tab: Reorder intelligence paragraph
+- Stock tab: Stock movement log
+- Products tab: ranking by margin not revenue
+- Products tab: AI insight card
+- Products tab: Margin comparison bar chart
+- Products tab: Products to review section
+- Finances tab: period selector toggle
+- Finances tab: profit trend line chart
+- Navigation updated: Stock and Products tabs
+- Daily Entry moved to floating action button
+- Tagline updated: "Know your stock. Know 
+  your profit."
+- All empty states show actionable prompts
+
+FEATURE 5 — Morning stock briefing
+- New cron job at 7:30am WAT (6:30am UTC)
+- Only sends if opening_stock_logged = true
+- Message includes stock health per product
+- Data freshness warning if 48+ hours stale
+- Business emoji by business type
+- One-time 8am onboarding prompt for new 
+  users without opening stock
+- Evening 7pm summary only sends to users 
+  who logged that day (NOT all users)
+- Old retention nudges replaced with 
+  staleness warnings in morning briefing
+- Day 7 and Day 14 re-engagement messages
+- Conversation window check before sending
+- Cost tracking in admin dashboard
+
+FEATURE 6 — Summary frequency preference
+- summary_frequency field on users table
+- Values: daily / weekly / monthly
+- Settings page shows frequency selector
+- 7pm cron respects this setting
+- Morning briefing always daily regardless
+
+FEATURE 7 — Buying calculator
+- Receipt photo with caption containing 
+  target margin triggers calculator mode
+  (e.g. "what should I sell these for at 30%")
+- Gemini reads receipt, extracts items
+- Calculates selling price per item at 
+  requested margin
+- Reply shows: item / cost / sell at / margin
+- User can request different margin in reply
+- This is separate from stock update mode
+  (no caption or caption = "received/stock" 
+  triggers stock update instead)
+
+FEATURE 8 — Wholesale vs retail channel split
+- Sale entries can be tagged as 
+  wholesale or retail
+- Parser detects channel from message:
+  Keywords: "wholesale", "bulk", "trade price"
+  → tag as wholesale
+  High quantity (10x+ normal unit) 
+  → ask for confirmation
+  No keyword → default to retail
+- product_transactions has channel field:
+  channel VARCHAR(20) DEFAULT 'retail'
+  Values: retail / wholesale / unknown
+- Product performance table shows 
+  two rows per product when both 
+  channels have data
+- Margin calculated separately per channel
+
+FEATURE 9 — WhatsApp messaging overhaul
+(full copy rewrite — see Section 3 below)
+
+After auditing each feature report back 
+in this format:
+
+AUDIT REPORT
+Feature 1 — Confirmation loop: [status]
+  Missing: [list specific missing pieces]
+Feature 2 — Product performance: [status]
+  Missing: [list specific missing pieces]
+[continue for all 9 features]
+
+OVERALL: [X] of 9 features fully built
+Critical gaps (blocking new users): [list]
+Important gaps (affects experience): [list]
+
+Wait for my review of the audit report 
+before proceeding to implementation.
+
+═══════════════════════════════════════
+SECTION 2 — IMPLEMENT MISSING FEATURES
+═══════════════════════════════════════
+
+After I approve the audit report, implement 
+all missing and partial features.
+
+For each missing feature:
+- Show me the files you will change
+- Show me the exact code or message 
+  you will add
+- Wait for my approval per feature
+- Then implement
+
+Priority order if multiple features missing:
+
+PRIORITY 1 (implement first — blocks trust):
+Confirmation loop
+
+PRIORITY 2 (implement second — core engine):
+Product performance foundation
+
+PRIORITY 3 (implement third — onboarding):
+Voice note and photo onboarding
+Buying calculator (same photo feature, 
+two modes — add calculator mode here)
+
+PRIORITY 4 (implement fourth — experience):
+Morning stock briefing
+Summary frequency preference
+Wholesale vs retail channel split
+
+PRIORITY 5 (implement last — presentation):
+Dashboard restructure
+WhatsApp messaging overhaul
+
+═══════════════════════════════════════
+SECTION 3 — WHATSAPP MESSAGING OVERHAUL
+═══════════════════════════════════════
+
+Whether messaging was previously updated 
+or not, rewrite all messages now to reflect 
+the validated product positioning.
+
+VALIDATED POSITIONING:
+BizPulse is a stock and sales intelligence 
+assistant for Nigerian traders who hold 
+physical stock. The core value is:
+1. Never lose a sale to a stockout you 
+   did not see coming
+2. Know which product makes you the most 
+   profit — not which sells the most
+3. Know your real profit after stock costs
+
+This came from four real user conversations:
+- Two perfume oil sellers confirmed false 
+  confidence stockouts as their biggest pain
+- Provision store owner described needing 
+  buying calculator at the market
+- All four confirmed voice note / photo 
+  as preferred input method
+- Weekly/monthly summary preferred by 
+  irregular sellers over daily
+
+YOU ARE ACTING AS AN EXPERT NIGERIAN 
+PRODUCT COPYWRITER. Rules:
+- Every line earns its place or is cut
+- Traders scan in 3 seconds — lead with 
+  what matters most
+- Nigerian context: naira, hustle, markets, 
+  suppliers, stock, customers
+- Short sentences always
+- Warm but direct — smart friend who knows 
+  business, not a bank chatbot
+- Never use: leverage, utilize, kindly, 
+  please note, feel free, as you know
+- Specific always beats generic
+- User's business type and products appear 
+  by name wherever possible
+
+MESSAGE 1 — Welcome message (new registration)
+
+New welcome must:
+- Open with what BizPulse does operationally 
+  in the first line — not what it is called
+- Immediately reference stock tracking as 
+  the primary function
+- Show exactly what to send first 
+  (opening stock via voice note or photo)
+- Under 180 words
+- Feel like a smart business partner 
+  who already understands their world
+
+Show me the proposed welcome before 
+implementing.
+
+MESSAGE 2 — Opening stock request 
+(sent after welcome if no stock logged)
+
+Must:
+- Tell them BizPulse needs their current 
+  stock before it can watch anything
+- Offer three input methods: voice note, 
+  photo, or typing
+- Show a specific example per their 
+  business type if known
+- Be under 80 words
+- End with a direct instruction not 
+  a polite suggestion
+
+Show me proposed message before implementing.
+
+MESSAGE 3 — Confirmation message 
+(after parse, before logging)
+
+Must:
+- Show exactly what was understood 
+  per product
+- Bold the numbers so errors are visible
+- YES / EDIT options clearly stated
+- Under 100 words
+- Never say "please" or "kindly confirm"
+
+Show me three variants:
+1. Perfume seller sale: sold 5 oud 8k, 
+   3 rose 6k
+2. Provision store receipt photo: 
+   Indomie / Peak / Cabin read from image
+3. Fashion trader stock in: received 
+   20 yards ankara 3500 each
+
+MESSAGE 4 — Post-confirmation reply 
+(after YES received, entry logged)
+
+Must:
+- Show streak
+- Show product breakdown not just totals
+- Show updated stock level for every 
+  product sold or received
+- End with one operational line connecting 
+  stock to next action
+- Under 80 words
+
+Show me two variants:
+1. Sale logged — perfume seller
+2. Stock receipt logged — provision store
+
+MESSAGE 5 — Buying calculator reply 
+(triggered when receipt photo sent with 
+margin target caption)
+
+Must:
+- List every item from the receipt
+- Show cost / sell at / margin per item
+- Offer to recalculate at different margin
+- Be scannable while standing in a market
+- Under 120 words
+
+Show me one example:
+Provision store at market, photographed 
+receipt for Indomie, Peak Milk, Cabin 
+biscuits, Eva water. Requesting 35% margin.
+
+MESSAGE 6 — Morning stock briefing 
+(7:30am WAT daily)
+
+Must:
+- Open with first name + business emoji
+- List every product with health status
+- Flag critical and low stock clearly
+- Include data freshness indicator
+- End with one specific action for today
+- Under 120 words
+- Feel like a useful briefing not a nag
+
+Show me two variants:
+1. Perfume seller — musk oil critical, 
+   oud oil low, rose and amber healthy, 
+   last log yesterday
+2. Provision store — all stock healthy, 
+   last log 3 days ago (staleness warning)
+
+MESSAGE 7 — Low stock alert 
+(triggered when product drops to <= 2 days)
+
+Must:
+- Name the specific product
+- State current stock and daily sales rate
+- State exactly how many days left
+- Give reorder suggestion with last price
+- Be urgent but not panicked
+- Under 60 words
+
+Show me one example:
+Perfume seller, musk oil at 2 bottles, 
+selling 3 per day, last purchase ₦3,100.
+
+MESSAGE 8 — Evening 7pm summary 
+(only sent to users who logged today)
+
+Must:
+- Open with top selling product by name 
+  not generic "revenue"
+- Show actual profit after stock costs
+- Show stock update after today's sales
+- One specific action for tomorrow
+- Under 100 words
+
+Show me two variants:
+1. Fashion trader — sold ankara and lace, 
+   ankara running low
+2. Provision store — sold mixed goods, 
+   profit reconciliation shown
+
+MESSAGE 9 — Retention: Day 7 silence
+
+Must:
+- Reference their specific business type
+- Mention that their stock numbers are 
+  getting stale
+- Remind them of the false confidence risk 
+  in plain language
+- Not guilt-trip — make it useful
+- Under 60 words
+
+Show me one variant per business type:
+1. Perfume seller
+2. Provision store owner
+
+MESSAGE 10 — Nudge messages 
+(rotating, based on days without logging)
+
+Replace all existing generic nudge messages. 
+New nudges must:
+- Reference business type and 
+  actual products if known
+- Speak to operational pain not habit
+- Day 3: gentle operational reminder
+- Day 7: loss aversion — what they 
+  are missing right now
+- Never generic "businesses that track 
+  consistently" language
+
+Show me Day 3 and Day 7 for:
+1. Perfume seller
+2. Provision store owner
+3. Fashion trader
+
+═══════════════════════════════════════
+SECTION 4 — WEB DASHBOARD COPY UPDATE
+═══════════════════════════════════════
+
+Update all text visible to users on the 
+web dashboard. Data logic unchanged.
+
+UPDATES REQUIRED:
+
+Tagline everywhere it appears:
+OLD: "Financial OS for Nigerian SMEs"
+NEW: "Know your stock. Know your profit."
+
+Dashboard metric card labels:
+OLD: Today's Revenue → NEW: Sold Today
+OLD: Your Profit Today → NEW: Today's Profit
+OLD: Biggest Cost → NEW: Stock Alerts
+OLD: Customers → NEW: Top Seller Today
+
+Profit summary sentence:
+OLD: "You earned ₦X more than you spent"
+NEW: "You sold ₦X today. Stock cost: ₦Y. 
+     You kept ₦Z."
+
+Section titles:
+OLD: "Last 5 days" → NEW: "Recent activity"
+NEW sections to add titles for:
+"Your stock right now"
+"Today's products"
+"Your products ranked by margin"
+
+Empty state messages — write specific 
+actionable copy for:
+- No stock data yet (home page)
+- No product sales data yet
+- No financial data yet
+- New user who just registered
+
+Settings page WhatsApp commands:
+Rewrite all command descriptions to 
+reflect stock intelligence positioning.
+Add new commands:
+"stock?" — check current stock levels
+"received [product] [qty] at [price]" 
+  — log stock received from supplier
+"[photo] + '30% margin'" 
+  — calculate selling prices from receipt
+
+═══════════════════════════════════════
+SECTION 5 — ADMIN DASHBOARD ADDITIONS
+═══════════════════════════════════════
+
+Add these to the /admin dashboard 
+if not already present:
+
+STOCK INTELLIGENCE METRICS:
+- Total products tracked (all users)
+- Users with opening stock logged vs total
+- Average products per active user
+- Low stock alerts sent today
+- Stock alerts sent this month
+
+CONFIRMATION LOOP METRICS:
+- Entries parsed today
+- Confirmed without edit (%)
+- Edited before confirming (%)
+- Expired without response (%)
+- Correction rate — alert if above 20%
+
+VOICE NOTE AND PHOTO METRICS:
+- Voice notes received this week
+- Voice notes successfully parsed (%)
+- Photos received this week
+- Photos successfully parsed (%)
+- Most common failed product names
+
+BUYING CALCULATOR METRICS:
+- Calculator requests this week
+- Average margin % requested
+- Most common products in receipts
+
+COST TRACKING:
+- Morning briefings sent today
+- Free vs paid breakdown with cost
+- Projected monthly WhatsApp API cost
+
+═══════════════════════════════════════
+SECTION 6 — FINAL VALIDATION
+═══════════════════════════════════════
+
+After all implementation is complete 
+run this validation checklist:
+
+WHATSAPP FLOW TEST:
+Send these five test messages and 
+show me the exact response to each:
+
+1. "received 20 bottles oud oil 3500 each"
+   Expected: stock_in confirmation message
+
+2. "sold 5 oud oil 8k each, 3 rose 6k each"
+   Expected: sale confirmation with 
+   product breakdown
+
+3. "YES" (after pending confirmation exists)
+   Expected: logged confirmation with 
+   updated stock levels
+
+4. "stock?"
+   Expected: full stock status with 
+   health emojis
+
+5. Voice note saying "I have 20 oud oil 
+   15 rose 5 musk"
+   Expected: opening stock confirmation
+
+DASHBOARD TEST:
+Show me the home page rendered with 
+sample data for a perfume oil seller 
+with 30 days of history.
+
+ADMIN TEST:
+Show me the /admin page with all new 
+sections visible.
+
+FINAL DELIVERABLE:
+
+A. Feature completion scorecard:
+   Each feature: ✅ COMPLETE or ❌ INCOMPLETE
+   with one line on any incomplete items
+
+B. Three things working well that a 
+   new user will immediately appreciate
+
+C. The single most important thing 
+   still missing or broken
+
+Do not pad the report. 
+A harsh accurate report is more 
+valuable than a kind inaccurate one.

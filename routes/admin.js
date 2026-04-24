@@ -59,7 +59,7 @@ router.get('/', adminAuth, async (req, res) => {
   try {
     const pw = req.query.password || '';
 
-    const [stats, recentRegs, allUsers, recentMessages, atRisk, variantStats, retentionByBiz] = await Promise.all([
+    const [stats, recentRegs, allUsers, recentMessages, atRisk, variantStats, retentionByBiz, confirmMetrics, productStats, openingStockStats, mediaStats, calcStats] = await Promise.all([
       UserModel.getAdminStats(),
       UserModel.getRecentRegistrations(7),
       UserModel.findAllWithStats(),
@@ -97,6 +97,57 @@ router.get('/', adminAuth, async (req, res) => {
         ORDER BY total_users DESC, retention_rate DESC
         LIMIT 20
       `),
+      // Confirmation metrics (Task 1)
+      query(`
+        SELECT
+          COUNT(*)                                                AS total_parsed,
+          COUNT(*) FILTER (WHERE status = 'confirmed')           AS confirmed,
+          COUNT(*) FILTER (WHERE status = 'edited')              AS edited,
+          COUNT(*) FILTER (WHERE status = 'expired')             AS expired,
+          COUNT(*) FILTER (WHERE status = 'discarded')           AS discarded,
+          ROUND(
+            COUNT(*) FILTER (WHERE status = 'edited')::NUMERIC
+            / NULLIF(COUNT(*) FILTER (WHERE status IN ('confirmed','edited','expired')), 0) * 100, 1
+          ) AS correction_rate
+        FROM pending_entries
+        WHERE created_at > NOW() - INTERVAL '7 days'
+      `).catch(() => ({ rows: [{}] })),
+      // Product tracking summary (Task 2)
+      query(`
+        SELECT
+          COUNT(DISTINCT p.id)                                                                   AS total_products,
+          COUNT(DISTINCT p.user_id)                                                              AS users_with_products,
+          COUNT(DISTINCT pt.id) FILTER (WHERE pt.transaction_date >= CURRENT_DATE - INTERVAL '7 days') AS transactions_7d,
+          COUNT(DISTINCT p.id) FILTER (WHERE p.current_stock = 0)                               AS out_of_stock,
+          COUNT(DISTINCT p.id) FILTER (WHERE p.current_stock > 0 AND p.total_ever_received > 0
+            AND p.current_stock::numeric / NULLIF(p.total_ever_received,0) < 0.20)              AS low_stock
+        FROM products p
+        LEFT JOIN product_transactions pt ON pt.product_id = p.id
+        WHERE p.is_active = true
+      `).catch(() => ({ rows: [{}] })),
+      // Stock intelligence adoption (opening stock setup)
+      UserModel.getOpeningStockStats().catch(() => ({})),
+      // Media/photo intelligence (image + voice submissions)
+      query(`
+        SELECT
+          COUNT(*) FILTER (WHERE media_type = 'image')                                          AS photo_total,
+          COUNT(*) FILTER (WHERE media_type = 'image' AND parse_success = true)                 AS photo_parsed,
+          COUNT(*) FILTER (WHERE media_type = 'audio')                                          AS voice_total,
+          COUNT(*) FILTER (WHERE media_type = 'audio' AND parse_success = true)                 AS voice_parsed,
+          COUNT(DISTINCT user_id)                                                                AS unique_users,
+          COUNT(*) FILTER (WHERE created_at >= CURRENT_DATE - INTERVAL '7 days')                AS last_7d
+        FROM media_log
+      `).catch(() => ({ rows: [{}] })),
+      // Buying calculator usage (calc_context pending entries)
+      query(`
+        SELECT
+          COUNT(*)                                                                               AS total_calcs,
+          COUNT(*) FILTER (WHERE created_at >= CURRENT_DATE - INTERVAL '7 days')                AS calcs_7d,
+          COUNT(DISTINCT user_id)                                                                AS unique_users,
+          COUNT(*) FILTER (WHERE status = 'confirmed')                                          AS confirmed
+        FROM pending_entries
+        WHERE entry_type = 'calc_context'
+      `).catch(() => ({ rows: [{}] })),
     ]);
 
     const totalUsers     = parseInt(stats.total_users,      10) || 0;
@@ -204,6 +255,161 @@ router.get('/', adminAuth, async (req, res) => {
           </td>
         </tr>`;
     }).join('') || '<tr><td colspan="5" style="padding:16px;text-align:center;color:#718096">No at-risk users — great retention! 🎉</td></tr>';
+
+    // ── Confirmation metrics ──
+    const cm = confirmMetrics.rows[0] || {};
+    const corrRate = parseFloat(cm.correction_rate) || 0;
+    const corrColor = corrRate > 20 ? '#C53030' : corrRate > 10 ? '#B7791F' : '#1A7A4A';
+    const corrBg    = corrRate > 20 ? '#FED7D7' : corrRate > 10 ? '#FEFCBF' : '#C6F6D5';
+    const corrBanner = corrRate > 20
+      ? `<div style="background:#FED7D7;border:1px solid #FC8181;border-radius:8px;padding:10px 14px;margin-bottom:1rem;color:#C53030;font-weight:600">⚠️ Correction rate above 20% — Gemini is misreading entries. Review recent EDIT responses.</div>`
+      : '';
+    const confirmStatsHtml = `
+      ${corrBanner}
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:12px;margin-bottom:1rem">
+        <div style="background:#F0F4FA;border-radius:8px;padding:12px;text-align:center">
+          <div style="font-size:1.4rem;font-weight:700;color:#0F2744">${cm.total_parsed || 0}</div>
+          <div style="font-size:0.72rem;color:#718096">Parsed</div>
+        </div>
+        <div style="background:#C6F6D5;border-radius:8px;padding:12px;text-align:center">
+          <div style="font-size:1.4rem;font-weight:700;color:#1A7A4A">${cm.confirmed || 0}</div>
+          <div style="font-size:0.72rem;color:#1A7A4A">Confirmed</div>
+        </div>
+        <div style="background:#FEFCBF;border-radius:8px;padding:12px;text-align:center">
+          <div style="font-size:1.4rem;font-weight:700;color:#B7791F">${cm.edited || 0}</div>
+          <div style="font-size:0.72rem;color:#B7791F">Edited</div>
+        </div>
+        <div style="background:#FED7D7;border-radius:8px;padding:12px;text-align:center">
+          <div style="font-size:1.4rem;font-weight:700;color:#C53030">${cm.expired || 0}</div>
+          <div style="font-size:0.72rem;color:#C53030">Expired</div>
+        </div>
+        <div style="background:#E2E8F0;border-radius:8px;padding:12px;text-align:center">
+          <div style="font-size:1.4rem;font-weight:700;color:#718096">${cm.discarded || 0}</div>
+          <div style="font-size:0.72rem;color:#718096">Discarded</div>
+        </div>
+        <div style="background:${corrBg};border-radius:8px;padding:12px;text-align:center">
+          <div style="font-size:1.4rem;font-weight:700;color:${corrColor}">${cm.correction_rate || 0}%</div>
+          <div style="font-size:0.72rem;color:${corrColor}">Correction Rate</div>
+        </div>
+      </div>`;
+
+    // ── Product tracking stats ──
+    const ps = productStats.rows[0] || {};
+    const productStatsHtml = `
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:12px;margin-bottom:1rem">
+        <div style="background:#F0F4FA;border-radius:8px;padding:12px;text-align:center">
+          <div style="font-size:1.4rem;font-weight:700;color:#0F2744">${ps.total_products || 0}</div>
+          <div style="font-size:0.72rem;color:#718096">Total Products</div>
+        </div>
+        <div style="background:#BEE3F8;border-radius:8px;padding:12px;text-align:center">
+          <div style="font-size:1.4rem;font-weight:700;color:#1A56A4">${ps.users_with_products || 0}</div>
+          <div style="font-size:0.72rem;color:#1A56A4">Users Tracking</div>
+        </div>
+        <div style="background:#C6F6D5;border-radius:8px;padding:12px;text-align:center">
+          <div style="font-size:1.4rem;font-weight:700;color:#1A7A4A">${ps.transactions_7d || 0}</div>
+          <div style="font-size:0.72rem;color:#1A7A4A">Transactions (7d)</div>
+        </div>
+        <div style="background:#FED7D7;border-radius:8px;padding:12px;text-align:center">
+          <div style="font-size:1.4rem;font-weight:700;color:#C53030">${ps.out_of_stock || 0}</div>
+          <div style="font-size:0.72rem;color:#C53030">Out of Stock</div>
+        </div>
+        <div style="background:#FEFCBF;border-radius:8px;padding:12px;text-align:center">
+          <div style="font-size:1.4rem;font-weight:700;color:#B7791F">${ps.low_stock || 0}</div>
+          <div style="font-size:0.72rem;color:#B7791F">Low Stock</div>
+        </div>
+      </div>`;
+
+    // ── Opening stock adoption ──
+    const os = openingStockStats || {};
+    const osActivated  = parseInt(os.activated,      10) || 0;
+    const osLogged     = parseInt(os.stock_logged,   10) || 0;
+    const osRate       = osActivated > 0 ? Math.round((osLogged / osActivated) * 100) : 0;
+    const osAvgMin     = parseFloat(os.avg_minutes_to_log) || 0;
+    const osRateClr    = osRate >= 60 ? '#1A7A4A' : osRate >= 30 ? '#B7791F' : '#C53030';
+    const openingStockHtml = `
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:12px;margin-bottom:1rem">
+        <div style="background:#F0F4FA;border-radius:8px;padding:12px;text-align:center">
+          <div style="font-size:1.4rem;font-weight:700;color:#0F2744">${osActivated}</div>
+          <div style="font-size:0.72rem;color:#718096">Activated Users</div>
+        </div>
+        <div style="background:#C6F6D5;border-radius:8px;padding:12px;text-align:center">
+          <div style="font-size:1.4rem;font-weight:700;color:#1A7A4A">${osLogged}</div>
+          <div style="font-size:0.72rem;color:#1A7A4A">Stock Setup Done</div>
+        </div>
+        <div style="background:#BEE3F8;border-radius:8px;padding:12px;text-align:center">
+          <div style="font-size:1.4rem;font-weight:700;color:${osRateClr}">${osRate}%</div>
+          <div style="font-size:0.72rem;color:#718096">Adoption Rate</div>
+        </div>
+        <div style="background:#FEFCBF;border-radius:8px;padding:12px;text-align:center">
+          <div style="font-size:1.4rem;font-weight:700;color:#B7791F">${osAvgMin > 0 ? osAvgMin + 'm' : '—'}</div>
+          <div style="font-size:0.72rem;color:#B7791F">Avg Time to Setup</div>
+        </div>
+      </div>`;
+
+    // ── Media/photo + voice stats ──
+    const ms = (mediaStats.rows || [{}])[0] || {};
+    const photoTotal  = parseInt(ms.photo_total,  10) || 0;
+    const photoParsed = parseInt(ms.photo_parsed, 10) || 0;
+    const voiceTotal  = parseInt(ms.voice_total,  10) || 0;
+    const voiceParsed = parseInt(ms.voice_parsed, 10) || 0;
+    const mediaUsers  = parseInt(ms.unique_users, 10) || 0;
+    const mediaLast7d = parseInt(ms.last_7d,      10) || 0;
+    const photoRate   = photoTotal > 0 ? Math.round((photoParsed / photoTotal) * 100) : 0;
+    const voiceRate   = voiceTotal > 0 ? Math.round((voiceParsed / voiceTotal) * 100) : 0;
+    const mediaStatsHtml = `
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:12px;margin-bottom:1rem">
+        <div style="background:#F0F4FA;border-radius:8px;padding:12px;text-align:center">
+          <div style="font-size:1.4rem;font-weight:700;color:#0F2744">${photoTotal}</div>
+          <div style="font-size:0.72rem;color:#718096">Photos Submitted</div>
+        </div>
+        <div style="background:#C6F6D5;border-radius:8px;padding:12px;text-align:center">
+          <div style="font-size:1.4rem;font-weight:700;color:#1A7A4A">${photoRate}%</div>
+          <div style="font-size:0.72rem;color:#1A7A4A">Photo Parse Rate</div>
+        </div>
+        <div style="background:#F0F4FA;border-radius:8px;padding:12px;text-align:center">
+          <div style="font-size:1.4rem;font-weight:700;color:#0F2744">${voiceTotal}</div>
+          <div style="font-size:0.72rem;color:#718096">Voice Submitted</div>
+        </div>
+        <div style="background:#C6F6D5;border-radius:8px;padding:12px;text-align:center">
+          <div style="font-size:1.4rem;font-weight:700;color:#1A7A4A">${voiceRate}%</div>
+          <div style="font-size:0.72rem;color:#1A7A4A">Voice Parse Rate</div>
+        </div>
+        <div style="background:#BEE3F8;border-radius:8px;padding:12px;text-align:center">
+          <div style="font-size:1.4rem;font-weight:700;color:#1A56A4">${mediaUsers}</div>
+          <div style="font-size:0.72rem;color:#1A56A4">Unique Users</div>
+        </div>
+        <div style="background:#FEFCBF;border-radius:8px;padding:12px;text-align:center">
+          <div style="font-size:1.4rem;font-weight:700;color:#B7791F">${mediaLast7d}</div>
+          <div style="font-size:0.72rem;color:#B7791F">Last 7 Days</div>
+        </div>
+      </div>`;
+
+    // ── Buying calculator stats ──
+    const cs = (calcStats.rows || [{}])[0] || {};
+    const calcTotal   = parseInt(cs.total_calcs,  10) || 0;
+    const calcLast7d  = parseInt(cs.calcs_7d,     10) || 0;
+    const calcUsers   = parseInt(cs.unique_users, 10) || 0;
+    const calcConfirm = parseInt(cs.confirmed,    10) || 0;
+    const calcConfirmRate = calcTotal > 0 ? Math.round((calcConfirm / calcTotal) * 100) : 0;
+    const calcStatsHtml = `
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:12px;margin-bottom:1rem">
+        <div style="background:#F0F4FA;border-radius:8px;padding:12px;text-align:center">
+          <div style="font-size:1.4rem;font-weight:700;color:#0F2744">${calcTotal}</div>
+          <div style="font-size:0.72rem;color:#718096">Total Calculations</div>
+        </div>
+        <div style="background:#BEE3F8;border-radius:8px;padding:12px;text-align:center">
+          <div style="font-size:1.4rem;font-weight:700;color:#1A56A4">${calcUsers}</div>
+          <div style="font-size:0.72rem;color:#1A56A4">Unique Users</div>
+        </div>
+        <div style="background:#FEFCBF;border-radius:8px;padding:12px;text-align:center">
+          <div style="font-size:1.4rem;font-weight:700;color:#B7791F">${calcLast7d}</div>
+          <div style="font-size:0.72rem;color:#B7791F">Last 7 Days</div>
+        </div>
+        <div style="background:#C6F6D5;border-radius:8px;padding:12px;text-align:center">
+          <div style="font-size:1.4rem;font-weight:700;color:#1A7A4A">${calcConfirmRate}%</div>
+          <div style="font-size:0.72rem;color:#1A7A4A">Confirmed Rate</div>
+        </div>
+      </div>`;
 
     // ── Variant conversion rows ──
     const variantRows = (variantStats.rows || []).map(v => {
@@ -487,6 +693,37 @@ router.get('/', adminAuth, async (req, res) => {
       <tbody>${variantRows}</tbody>
     </table>
   </div>
+
+  <p class="section-title" style="margin-top:1.5rem">Parse Confirmation (last 7 days)</p>
+  <p style="font-size:.82rem;color:#718096;margin-bottom:1rem">
+    Tracks how often Gemini gets entries right vs needing correction.
+    Correction rate &gt;20% means the AI prompt needs tuning.
+  </p>
+  ${confirmStatsHtml}
+
+  <p class="section-title" style="margin-top:1.5rem">Product Tracking</p>
+  <p style="font-size:.82rem;color:#718096;margin-bottom:1rem">
+    Products tracked across all active users.
+  </p>
+  ${productStatsHtml}
+
+  <p class="section-title" style="margin-top:1.5rem">Stock Intelligence Adoption</p>
+  <p style="font-size:.82rem;color:#718096;margin-bottom:1rem">
+    How many activated users have completed their opening stock setup. Low adoption means the morning briefing isn't firing for most users.
+  </p>
+  ${openingStockHtml}
+
+  <p class="section-title" style="margin-top:1.5rem">Photo &amp; Voice Intelligence</p>
+  <p style="font-size:.82rem;color:#718096;margin-bottom:1rem">
+    Usage of image (price-tag photo) and voice message submission. Parse rate = Gemini successfully extracted data.
+  </p>
+  ${mediaStatsHtml}
+
+  <p class="section-title" style="margin-top:1.5rem">Buying Calculator Usage</p>
+  <p style="font-size:.82rem;color:#718096;margin-bottom:1rem">
+    Users who sent a margin % command (e.g. "35% margin") to calculate target buying prices. Confirmed = user accepted the result.
+  </p>
+  ${calcStatsHtml}
 
   <p class="section-title">7-Day Retention by Business Type</p>
   <p style="font-size:.82rem;color:#718096;margin-bottom:1rem">

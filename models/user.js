@@ -179,16 +179,18 @@ const UserModel = {
   },
 
   /** Update user profile settings from the frontend */
-  async update(userId, { name, email, bizName, bizType, state, whatsappNumber }) {
+  async update(userId, { name, email, bizName, bizType, state, whatsappNumber, summaryFrequency }) {
+    const params = [name, email, bizName, bizType, state, userId];
+    let extra = '';
+    if (whatsappNumber !== undefined) {
+      extra += `, whatsapp_number = $${params.push(whatsappNumber)}`;
+    }
+    if (summaryFrequency !== undefined) {
+      extra += `, summary_frequency = $${params.push(summaryFrequency)}`;
+    }
     const res = await query(
-      `UPDATE users
-       SET name = $1, email = $2, biz_name = $3, biz_type = $4, state = $5
-           ${whatsappNumber !== undefined ? ', whatsapp_number = $7' : ''}
-       WHERE id = $6
-       RETURNING *`,
-      whatsappNumber !== undefined
-        ? [name, email, bizName, bizType, state, userId, whatsappNumber]
-        : [name, email, bizName, bizType, state, userId]
+      `UPDATE users SET name=$1, email=$2, biz_name=$3, biz_type=$4, state=$5${extra} WHERE id=$6 RETURNING *`,
+      params
     );
     return res.rows[0];
   },
@@ -225,6 +227,31 @@ const UserModel = {
       ORDER BY last_message_date ASC
     `);
     return res.rows;
+  },
+
+  /** Mark a user's opening stock as logged. */
+  async markOpeningStockLogged(userId) {
+    await query(
+      `UPDATE users
+       SET opening_stock_logged = true, opening_stock_logged_at = NOW()
+       WHERE id = $1`,
+      [userId]
+    );
+  },
+
+  /** Count users who have completed opening stock setup. */
+  async getOpeningStockStats() {
+    const res = await query(
+      `SELECT
+         COUNT(*) FILTER (WHERE first_message_date IS NOT NULL)              AS activated,
+         COUNT(*) FILTER (WHERE opening_stock_logged = true)                 AS stock_logged,
+         ROUND(AVG(
+           EXTRACT(EPOCH FROM (opening_stock_logged_at - created_at)) / 60
+         ) FILTER (WHERE opening_stock_logged = true), 1)                   AS avg_minutes_to_log
+       FROM users
+       WHERE active = true`
+    );
+    return res.rows[0] || {};
   },
 };
 
