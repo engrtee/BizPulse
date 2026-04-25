@@ -6,7 +6,10 @@
   "scripts": {
     "start": "node server.js",
     "dev": "nodemon server.js",
-    "setup-db": "node scripts/setupDb.js"
+    "setup-db": "node scripts/setupDb.js",
+    "test:parser": "node scripts/stress-test-parser.js",
+    "test:parser:dry": "node scripts/stress-test-parser.js --dry-run",
+    "test:parser:quick": "node scripts/stress-test-parser.js --batch 15 --delay 500"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.87.0",
