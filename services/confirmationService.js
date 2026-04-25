@@ -60,6 +60,20 @@ async function confirmEntry(pendingId) {
      WHERE id = $1`,
     [pendingId]
   );
+  // Backfill outcome on the matching inference log row
+  query(
+    `UPDATE ai_inference_log SET outcome = 'confirmed'
+     WHERE id = (
+       SELECT ail.id FROM ai_inference_log ail
+       JOIN pending_entries pe ON pe.id = $1
+       WHERE ail.user_id = pe.user_id
+         AND ail.call_type = 'parse'
+         AND ail.outcome IS NULL
+         AND ail.created_at >= pe.created_at - INTERVAL '5 minutes'
+       ORDER BY ail.created_at DESC LIMIT 1
+     )`,
+    [pendingId]
+  ).catch(() => {});
 }
 
 async function discardEntry(pendingId) {
@@ -74,6 +88,19 @@ async function editEntry(pendingId) {
     `UPDATE pending_entries SET status = 'edited' WHERE id = $1`,
     [pendingId]
   );
+  query(
+    `UPDATE ai_inference_log SET outcome = 'edited'
+     WHERE id = (
+       SELECT ail.id FROM ai_inference_log ail
+       JOIN pending_entries pe ON pe.id = $1
+       WHERE ail.user_id = pe.user_id
+         AND ail.call_type = 'parse'
+         AND ail.outcome IS NULL
+         AND ail.created_at >= pe.created_at - INTERVAL '5 minutes'
+       ORDER BY ail.created_at DESC LIMIT 1
+     )`,
+    [pendingId]
+  ).catch(() => {});
 }
 
 // ── Expire entries older than 4h and return list for logging ──────────────

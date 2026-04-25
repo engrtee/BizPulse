@@ -394,6 +394,24 @@ async function initDb() {
   )`, 'CREATE learned_phrases');
   await run(`CREATE INDEX IF NOT EXISTS idx_learned_status ON learned_phrases(status)`, 'INDEX learned_phrases');
 
+  // ── AI inference log (training dataset capture) ───────────────────────
+  // Every Gemini parse call is logged here. outcome is filled in when the
+  // user confirms (YES) or edits — giving us labeled fine-tuning data.
+  await run(`CREATE TABLE IF NOT EXISTS ai_inference_log (
+    id           SERIAL PRIMARY KEY,
+    user_id      INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    call_type    VARCHAR(30) NOT NULL,
+    model        VARCHAR(60) NOT NULL,
+    input_text   TEXT NOT NULL,
+    output_text  TEXT NOT NULL,
+    parsed_type  VARCHAR(30),
+    outcome      VARCHAR(20),
+    latency_ms   INTEGER,
+    created_at   TIMESTAMPTZ DEFAULT NOW()
+  )`, 'CREATE ai_inference_log');
+  await run(`CREATE INDEX IF NOT EXISTS idx_ailog_user   ON ai_inference_log(user_id, created_at DESC)`, 'INDEX ailog_user');
+  await run(`CREATE INDEX IF NOT EXISTS idx_ailog_outcome ON ai_inference_log(outcome, call_type)`,       'INDEX ailog_outcome');
+
   console.log('✅ Database tables ready.');
 }
 

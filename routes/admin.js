@@ -727,6 +727,30 @@ router.get('/', adminAuth, async (req, res) => {
   </p>
   ${calcStatsHtml}
 
+  <p class="section-title" style="margin-top:1.5rem">🧠 Training Dataset</p>
+  <p style="font-size:.82rem;color:#718096;margin-bottom:1rem">
+    Every confirmed entry is a labeled fine-tuning example: input = WhatsApp message, output = Gemini JSON, label = user confirmed correct.
+  </p>
+  <div id="dataset-stats-area">
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:1rem;margin-bottom:1rem" id="dataset-stats-grid">
+      <div class="stat-card"><div class="stat-value" id="ds-confirmed">–</div><div class="stat-label">Confirmed examples</div></div>
+      <div class="stat-card"><div class="stat-value" id="ds-edited">–</div><div class="stat-label">Edited (negative)</div></div>
+      <div class="stat-card"><div class="stat-value" id="ds-total">–</div><div class="stat-label">Total parses logged</div></div>
+      <div class="stat-card"><div class="stat-value" id="ds-latency">–</div><div class="stat-label">Avg parse latency</div></div>
+    </div>
+    <div style="display:flex;gap:.75rem;flex-wrap:wrap">
+      <a id="ds-export-btn" href="/admin/api/dataset/export.jsonl?outcome=confirmed&password=${pw}" download
+        style="padding:8px 18px;background:#0F2744;color:#fff;border-radius:8px;text-decoration:none;font-size:.88rem;font-weight:600">
+        ⬇ Download confirmed.jsonl
+      </a>
+      <a id="ds-export-all-btn" href="/admin/api/dataset/export.jsonl?outcome=all&password=${pw}" download
+        style="padding:8px 18px;background:#1A56A4;color:#fff;border-radius:8px;text-decoration:none;font-size:.88rem;font-weight:600">
+        ⬇ Download all labeled.jsonl
+      </a>
+    </div>
+    <div id="ds-type-dist" style="margin-top:.75rem;font-size:.82rem;color:#718096"></div>
+  </div>
+
   <p class="section-title">7-Day Retention by Business Type</p>
   <p style="font-size:.82rem;color:#718096;margin-bottom:1rem">
     % of activated users (at least 1 message sent) who sent a message in the last 7 days.
@@ -990,6 +1014,32 @@ async function savePhone(userId) {
   }
 }
 
+// ── Dataset stats ─────────────────────────────────────────────────────────────
+(async function loadDatasetStats() {
+  try {
+    const pw = new URLSearchParams(location.search).get('password') || '';
+    const res = await fetch('/admin/api/dataset/stats?password=' + encodeURIComponent(pw));
+    const data = await res.json();
+    if (!data.success) return;
+
+    const ps = data.parseStats;
+    const ls = data.labelStats;
+
+    document.getElementById('ds-confirmed').textContent = Number(ls.confirmed || 0).toLocaleString();
+    document.getElementById('ds-edited').textContent    = Number(ls.edited    || 0).toLocaleString();
+    document.getElementById('ds-total').textContent     = Number(ps.total_parses || 0).toLocaleString();
+    document.getElementById('ds-latency').textContent   =
+      ps.avg_latency_24h ? Math.round(ps.avg_latency_24h) + ' ms' : '–';
+
+    if (data.typeDistribution && data.typeDistribution.length) {
+      const dist = data.typeDistribution
+        .map(r => \`<span style="margin-right:1rem">\${r.parsed_type}: \${r.n}</span>\`)
+        .join('');
+      document.getElementById('ds-type-dist').innerHTML = 'Type breakdown (confirmed): ' + dist;
+    }
+  } catch (e) { /* non-critical */ }
+})();
+
 // ── Learning tab ──────────────────────────────────────────────────────────────
 let learningLoaded = false;
 async function loadLearning() {
@@ -1191,6 +1241,135 @@ router.get('/stats', adminAuth, async (req, res) => {
     res.json({ stats, recentRegistrations: recentRegs });
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// ─────────────────────────────────────────────
+// GET /admin/api/dataset/stats — training dataset summary
+// ─────────────────────────────────────────────
+router.get('/api/dataset/stats', adminAuth, async (req, res) => {
+  try {
+    const [parseStats, labelStats, latencyStats] = await Promise.all([
+      // Total parse calls by outcome
+      query(`
+        SELECT
+          COUNT(*)                                         AS total_parses,
+          COUNT(*) FILTER (WHERE outcome = 'confirmed')    AS confirmed,
+          COUNT(*) FILTER (WHERE outcome = 'edited')       AS edited,
+          COUNT(*) FILTER (WHERE outcome IS NULL)          AS unlabeled,
+          ROUND(AVG(latency_ms))                           AS avg_latency_ms,
+          ROUND(AVG(latency_ms) FILTER (WHERE created_at >= NOW() - INTERVAL '24 hours')) AS avg_latency_24h
+        FROM ai_inference_log
+        WHERE call_type = 'parse'
+      `),
+      // Pending entries by status — the ground-truth confirmation labels
+      query(`
+        SELECT
+          COUNT(*)                                              AS total,
+          COUNT(*) FILTER (WHERE status = 'confirmed')         AS confirmed,
+          COUNT(*) FILTER (WHERE status = 'edited')            AS edited,
+          COUNT(*) FILTER (WHERE status = 'expired')           AS expired,
+          COUNT(*) FILTER (WHERE created_at >= NOW() - INTERVAL '7 days') AS last_7d
+        FROM pending_entries
+      `),
+      // Parse type distribution (confirmed entries = clean training data)
+      query(`
+        SELECT parsed_type, COUNT(*) AS n
+        FROM ai_inference_log
+        WHERE call_type = 'parse' AND outcome = 'confirmed'
+        GROUP BY parsed_type
+        ORDER BY n DESC
+      `),
+    ]);
+    res.json({
+      success: true,
+      parseStats: parseStats.rows[0],
+      labelStats: labelStats.rows[0],
+      typeDistribution: latencyStats.rows,
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ─────────────────────────────────────────────
+// GET /admin/api/dataset/export.jsonl
+// Streams the full labeled training dataset as newline-delimited JSON.
+// Each line is one example in Anthropic/OpenAI fine-tuning format.
+// ─────────────────────────────────────────────
+router.get('/api/dataset/export.jsonl', adminAuth, async (req, res) => {
+  try {
+    const outcomeFilter = req.query.outcome || 'confirmed'; // 'confirmed' | 'edited' | 'all'
+
+    const whereOutcome = outcomeFilter === 'all'
+      ? `pe.status IN ('confirmed','edited')`
+      : `pe.status = $1`;
+    const params = outcomeFilter === 'all' ? [] : [outcomeFilter];
+
+    const result = await query(
+      `SELECT
+         pe.id,
+         pe.original_message,
+         pe.parsed_data,
+         pe.entry_type,
+         pe.status          AS outcome,
+         pe.created_at,
+         u.biz_type,
+         u.state,
+         pc.corrected_parsed_data
+       FROM pending_entries pe
+       JOIN users u ON u.id = pe.user_id
+       LEFT JOIN parse_corrections pc
+         ON pc.user_id = pe.user_id
+        AND pc.original_message = pe.original_message
+        AND pc.created_at >= pe.created_at
+        AND pc.created_at <= pe.created_at + INTERVAL '3 hours'
+       WHERE ${whereOutcome}
+         AND pe.entry_type != 'calc_context'
+       ORDER BY pe.created_at DESC
+       LIMIT 50000`,
+      params
+    );
+
+    res.setHeader('Content-Type', 'application/x-ndjson');
+    res.setHeader('Content-Disposition', `attachment; filename="bizpulse-training-${new Date().toISOString().slice(0,10)}.jsonl"`);
+
+    for (const row of result.rows) {
+      const parsedData = typeof row.parsed_data === 'string'
+        ? row.parsed_data
+        : JSON.stringify(row.parsed_data);
+
+      const systemContext =
+        `You are a Nigerian SME financial data parser. Business type: ${row.biz_type || 'Retail'}. State: ${row.state || 'Nigeria'}.`;
+
+      const example = {
+        messages: [
+          { role: 'system',    content: systemContext },
+          { role: 'user',      content: row.original_message },
+          { role: 'assistant', content: parsedData },
+        ],
+        metadata: {
+          id:         row.id,
+          entry_type: row.entry_type,
+          outcome:    row.outcome,
+          biz_type:   row.biz_type,
+          state:      row.state,
+          created_at: row.created_at,
+          // Include correction if this was an edited entry
+          correction: row.corrected_parsed_data
+            ? (typeof row.corrected_parsed_data === 'string'
+                ? row.corrected_parsed_data
+                : JSON.stringify(row.corrected_parsed_data))
+            : null,
+        },
+      };
+      res.write(JSON.stringify(example) + '\n');
+    }
+    res.end();
+  } catch (err) {
+    if (!res.headersSent) {
+      res.status(500).json({ success: false, error: err.message });
+    }
   }
 });
 

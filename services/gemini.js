@@ -19,6 +19,27 @@ function getLearningService() {
   return require('./learningService');
 }
 
+// ── Non-blocking inference logger ────────────────────────────────────────────
+// Writes one row to ai_inference_log after every Gemini call.
+// Never throws — a log failure must never affect the user response.
+function logInference({ userId, callType, model, inputText, outputText, parsedType, latencyMs }) {
+  const { query } = require('../models/db');
+  query(
+    `INSERT INTO ai_inference_log
+       (user_id, call_type, model, input_text, output_text, parsed_type, latency_ms)
+     VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+    [
+      userId   || null,
+      callType,
+      model,
+      inputText.slice(0, 4000),   // cap at 4k chars — system prompt is separate
+      outputText.slice(0, 8000),
+      parsedType || null,
+      latencyMs  || null,
+    ]
+  ).catch(e => console.error('[Gemini] logInference failed:', e.message));
+}
+
 function getClient() {
   if (!genAI) {
     if (!process.env.GEMINI_API_KEY) {
@@ -238,8 +259,10 @@ If the user says "I sell [item]" or quantity × price implies resale → product
 - Return ONLY valid JSON. No markdown, no explanation, no code blocks.
 `;
 
+  const t0 = Date.now();
   try {
-    const model = getClient().getGenerativeModel({ model: 'gemini-2.5-flash' });
+    const modelName = 'gemini-2.5-flash';
+    const model = getClient().getGenerativeModel({ model: modelName });
     const result = await model.generateContent(prompt);
     const text = result.response.text().trim();
 
@@ -269,10 +292,29 @@ If the user says "I sell [item]" or quantity × price implies resale → product
       parsed.product_name = parsed.product_name || null;
     }
 
+    // Log for training dataset — non-blocking, never affects response
+    logInference({
+      userId:     user?.id,
+      callType:   'parse',
+      model:      modelName,
+      inputText:  message,
+      outputText: clean,
+      parsedType: parsed.type,
+      latencyMs:  Date.now() - t0,
+    });
+
     return parsed;
   } catch (err) {
     console.error('[Gemini] parseWithAI error:', err.message);
-    // Fallback: return unknown so the caller can handle gracefully
+    logInference({
+      userId:     user?.id,
+      callType:   'parse',
+      model:      'gemini-2.5-flash',
+      inputText:  message,
+      outputText: 'ERROR: ' + err.message,
+      parsedType: 'error',
+      latencyMs:  Date.now() - t0,
+    });
     return { type: 'unknown' };
   }
 }
