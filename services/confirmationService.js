@@ -109,6 +109,22 @@ async function markReminderSent(pendingId) {
   );
 }
 
+// ── Fetch the most recent 'edited' entry for a user (within 2h) ───────────────
+// Used by the learning system: if a user confirmed YES after editing, the
+// edited entry is the "before" and the new confirmed entry is the "after".
+async function getRecentEditedEntry(userId) {
+  const res = await query(
+    `SELECT * FROM pending_entries
+     WHERE user_id = $1
+       AND status = 'edited'
+       AND created_at > NOW() - INTERVAL '2 hours'
+     ORDER BY created_at DESC
+     LIMIT 1`,
+    [userId]
+  );
+  return res.rows[0] || null;
+}
+
 // ── Confirmation message builders ─────────────────────────────────────────
 
 function buildConfirmationMessage(entryType, parsedData) {
@@ -283,6 +299,7 @@ module.exports = {
   expireOldEntries,
   getPendingNeedingReminder,
   markReminderSent,
+  getRecentEditedEntry,
   buildConfirmationMessage,
   getConfirmationMetrics,
 };

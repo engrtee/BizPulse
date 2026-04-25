@@ -360,6 +360,40 @@ async function initDb() {
   // ── Feature 8: Wholesale channel on product transactions ──────────────
   await run(`ALTER TABLE product_transactions ADD COLUMN IF NOT EXISTS channel VARCHAR(20) DEFAULT 'retail'`, 'ADD pt.channel');
 
+  // ── Crowdsourced learning: raw correction signals ─────────────────────
+  await run(`CREATE TABLE IF NOT EXISTS parse_corrections (
+    id                    SERIAL PRIMARY KEY,
+    user_id               INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    user_state            TEXT,
+    original_message      TEXT NOT NULL,
+    original_type         TEXT,
+    original_parsed_data  JSONB,
+    corrected_message     TEXT,
+    corrected_type        TEXT,
+    corrected_parsed_data JSONB,
+    phrase_key            TEXT NOT NULL,
+    learn_type            TEXT NOT NULL,
+    created_at            TIMESTAMPTZ DEFAULT NOW()
+  )`, 'CREATE parse_corrections');
+  await run(`CREATE INDEX IF NOT EXISTS idx_corrections_phrase ON parse_corrections(phrase_key, learn_type)`, 'INDEX parse_corrections');
+
+  // ── Crowdsourced learning: promoted phrases injected into Gemini ───────
+  await run(`CREATE TABLE IF NOT EXISTS learned_phrases (
+    id               SERIAL PRIMARY KEY,
+    phrase_key       TEXT NOT NULL,
+    learn_type       TEXT NOT NULL,
+    maps_to          TEXT NOT NULL,
+    correction_count INTEGER DEFAULT 0,
+    unique_users     INTEGER DEFAULT 0,
+    unique_states    INTEGER DEFAULT 0,
+    status           TEXT DEFAULT 'pending_review',
+    example_message  TEXT,
+    created_at       TIMESTAMPTZ DEFAULT NOW(),
+    updated_at       TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(phrase_key, learn_type)
+  )`, 'CREATE learned_phrases');
+  await run(`CREATE INDEX IF NOT EXISTS idx_learned_status ON learned_phrases(status)`, 'INDEX learned_phrases');
+
   console.log('✅ Database tables ready.');
 }
 

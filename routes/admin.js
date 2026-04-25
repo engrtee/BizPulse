@@ -15,6 +15,7 @@ const router         = express.Router();
 const UserModel      = require('../models/user');
 const TransactionModel = require('../models/transaction');
 const { MessageModel, query } = require('../models/db');
+const LearningService  = require('../services/learningService');
 
 function adminAuth(req, res, next) {
   const provided = req.query.password || req.headers['x-admin-password'];
@@ -574,6 +575,7 @@ router.get('/', adminAuth, async (req, res) => {
   <div class="tab" onclick="showTab('atrisk')">At-Risk (${atRiskCount})</div>
   <div class="tab" onclick="showTab('variants')">Nudge Analytics</div>
   <div class="tab" onclick="showTab('health')">System Health</div>
+  <div class="tab" onclick="showTab('learning');loadLearning()">🧠 Learning</div>
 </div>
 
 <!-- ── OVERVIEW TAB ── -->
@@ -755,6 +757,31 @@ router.get('/', adminAuth, async (req, res) => {
     <div>POST <code style="background:#F0F4FA;padding:2px 6px;border-radius:4px">${process.env.BASE_URL || ''}/api/cron/evening-reminder</code> — 6pm WAT daily</div>
     <div>POST <code style="background:#F0F4FA;padding:2px 6px;border-radius:4px">${process.env.BASE_URL || ''}/api/cron/daily-summary</code> — 7pm WAT daily</div>
     <div>POST <code style="background:#F0F4FA;padding:2px 6px;border-radius:4px">${process.env.BASE_URL || ''}/api/cron/retention-nudge</code> — 10am WAT daily</div>
+  </div>
+</div>
+
+<!-- ── LEARNING TAB ── -->
+<div id="tab-learning" class="pane">
+  <p class="section-title">Crowdsourced Vocabulary Learning</p>
+  <div id="learning-stats" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:1rem;margin-bottom:1.5rem">
+    <div class="stat-card"><div class="stat-value" id="ls-active">–</div><div class="stat-label">Active phrases</div></div>
+    <div class="stat-card"><div class="stat-value" id="ls-pending">–</div><div class="stat-label">Pending review</div></div>
+    <div class="stat-card"><div class="stat-value" id="ls-corrections">–</div><div class="stat-label">Total corrections</div></div>
+    <div class="stat-card"><div class="stat-value" id="ls-rejected">–</div><div class="stat-label">Rejected</div></div>
+  </div>
+
+  <p class="section-title">Pending Review
+    <span style="font-size:.8rem;font-weight:400;color:#718096;margin-left:.5rem">
+      — intent_change always requires manual approval; others surface here at 2+ user confirmations
+    </span>
+  </p>
+  <div id="learning-pending">
+    <p style="color:#718096;font-size:.9rem">Loading…</p>
+  </div>
+
+  <p class="section-title" style="margin-top:1.5rem">Active Learned Phrases (injected into every Gemini parse)</p>
+  <div id="learning-active">
+    <p style="color:#718096;font-size:.9rem">Loading…</p>
   </div>
 </div>
 
@@ -962,6 +989,89 @@ async function savePhone(userId) {
     toast('❌ ' + (data.error || 'Update failed'), false);
   }
 }
+
+// ── Learning tab ──────────────────────────────────────────────────────────────
+let learningLoaded = false;
+async function loadLearning() {
+  if (learningLoaded) return;
+  learningLoaded = true;
+  const pw = new URLSearchParams(location.search).get('password') || '';
+  const res = await fetch('/admin/api/learning?password=' + encodeURIComponent(pw));
+  const data = await res.json();
+  if (!data.success) { toast('❌ Could not load learning data', false); return; }
+
+  const { stats, pending, active } = data;
+  document.getElementById('ls-active').textContent      = stats.active_count      || 0;
+  document.getElementById('ls-pending').textContent     = stats.pending_count     || 0;
+  document.getElementById('ls-corrections').textContent = stats.total_corrections || 0;
+  document.getElementById('ls-rejected').textContent    = stats.rejected_count    || 0;
+
+  // Pending reviews
+  const pendingEl = document.getElementById('learning-pending');
+  if (!pending || !pending.length) {
+    pendingEl.innerHTML = '<p style="color:#718096;font-size:.9rem">No phrases pending review.</p>';
+  } else {
+    pendingEl.innerHTML = pending.map(p => {
+      const examples = (p.examples || []).slice(0, 3)
+        .map(e => '<li style="color:#4A5568;font-size:.82rem;margin:2px 0">"' + escHtmlJs(e.message || '') + '" (' + (e.state || 'unknown state') + ')</li>')
+        .join('');
+      const badge = p.learn_type === 'intent_change'
+        ? '<span style="background:#FEB2B2;color:#742A2A;padding:2px 8px;border-radius:10px;font-size:.75rem;font-weight:600">intent_change — manual required</span>'
+        : p.learn_type === 'product_variant'
+        ? '<span style="background:#BEE3F8;color:#2C5282;padding:2px 8px;border-radius:10px;font-size:.75rem;font-weight:600">product_variant</span>'
+        : '<span style="background:#FEFCBF;color:#744210;padding:2px 8px;border-radius:10px;font-size:.75rem;font-weight:600">phrase_intent</span>';
+      return \`<div style="border:1px solid #E2E8F0;border-radius:8px;padding:1rem;margin-bottom:.75rem">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:.5rem;flex-wrap:wrap">
+          <div>
+            \${badge}
+            <span style="font-weight:600;margin-left:.5rem">"<code>\${escHtmlJs(p.phrase_key)}</code>"</span>
+            &rarr; <span style="color:#1A7A4A">\${escHtmlJs(p.maps_to)}</span>
+          </div>
+          <div style="font-size:.82rem;color:#718096">\${p.unique_users} users · \${p.unique_states} states · \${p.correction_count} corrections</div>
+        </div>
+        <ul style="margin:.5rem 0 .75rem 1rem;padding:0">\${examples}</ul>
+        <div style="display:flex;gap:.5rem">
+          <button onclick="learningAction(\${p.id},'approve')" style="padding:5px 16px;background:#1A7A4A;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:.85rem">✅ Approve</button>
+          <button onclick="learningAction(\${p.id},'reject')" style="padding:5px 16px;background:#C53030;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:.85rem">❌ Reject</button>
+        </div>
+      </div>\`;
+    }).join('');
+  }
+
+  // Active phrases
+  const activeEl = document.getElementById('learning-active');
+  if (!active || !active.length) {
+    activeEl.innerHTML = '<p style="color:#718096;font-size:.9rem">No active phrases yet. They will appear here once confirmed at threshold.</p>';
+  } else {
+    activeEl.innerHTML = '<table style="width:100%;border-collapse:collapse;font-size:.88rem"><thead><tr style="background:#F0F4FA"><th style="text-align:left;padding:8px">Phrase</th><th style="text-align:left;padding:8px">Type</th><th style="text-align:left;padding:8px">Maps to</th><th style="padding:8px">Users</th><th style="padding:8px">States</th></tr></thead><tbody>' +
+      active.map((p, i) => \`<tr style="background:\${i%2===0?'#fff':'#F7FAFC'}">
+        <td style="padding:8px;font-family:monospace">\${escHtmlJs(p.phrase_key)}</td>
+        <td style="padding:8px;font-size:.8rem;color:#718096">\${p.learn_type}</td>
+        <td style="padding:8px;color:#1A7A4A">\${escHtmlJs(p.maps_to)}</td>
+        <td style="padding:8px;text-align:center">\${p.unique_users}</td>
+        <td style="padding:8px;text-align:center">\${p.unique_states}</td>
+      </tr>\`).join('') +
+      '</tbody></table>';
+  }
+}
+
+async function learningAction(id, action) {
+  const pw = new URLSearchParams(location.search).get('password') || '';
+  const res = await fetch('/admin/api/learning/' + id + '/' + action + '?password=' + encodeURIComponent(pw), { method: 'POST' });
+  const data = await res.json();
+  if (data.success) {
+    toast(action === 'approve' ? '✅ Phrase approved — now active' : '✅ Phrase rejected');
+    learningLoaded = false;
+    loadLearning();
+  } else {
+    toast('❌ ' + (data.error || 'Failed'), false);
+  }
+}
+
+function escHtmlJs(str) {
+  if (!str) return '';
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
 </script>
 </body>
 </html>`;
@@ -1081,6 +1191,46 @@ router.get('/stats', adminAuth, async (req, res) => {
     res.json({ stats, recentRegistrations: recentRegs });
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// ─────────────────────────────────────────────
+// GET /admin/api/learning — stats + pending reviews + active phrases
+// ─────────────────────────────────────────────
+router.get('/api/learning', adminAuth, async (req, res) => {
+  try {
+    const [stats, pending, active] = await Promise.all([
+      LearningService.getLearningStats(),
+      LearningService.getPendingReviews(),
+      LearningService.getActivePhrases(),
+    ]);
+    res.json({ success: true, stats, pending, active });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ─────────────────────────────────────────────
+// POST /admin/api/learning/:id/approve
+// ─────────────────────────────────────────────
+router.post('/api/learning/:id/approve', adminAuth, async (req, res) => {
+  try {
+    await LearningService.approvePhrase(parseInt(req.params.id, 10));
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ─────────────────────────────────────────────
+// POST /admin/api/learning/:id/reject
+// ─────────────────────────────────────────────
+router.post('/api/learning/:id/reject', adminAuth, async (req, res) => {
+  try {
+    await LearningService.rejectPhrase(parseInt(req.params.id, 10));
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 

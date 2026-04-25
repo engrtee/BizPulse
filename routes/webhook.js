@@ -36,6 +36,7 @@ const { trackOutcome }   = require('../services/messageVariants');
 const ConfirmationService = require('../services/confirmationService');
 const ProductService      = require('../services/productService');
 const ProductModel        = require('../models/product');
+const LearningService     = require('../services/learningService');
 
 const { calcHealthScore, healthLabel, topExpenseCategory, todayWAT } = require('../utils/formatter');
 const { calcMargin } = require('../utils/naira');
@@ -278,6 +279,27 @@ router.post('/', async (req, res) => {
       const pending = await ConfirmationService.getPendingEntry(user.id);
       if (pending) {
         await ConfirmationService.confirmEntry(pending.id);
+
+        // ── Learning: record correction if this YES follows an EDIT ──────────
+        try {
+          const editedEntry = await ConfirmationService.getRecentEditedEntry(user.id);
+          if (editedEntry && editedEntry.id !== pending.id) {
+            const origData = typeof editedEntry.parsed_data === 'string'
+              ? JSON.parse(editedEntry.parsed_data) : editedEntry.parsed_data;
+            const confData = typeof pending.parsed_data === 'string'
+              ? JSON.parse(pending.parsed_data) : pending.parsed_data;
+            LearningService.recordCorrection(
+              user.id,
+              user.state,
+              { type: editedEntry.entry_type, data: origData, message: editedEntry.original_message },
+              { type: pending.entry_type,     data: confData, message: pending.original_message }
+            ).catch(e => console.error('[Learning] Hook error:', e.message));
+          }
+        } catch (e) {
+          console.error('[Learning] Correction hook failed:', e.message);
+        }
+        // ─────────────────────────────────────────────────────────────────────
+
         await handleConfirmedEntry(user, from, pending);
         await MessageModel.updateLog(msgLogId, { intent: 'confirm_yes', status: 'processed' }).catch(() => {});
         return;

@@ -14,6 +14,11 @@ const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 let genAI = null;
 
+// Lazy-required to avoid circular dependency at module load time
+function getLearningService() {
+  return require('./learningService');
+}
+
 function getClient() {
   if (!genAI) {
     if (!process.env.GEMINI_API_KEY) {
@@ -53,8 +58,11 @@ Always respond in plain English, not accounting jargon. Be warm and encouraging.
  * @returns {object}        Structured data matching the message type
  */
 async function parseWithAI(message, user) {
+  const learnedContext = await getLearningService().getLearnedContext().catch(() => '');
+
   const prompt = `
 ${NIGERIA_CONTEXT}
+${learnedContext}
 
 You are BizPulse — a personal business data assistant for Nigerian SMEs.
 The user runs a "${user.biz_type || 'retail'}" business.
