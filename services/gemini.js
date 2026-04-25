@@ -86,18 +86,34 @@ Classify as EXACTLY ONE of these types:
    Example: "I have 20 oud oil 15 rose and 5 musk" → opening_stock with 3 products
    Do NOT classify as opening_stock if the message also contains prices in a sale/purchase context.
 
-5. customer_log — they are only reporting a customer count, with no financial figures
+5. stock_zero — user is reporting a product has completely run out or wants it marked as out of stock
+   Trigger phrases (Nigerian Pidgin and English):
+   "[product] don finish", "[product] e don finish o", "[product] don comot", "[product] don comot finish",
+   "[product] finish", "[product] finished", "[product] is finished", "[product] don exhaust",
+   "[product] abeg update", "[product] done", "[product] no more", "[product] don go",
+   "e don finish o" (no product = null), "e don finish", "it has finished", "it don finish"
+   Return: { "type": "stock_zero", "product_name": string|null }
+   If no product name is identifiable, set product_name to null.
+   Examples:
+   "milo don finish" → { "type": "stock_zero", "product_name": "milo" }
+   "e don finish o" → { "type": "stock_zero", "product_name": null }
+   "milo e don finish o" → { "type": "stock_zero", "product_name": "milo" }
+   "milo abeg update" → { "type": "stock_zero", "product_name": "milo" }
+   "rice don comot finish" → { "type": "stock_zero", "product_name": "rice" }
+   Do NOT classify as stock_zero if the message also contains revenue figures or is clearly a sale/purchase.
+
+6. customer_log — they are only reporting a customer count, with no financial figures
    Return: { "type": "customer_log", "count": number, "notes": string }
 
-6. greeting — hello, good morning, how are you, general pleasantries
+7. greeting — hello, good morning, how are you, general pleasantries
    Return: { "type": "greeting", "message": string }
    The message must be a warm, encouraging reply (2-3 sentences max) as their personal business assistant. Reference their business type or name naturally.
 
-7. question — asking for advice, explanation, or help about their business, BizPulse features, or finances
+8. question — asking for advice, explanation, or help about their business, BizPulse features, or finances
    Return: { "type": "question", "message": string }
    The message must be a helpful, specific answer (2-3 sentences max) grounded in Nigerian business context.
 
-8. unknown — completely off-topic, cannot be classified
+9. unknown — completely off-topic, cannot be classified
    Return: { "type": "unknown" }
 
 Expense categories to use: Stock / Inventory, Rent, Staff Wages, Transport, Utilities, Marketing, Packaging, Equipment, Food & Supplies, Professional Fees, Data / Internet, Uncategorised
@@ -240,6 +256,9 @@ If the user says "I sell [item]" or quantity × price implies resale → product
     }
     if (parsed.type === 'opening_stock') {
       parsed.products = Array.isArray(parsed.products) ? parsed.products : [];
+    }
+    if (parsed.type === 'stock_zero') {
+      parsed.product_name = parsed.product_name || null;
     }
 
     return parsed;

@@ -35,6 +35,7 @@ const EmailService       = require('../services/email');
 const { trackOutcome }   = require('../services/messageVariants');
 const ConfirmationService = require('../services/confirmationService');
 const ProductService      = require('../services/productService');
+const ProductModel        = require('../models/product');
 
 const { calcHealthScore, healthLabel, topExpenseCategory, todayWAT } = require('../utils/formatter');
 const { calcMargin } = require('../utils/naira');
@@ -431,6 +432,40 @@ router.post('/', async (req, res) => {
         break;
       }
 
+      case 'stock_zero': {
+        const rawProductName = data.product_name;
+        if (!rawProductName) {
+          await WhatsAppService.sendMessage(from,
+            `Which product finished? Just send the name — e.g. *Milo* — and I'll mark it as out of stock. 🔴`);
+          await MessageModel.updateLog(msgLogId, { intent: 'stock_zero', status: 'needs_product' }).catch(() => {});
+          break;
+        }
+        const foundProduct = await ProductService.findProductFuzzy(user.id, rawProductName).catch(() => null);
+        if (!foundProduct) {
+          await WhatsAppService.sendMessage(from,
+            `I don't have *${rawProductName}* in your stock records yet.\n\n` +
+            `To add it first, send:\n_"I have [number] ${rawProductName}"_\nor\n_"received [number] ${rawProductName} at [price] each"_ 📦`);
+          await MessageModel.updateLog(msgLogId, { intent: 'stock_zero', status: 'product_not_found' }).catch(() => {});
+          break;
+        }
+        const currentStock = await ProductModel.getCurrentStock(foundProduct.id);
+        if (currentStock === 0) {
+          await WhatsAppService.sendMessage(from,
+            `🔴 *${foundProduct.product_name}* is already out of stock. Nothing to update.`);
+          break;
+        }
+        const pendingData = {
+          product_name:  foundProduct.product_name,
+          product_id:    foundProduct.id,
+          current_stock: currentStock,
+        };
+        await ConfirmationService.savePending(user.id, 'stock_zero', pendingData, text);
+        const confirmMsgZero = ConfirmationService.buildConfirmationMessage('stock_zero', pendingData);
+        await WhatsAppService.sendMessage(from, confirmMsgZero);
+        await MessageModel.updateLog(msgLogId, { intent: 'stock_zero', parsedData: pendingData, status: 'pending_confirm' }).catch(() => {});
+        break;
+      }
+
       case 'customer_log': {
         const count = parseInt(data.count, 10) || 0;
         await CustomerService.logCustomers(user, count, text);
@@ -543,6 +578,17 @@ async function handleConfirmedEntry(user, from, pending) {
     await WhatsAppService.sendMessage(from,
       `✅ Stock set, ${user.name.split(' ')[0]}!\n\n${lines}\n\n` +
       `I'll alert you before anything runs low. Send your daily sales whenever you're ready. 🚀`
+    );
+    return;
+  }
+
+  if (entry_type === 'stock_zero') {
+    const { product_name, product_id, current_stock } = parsedData;
+    const zeroed = await ProductService.zeroProductStock(user.id, product_id, todayWAT());
+    const qty    = zeroed || current_stock || 0;
+    await WhatsAppService.sendMessage(from,
+      `🔴 *${product_name}* marked as out of stock (${qty.toLocaleString('en-NG')} units cleared).\n\n` +
+      `When you restock, send:\n_"received [number] ${product_name} at [price] each"_\nand I'll update your inventory. 📦`
     );
     return;
   }

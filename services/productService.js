@@ -359,6 +359,29 @@ async function setOpeningStock(userId, products) {
   }
 }
 
+/**
+ * Zero out a product's stock — records the remaining quantity as a sale transaction
+ * so the movement log reflects what happened.
+ * Returns the quantity that was zeroed out (0 if already empty).
+ */
+async function zeroProductStock(userId, productId, date) {
+  const currentStock = await ProductModel.getCurrentStock(productId);
+  if (currentStock <= 0) return 0;
+  await ProductModel.applyStockChange(productId, { delta: -currentStock });
+  await ProductModel.recordTransaction({
+    userId,
+    productId,
+    type:         'sale',
+    quantity:     currentStock,
+    unitPrice:    null,
+    totalAmount:  0,
+    dailyEntryId: null,
+    date,
+    channel:      'retail',
+  });
+  return currentStock;
+}
+
 module.exports = {
   normalizeProductName,
   normalizeForStorage,
@@ -367,4 +390,5 @@ module.exports = {
   processProductTransactions,
   checkAndSendLowStockAlert,
   setOpeningStock,
+  zeroProductStock,
 };

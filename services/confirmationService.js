@@ -115,6 +115,7 @@ function buildConfirmationMessage(entryType, parsedData) {
   if (entryType === 'inventory_in')  return buildStockInConfirmation(parsedData);
   if (entryType === 'inventory_out') return buildStockOutConfirmation(parsedData);
   if (entryType === 'opening_stock') return buildOpeningStockConfirmation(parsedData);
+  if (entryType === 'stock_zero')    return buildStockZeroConfirmation(parsedData);
   return buildDailyEntryConfirmation(parsedData);
 }
 
@@ -238,6 +239,19 @@ function buildOpeningStockConfirmation(data) {
   lines.push('Reply *YES* to set these as your starting stock levels ✅');
   lines.push('Reply *EDIT* if something is wrong ❌');
   return lines.join('\n');
+}
+
+function buildStockZeroConfirmation(data) {
+  const name  = data.product_name || 'this product';
+  const stock = parseFloat(data.current_stock) || 0;
+  return [
+    `Got it — confirm this is correct:\n`,
+    `🔴 *MARK AS OUT OF STOCK*`,
+    `- ${name}: ${stock.toLocaleString('en-NG')} units remaining → 0`,
+    ``,
+    `Reply *YES* to mark it as out of stock ✅`,
+    `Reply *EDIT* if you meant something else ❌`,
+  ].join('\n');
 }
 
 // ── Admin metrics ─────────────────────────────────────────────────────────
