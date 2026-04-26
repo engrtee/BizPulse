@@ -1,0 +1,141 @@
+══════════════════════════════════════════════════════════════════════
+  BIZPULSE STOCK INTELLIGENCE STRESS TEST
+  Started: 2026-04-26T17:36:51.407Z
+  Parser: real Gemini 2.0 Flash   DB: real PostgreSQL   WA: null mock
+  500ms pause between messages    DO NOT auto-fix failures
+══════════════════════════════════════════════════════════════════════
+
+━━━ Trader 01 — Fatima (Opening stock declaration, Lagos, FMCG) ━━━
+     📨  "I have 50 bags of rice and 30 cartons of indomie"
+     🤖  → opening_stock
+  ✅ PASS   Rice stock=50  [got 50.00]
+  ✅ PASS   Indomie stock=30  [got 30.00]
+
+━━━ Trader 02 — Chidi (Restock + sell, Abuja, Electronics) ━━━
+     📨  "received 20 iPhone 14 at 850000 each"
+     🤖  → inventory_in
+     📨  "sold 3 iPhone 14 at 980000 each"
+     🤖  → daily_entry
+  ✅ PASS   RESTOCK+DEDUCTION: iPhone stock=17  [got 17.00]
+  ✅ PASS   REVENUE: ₦2,940,000  [got ₦2,940,000]
+
+━━━ Trader 03 — Amina (Ankara fabric, Kano, Fashion) ━━━
+     📨  "received 40 yards ankara at 4500 per yard"
+     🤖  → inventory_in
+     📨  "I sell 10 yards ankara for 6500 each"
+     🤖  → daily_entry
+  ✅ PASS   STOCK_DEDUCTION: Ankara stock=30  [got 30.00]
+  ✅ PASS   REVENUE: ₦65,000  [got ₦65,000]
+
+━━━ Trader 04 — Emeka (FMCG Pidgin bulk, Anambra) ━━━
+     📨  "got 100 carton indomie at 3800 each"
+     🤖  → inventory_in
+     📨  "indomie 80 carton 4200 each = 336000"
+     🤖  → daily_entry
+  ✅ PASS   STOCK_DEDUCTION: Indomie stock=20  [got 20.00]
+  ✅ PASS   REVENUE: ₦336,000  [got ₦336,000]
+
+━━━ Trader 05 — Blessing (Cumulative deduction across 2 messages, Enugu) ━━━
+     📨  "I have 100 bags garri"
+     🤖  → opening_stock
+     📨  "sold 40 bags garri at 3500 each"
+     🤖  → daily_entry
+     📨  "sold 30 bags garri at 3500 each"
+     🤖  → daily_entry
+  ✅ PASS   CUMULATIVE DEDUCTION: Garri stock=30 (100-40-30)  [got 30.00]
+  ✅ PASS   TX_COUNT: 2 sale transactions  [got 2]
+
+━━━ Trader 06 — Kunle (Low stock threshold check, Oyo) ━━━
+     📨  "received 50 bags rice at 22000 each"
+     🤖  → inventory_in
+     📨  "sold 41 bags rice at 28000 each"
+     🤖  → daily_entry
+  ✅ PASS   STOCK_DEDUCTION: Rice stock=9  [got 9.00]
+  ✅ PASS   LOW_STOCK zone: 18.0% < 20% of 50 received
+
+━━━ Trader 07 — Ngozi (Sell-all → stock=0, Lagos, Beauty) ━━━
+     📨  "received 20 wigs at 15000 each"
+     🤖  → inventory_in
+     📨  "sold 20 wigs at 25000 each today"
+     🤖  → daily_entry
+  ✅ PASS   OUT_OF_STOCK: Wig stock=0  [got 0.00]
+
+━━━ Trader 08 — Tunde ("milo don finish" Pidgin stock_zero, Lagos) ━━━
+     📨  "I have 30 tins of milo"
+     🤖  → opening_stock
+     📨  "milo don finish"
+     🤖  → stock_zero
+  ✅ PASS   PIDGIN STOCK_ZERO: Milo stock=0 after "milo don finish"  [got 0.00]
+
+━━━ Trader 09 — Aisha (Credit sale → revenue=0, Kano, Fashion) ━━━
+     📨  "received 10 yards lace fabric at 12000 each"
+     🤖  → inventory_in
+     📨  "sold lace fabric to Mama Joy on credit, she will pay 80k on Saturday"
+     🤖  → daily_entry
+  ✅ PASS   CREDIT_SALE: revenue=0 (unpaid credit not counted)  [got ₦0]
+
+━━━ Trader 10 — Seun (Customer return — Phase 2 edge case, Ogun) ━━━
+     📨  "received 20 bags of beans at 18000 each"
+     🤖  → inventory_in
+     📨  "sold 5 bags of beans at 25000 each"
+     🤖  → daily_entry
+     📨  "customer returned 2 bags of beans"
+     🤖  → inventory_in
+  ✅ PASS   RETURN: stock=17 — return captured as stock_in ✓  [got 17]
+
+━━━ Trader 11 — Musa (Multi-product single message, Kaduna, FMCG) ━━━
+     📨  "I have 50 bags rice and 100 carton indomie"
+     🤖  → opening_stock
+     📨  "sold 3 bags rice at 25000 each and 10 cartons indomie at 4000 each"
+     🤖  → daily_entry
+  ✅ PASS   STOCK_DEDUCTION: Rice stock=47  [got 47.00]
+  ✅ PASS   STOCK_DEDUCTION: Indomie stock=90  [got 90.00]
+  ✅ PASS   REVENUE: ₦115,000 (3×25k + 10×4k)  [got ₦115,000]
+
+━━━ Trader 12 — Grace (Wholesale channel detection, Rivers, FMCG) ━━━
+     📨  "received 500 carton indomie at 3500 each"
+     🤖  → inventory_in
+     📨  "wholesale bulk order — 200 carton indomie to market traders at 3800 each = 760000"
+     🤖  → daily_entry
+  ✅ PASS   STOCK_DEDUCTION: Indomie stock=300  [got 300.00]
+  ✅ PASS   REVENUE: ₦760,000  [got ₦760,000]
+  ✅ PASS   CHANNEL: wholesale detected  [got "wholesale"]
+
+━━━ Trader 13 — Ibrahim (Fuzzy name matching — no duplicates, Katsina) ━━━
+     📨  "received 50 bags of rice at 22000 each"
+     🤖  → inventory_in
+     📨  "sold 5 Rice at 28000 each"
+     🤖  → daily_entry
+     📨  "sold 3 bags of rice for 28k"
+     🤖  → daily_entry
+  ✅ PASS   FUZZY MATCH: 1 product record (no duplicates)  [got 1 products]
+  ✅ PASS   STOCK_DEDUCTION cumulative: Rice stock=42 (50-5-3)  [got 42.00]
+
+━━━ Trader 14 — Chioma (Large numbers — 1.5m notation, Delta, Retail) ━━━
+     📨  "received 5 human hair pieces at 800000 each"
+     🤖  → inventory_in
+     📨  "sold 2 human hair at 1.5m each today"
+     🤖  → daily_entry
+  ✅ PASS   STOCK_DEDUCTION: Hair stock=3  [got 3.00]
+  ✅ PASS   REVENUE: ₦3,000,000 (1.5m × 2 parsed correctly)  [got ₦3,000,000]
+
+━━━ Trader 15 — Adewale (Oversell protection — no negative stock, Lagos) ━━━
+     📨  "I have 10 power banks"
+     🤖  → opening_stock
+     📨  "sold 15 power banks at 5000 each"
+     🤖  → daily_entry
+  ✅ PASS   OVERSELL PROTECTION: stock >= 0 (no negative balance)  [got 0.00]
+  ✅ PASS   OVERSELL: stock clamped to 0  [got 0.00]
+
+══════════════════════════════════════════════════════════════════════
+  RESULTS SUMMARY
+══════════════════════════════════════════════════════════════════════
+  ✅ PASSED:  28
+  ❌ FAILED:  0
+  ⚠️  WARNED:  0
+  ⏭️  SKIPPED: 0
+  TOTAL:    28 checks across 15 traders
+
+  🏆 ALL CHECKS PASSED
+══════════════════════════════════════════════════════════════════════
+  Report: C:\Users\USER\Desktop\Development Project\BizPulse\reports\stress_test_2026-04-26T17-36-51.txt

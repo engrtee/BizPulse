@@ -159,12 +159,18 @@ async function sendReminder(to, firstName, streak) {
 
 /**
  * Send the current stock levels to a user on "stock?" request.
+ * Legacy fallback — used only when the products table has no data for this user.
  * @param {string}  to     WhatsApp number
- * @param {Array}   items  Array of inventory rows from DB
+ * @param {Array}   items  Array of inventory rows from old inventory table
  */
 async function sendStockReply(to, items) {
   if (!items || items.length === 0) {
-    return sendMessage(to, '📦 No stock items recorded yet.\n\nSend something like:\n"received 50 bags rice at 900 each"\nto start tracking.');
+    return sendMessage(to,
+      `📦 No stock on record yet.\n\n` +
+      `Tell me what you have and I'll track it:\n` +
+      `_"I have 50 bags rice, 20 cartons indomie"_\n` +
+      `Or send a photo of your shelf. 📸`
+    );
   }
 
   const lines = items.map(
@@ -172,6 +178,93 @@ async function sendStockReply(to, items) {
   );
 
   const body = `📦 Current Stock\n\n${lines.join('\n')}`;
+  return sendMessage(to, body);
+}
+
+/**
+ * Send stock intelligence reply — reads from products table (new system).
+ * Shows health indicators, velocity-based days remaining, last purchase price.
+ * Called by stock_check when products table has data.
+ *
+ * @param {string} to        WhatsApp number
+ * @param {string} firstName User's first name
+ * @param {Array}  products  Rows from ProductModel.getWithHealth()
+ */
+async function sendStockIntelligenceReply(to, firstName, products) {
+  const fmt = (n) => Number(n || 0).toLocaleString('en-NG');
+
+  if (!products || products.length === 0) {
+    return sendMessage(to,
+      `📦 No stock on record yet.\n\n` +
+      `Tell me what you have and I'll track it:\n` +
+      `_"I have 50 bags rice, 20 cartons indomie"_\n` +
+      `Or send a photo of your shelf. 📸`
+    );
+  }
+
+  const lines = products.map(p => {
+    const stock    = parseFloat(p.current_stock)    || 0;
+    const received = parseFloat(p.total_ever_received) || 0;
+    const velocity = parseFloat(p.velocity_per_day) || 0;
+    const unit     = p.unit || 'units';
+    const priceNote = p.last_purchase_price
+      ? ` · Last cost: ₦${fmt(p.last_purchase_price)}`
+      : '';
+
+    let emoji    = '🟢';
+    let daysNote = '';
+
+    if (stock === 0) {
+      emoji    = '🔴';
+      daysNote = ' · OUT OF STOCK';
+    } else if (velocity > 0) {
+      const daysLeft = stock / velocity;
+      if (daysLeft < 1) {
+        emoji    = '🔴';
+        daysNote = ' · less than 1 day left';
+      } else if (daysLeft < 3) {
+        emoji    = '🟡';
+        daysNote = ` · ~${Math.round(daysLeft)} day${Math.round(daysLeft) === 1 ? '' : 's'} left`;
+      } else {
+        daysNote = ` · ~${Math.round(daysLeft)} days`;
+      }
+    } else if (received > 0 && stock / received < 0.20) {
+      emoji    = '🟡';
+      daysNote = ' · running low';
+    }
+
+    return `${emoji} ${p.product_name} — ${stock.toLocaleString('en-NG')} ${unit}${daysNote}${priceNote}`;
+  });
+
+  // Find the most urgent item for the action line
+  const outOfStock = products.filter(p => parseFloat(p.current_stock) === 0);
+  const critical   = products.find(p => {
+    const s = parseFloat(p.current_stock) || 0;
+    const v = parseFloat(p.velocity_per_day) || 0;
+    return s > 0 && v > 0 && s / v < 1;
+  });
+
+  let actionLine = '';
+  if (outOfStock.length > 0) {
+    const names = outOfStock.map(p => p.product_name).join(', ');
+    actionLine = `\n⚠️ Restock ${names} — you're losing sales on ${outOfStock.length === 1 ? 'it' : 'these'} right now.`;
+  } else if (critical) {
+    const price = critical.last_purchase_price
+      ? ` Last cost: ₦${fmt(critical.last_purchase_price)}.`
+      : '';
+    actionLine = `\n⚠️ Reorder ${critical.product_name} today — selling through before close.${price}`;
+  }
+
+  const velocityNote = products.some(p => parseFloat(p.velocity_per_day) > 0)
+    ? ''
+    : '\n\n_Tip: Send your daily sales so I can calculate how fast each item moves._';
+
+  const body =
+    `📦 *${firstName}'s Live Stock*\n\n` +
+    lines.join('\n') +
+    actionLine +
+    velocityNote;
+
   return sendMessage(to, body);
 }
 
@@ -292,18 +385,37 @@ async function sendEveningReminder(to, firstName, streak) {
 /**
  * Send the first-time welcome to a new user.
  * Fires once — the moment they send their very first WhatsApp message.
+ * @param {string} to        WhatsApp number
+ * @param {string} firstName User's first name
+ * @param {string} bizType   User's business type (for personalised example)
  */
-async function sendOnboarding(to, firstName) {
+async function sendOnboarding(to, firstName, bizType) {
+  const b = (bizType || '').toLowerCase();
+  let example = '"I have 50 bags rice, 20 cartons indomie, 10 peak milk"';
+
+  if (/fragrance|perfume|oil|scent/i.test(b)) {
+    example = '"I have 20 oud oil, 15 rose oil, 5 musk"';
+  } else if (/fashion|cloth|tailor|fabric|ankara/i.test(b)) {
+    example = '"I have 40 yards ankara, 20 yards lace, 15 george"';
+  } else if (/food|restaurant|bakery|cook/i.test(b)) {
+    example = '"I have 10 bags rice, 5 cartons eggs, 20 litres palm oil"';
+  } else if (/beauty|hair|salon|nail|makeup/i.test(b)) {
+    example = '"I have 15 wigs, 10 relaxer packs, 20 body cream"';
+  } else if (/tech|phone|electr|gadget|computer/i.test(b)) {
+    example = '"I have 10 iPhone 15, 5 Samsung A54, 20 power banks"';
+  }
+
   const body =
-    `Your BizPulse account is live, ${firstName}.\n\n` +
-    `I track your stock, your sales, and your profit — all from WhatsApp. No apps to download.\n\n` +
-    `First: tell me what stock you have right now.\n` +
-    `• Voice note: _"I have 20 oud oil, 15 rose, 5 musk"_\n` +
-    `• Photo of your shelf or stock list\n` +
-    `• Or just type it out\n\n` +
-    `Once I know your stock, I'll alert you before anything runs out.\n\n` +
-    `After that, message me your daily sales. I'll send you a full profit breakdown every evening.\n\n` +
-    `Ready when you are. 🚀`;
+    `${firstName}, you're in. ✅\n\n` +
+    `I'm BizPulse — your stock tracker and profit analyst, right here on WhatsApp.\n\n` +
+    `Every time you sell something, just tell me. I'll:\n` +
+    `→ Alert you before stock runs out (before it happens)\n` +
+    `→ Track which products make you the most money\n` +
+    `→ Send you a profit breakdown every evening\n\n` +
+    `*First step:* Tell me what stock you have right now.\n\n` +
+    `Type: ${example}\n` +
+    `Or voice note it. Or send a photo of your shelf.\n\n` +
+    `I'll take it from there. 🚀`;
 
   return sendMessage(to, body);
 }
@@ -411,6 +523,7 @@ module.exports = {
   sendEntryAck,
   sendMilestone,
   sendStockReply,
+  sendStockIntelligenceReply,
   sendHelp,
   sendNotRegistered,
   sendOnboarding,

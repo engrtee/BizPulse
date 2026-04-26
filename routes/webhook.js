@@ -244,16 +244,7 @@ router.post('/', async (req, res) => {
     // ── New user onboarding: first ever WhatsApp message ──
     if (!user.first_message_date) {
       const firstName = user.name.split(' ')[0];
-      await WhatsAppService.sendOnboarding(from, firstName);
-      // Prompt for opening stock immediately after welcome
-      await WhatsAppService.sendMessage(from,
-        `📦 *First step:* Tell me what stock you have right now.\n\n` +
-        `You can:\n` +
-        `• Voice note: _"I have 20 oud oil, 15 rose, 5 musk"_\n` +
-        `• Photo of your shelf or stock list\n` +
-        `• Or just type it out\n\n` +
-        `Once I know your stock, I'll alert you before anything runs out. 🎯`
-      ).catch(() => {});
+      await WhatsAppService.sendOnboarding(from, firstName, user.biz_type);
       // Mark first_message_date so this never fires again
       await UserModel.touchLastEntry(user.id);
       await MessageModel.updateLog(msgLogId, { intent: 'onboarding', status: 'processed' }).catch(() => {});
@@ -371,24 +362,14 @@ router.post('/', async (req, res) => {
       }
 
       case 'stock_check': {
-        const items = await InventoryService.getStock(user.id);
-        await WhatsAppService.sendStockReply(from, items);
-        // Data freshness warning — alert if products haven't been updated in 48+ hours
-        const { query: dbQuery } = require('../models/db');
-        const freshnessRes = await dbQuery(
-          `SELECT MAX(updated_at) AS last_update FROM products WHERE user_id = $1`,
-          [user.id]
-        ).catch(() => null);
-        const lastUpdate = freshnessRes?.rows?.[0]?.last_update;
-        if (lastUpdate) {
-          const hoursSince = (Date.now() - new Date(lastUpdate).getTime()) / 3600000;
-          if (hoursSince >= 48) {
-            const daysSince = Math.floor(hoursSince / 24);
-            WhatsAppService.sendMessage(from,
-              `⚠️ These numbers are ${daysSince} day${daysSince === 1 ? '' : 's'} old.\n\n` +
-              `If you've bought or sold stock since then, send me the update to keep this accurate.`
-            ).catch(() => {});
-          }
+        // Use new products table (has velocity for intelligence).
+        // Fall back to old inventory table only if products is empty (legacy data).
+        const products = await ProductModel.getWithHealth(user.id);
+        if (products.length > 0) {
+          await WhatsAppService.sendStockIntelligenceReply(from, user.name.split(' ')[0], products);
+        } else {
+          const items = await InventoryService.getStock(user.id);
+          await WhatsAppService.sendStockReply(from, items);
         }
         await MessageModel.updateLog(msgLogId, { intent: 'stock_check', status: 'processed' }).catch(() => {});
         break;

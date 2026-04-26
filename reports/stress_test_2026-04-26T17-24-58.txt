@@ -1,0 +1,124 @@
+══════════════════════════════════════════════════════════════════════
+  BIZPULSE STOCK INTELLIGENCE STRESS TEST
+  Started: 2026-04-26T17:24:58.921Z
+  Parser: real Gemini 2.0 Flash   DB: real PostgreSQL   WA: null mock
+  500ms pause between messages    DO NOT auto-fix failures
+══════════════════════════════════════════════════════════════════════
+
+━━━ Trader 01 — Fatima (Opening stock declaration, Lagos, FMCG) ━━━
+     📨  "I have 50 bags of rice and 30 cartons of indomie"
+     🤖  → opening_stock
+  ❌ FATAL   trader01: relation "products" does not exist
+
+━━━ Trader 02 — Chidi (Restock + sell, Abuja, Electronics) ━━━
+     📨  "received 20 iPhone 14 at 850000 each"
+     🤖  → inventory_in
+     📨  "sold 3 iPhone 14 at 980000 each"
+     🤖  → daily_entry
+  ❌ FATAL   trader02: relation "products" does not exist
+
+━━━ Trader 03 — Amina (Ankara fabric, Kano, Fashion) ━━━
+     📨  "received 40 yards ankara at 4500 per yard"
+     🤖  → inventory_in
+     📨  "I sell 10 yards ankara for 6500 each"
+     🤖  → daily_entry
+  ❌ FATAL   trader03: relation "products" does not exist
+
+━━━ Trader 04 — Emeka (FMCG Pidgin bulk, Anambra) ━━━
+     📨  "got 100 carton indomie at 3800 each"
+     🤖  → inventory_in
+     📨  "indomie 80 carton 4200 each = 336000"
+     🤖  → daily_entry
+  ❌ FATAL   trader04: relation "products" does not exist
+
+━━━ Trader 05 — Blessing (Cumulative deduction across 2 messages, Enugu) ━━━
+     📨  "I have 100 bags garri"
+     🤖  → opening_stock
+     📨  "sold 40 bags garri at 3500 each"
+     🤖  → daily_entry
+     📨  "sold 30 bags garri at 3500 each"
+     🤖  → daily_entry
+  ❌ FATAL   trader05: relation "products" does not exist
+
+━━━ Trader 06 — Kunle (Low stock threshold check, Oyo) ━━━
+     📨  "received 50 bags rice at 22000 each"
+     🤖  → inventory_in
+     📨  "sold 41 bags rice at 28000 each"
+     🤖  → daily_entry
+  ❌ FATAL   trader06: relation "products" does not exist
+
+━━━ Trader 07 — Ngozi (Sell-all → stock=0, Lagos, Beauty) ━━━
+     📨  "received 20 wigs at 15000 each"
+     🤖  → inventory_in
+     📨  "sold 20 wigs at 25000 each today"
+     🤖  → daily_entry
+  ❌ FATAL   trader07: relation "products" does not exist
+
+━━━ Trader 08 — Tunde ("milo don finish" Pidgin stock_zero, Lagos) ━━━
+     📨  "I have 30 tins of milo"
+     🤖  → opening_stock
+  ❌ FATAL   trader08: relation "products" does not exist
+
+━━━ Trader 09 — Aisha (Credit sale → revenue=0, Kano, Fashion) ━━━
+     📨  "received 10 yards lace fabric at 12000 each"
+     🤖  → inventory_in
+     📨  "sold lace fabric to Mama Joy on credit, she will pay 80k on Saturday"
+     🤖  → daily_entry
+  ✅ PASS   CREDIT_SALE: revenue=0 (unpaid credit not counted)  [got ₦0]
+
+━━━ Trader 10 — Seun (Customer return — Phase 2 edge case, Ogun) ━━━
+     📨  "received 20 bags of beans at 18000 each"
+     🤖  → inventory_in
+     📨  "sold 5 bags of beans at 25000 each"
+     🤖  → daily_entry
+     📨  "customer returned 2 bags of beans"
+     🤖  → inventory_in
+  ❌ FATAL   trader10: relation "products" does not exist
+
+━━━ Trader 11 — Musa (Multi-product single message, Kaduna, FMCG) ━━━
+     📨  "I have 50 bags rice and 100 carton indomie"
+     🤖  → opening_stock
+     📨  "sold 3 bags rice at 25000 each and 10 cartons indomie at 4000 each"
+     🤖  → daily_entry
+  ❌ FATAL   trader11: relation "products" does not exist
+
+━━━ Trader 12 — Grace (Wholesale channel detection, Rivers, FMCG) ━━━
+     📨  "received 500 carton indomie at 3500 each"
+     🤖  → inventory_in
+     📨  "wholesale bulk order — 200 carton indomie to market traders at 3800 each = 760000"
+     🤖  → daily_entry
+  ❌ FATAL   trader12: relation "products" does not exist
+
+━━━ Trader 13 — Ibrahim (Fuzzy name matching — no duplicates, Katsina) ━━━
+     📨  "received 50 bags of rice at 22000 each"
+     🤖  → inventory_in
+     📨  "sold 5 Rice at 28000 each"
+     🤖  → daily_entry
+     📨  "sold 3 bags of rice for 28k"
+     🤖  → daily_entry
+  ❌ FATAL   trader13: relation "products" does not exist
+
+━━━ Trader 14 — Chioma (Large numbers — 1.5m notation, Delta, Retail) ━━━
+     📨  "received 5 human hair pieces at 800000 each"
+     🤖  → inventory_in
+     📨  "sold 2 human hair at 1.5m each today"
+     🤖  → daily_entry
+  ❌ FATAL   trader14: relation "products" does not exist
+
+━━━ Trader 15 — Adewale (Oversell protection — no negative stock, Lagos) ━━━
+     📨  "I have 10 power banks"
+     🤖  → opening_stock
+     📨  "sold 15 power banks at 5000 each"
+     🤖  → daily_entry
+  ❌ FATAL   trader15: relation "products" does not exist
+
+══════════════════════════════════════════════════════════════════════
+  RESULTS SUMMARY
+══════════════════════════════════════════════════════════════════════
+  ✅ PASSED:  1
+  ❌ FAILED:  14
+  ⚠️  WARNED:  0
+  ⏭️  SKIPPED: 0
+  TOTAL:    15 checks across 15 traders
+══════════════════════════════════════════════════════════════════════
+  Report: C:\Users\USER\Desktop\Development Project\BizPulse\reports\stress_test_2026-04-26T17-24-58.txt
