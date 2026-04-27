@@ -394,6 +394,24 @@ async function initDb() {
   )`, 'CREATE learned_phrases');
   await run(`CREATE INDEX IF NOT EXISTS idx_learned_status ON learned_phrases(status)`, 'INDEX learned_phrases');
 
+  // ── Credit / cash sale tracking ──────────────────────────────────────
+  await run(`ALTER TABLE transactions ADD COLUMN IF NOT EXISTS sale_type VARCHAR(20) DEFAULT 'cash'`, 'ADD transactions.sale_type');
+  await run(`ALTER TABLE product_transactions ADD COLUMN IF NOT EXISTS sale_type VARCHAR(20) DEFAULT 'cash'`, 'ADD pt.sale_type');
+
+  await run(`CREATE TABLE IF NOT EXISTS debtors (
+    id           SERIAL PRIMARY KEY,
+    user_id      INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    debtor_name  VARCHAR(200) NOT NULL,
+    amount       NUMERIC(15,2) NOT NULL DEFAULT 0,
+    amount_paid  NUMERIC(15,2) NOT NULL DEFAULT 0,
+    product_name VARCHAR(200),
+    status       VARCHAR(20) DEFAULT 'pending',
+    notes        TEXT,
+    created_at   TIMESTAMPTZ DEFAULT NOW(),
+    paid_at      TIMESTAMPTZ
+  )`, 'CREATE debtors');
+  await run(`CREATE INDEX IF NOT EXISTS idx_debtors_user_status ON debtors(user_id, status)`, 'INDEX debtors');
+
   // ── AI inference log (training dataset capture) ───────────────────────
   // Every Gemini parse call is logged here. outcome is filled in when the
   // user confirms (YES) or edits — giving us labeled fine-tuning data.

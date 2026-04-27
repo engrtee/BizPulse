@@ -36,6 +36,7 @@ const { trackOutcome }   = require('../services/messageVariants');
 const ConfirmationService = require('../services/confirmationService');
 const ProductService      = require('../services/productService');
 const ProductModel        = require('../models/product');
+const DebtorModel         = require('../models/debtor');
 const LearningService     = require('../services/learningService');
 
 const { calcHealthScore, healthLabel, topExpenseCategory, todayWAT } = require('../utils/formatter');
@@ -362,8 +363,6 @@ router.post('/', async (req, res) => {
       }
 
       case 'stock_check': {
-        // Use new products table (has velocity for intelligence).
-        // Fall back to old inventory table only if products is empty (legacy data).
         const products = await ProductModel.getWithHealth(user.id);
         if (products.length > 0) {
           await WhatsAppService.sendStockIntelligenceReply(from, user.name.split(' ')[0], products);
@@ -372,6 +371,28 @@ router.post('/', async (req, res) => {
           await WhatsAppService.sendStockReply(from, items);
         }
         await MessageModel.updateLog(msgLogId, { intent: 'stock_check', status: 'processed' }).catch(() => {});
+        break;
+      }
+
+      case 'debtors_check': {
+        const pendingDebtors = await DebtorModel.getPendingAll(user.id);
+        await WhatsAppService.sendDebtorList(from, user.name.split(' ')[0], pendingDebtors);
+        await MessageModel.updateLog(msgLogId, { intent: 'debtors_check', status: 'processed' }).catch(() => {});
+        break;
+      }
+
+      case 'debt_payment': {
+        const hasAmount = parseFloat(data.amount) > 0;
+        if (!hasAmount || !data.debtor_name) {
+          await WhatsAppService.sendMessage(from,
+            `Who paid you, and how much?\n\nSend it like:\n_"Ngozi paid me 25k"_`);
+          await MessageModel.updateLog(msgLogId, { intent: 'debt_payment', status: 'parse_error' }).catch(() => {});
+          break;
+        }
+        await ConfirmationService.savePending(user.id, 'debt_payment', data, text);
+        const confirmDebt = ConfirmationService.buildConfirmationMessage('debt_payment', data);
+        await WhatsAppService.sendMessage(from, confirmDebt);
+        await MessageModel.updateLog(msgLogId, { intent: 'debt_payment', parsedData: data, status: 'pending_confirm' }).catch(() => {});
         break;
       }
 
@@ -549,13 +570,36 @@ async function handleConfirmedEntry(user, from, pending) {
 
   if (entry_type === 'inventory_out') {
     const hasProducts = Array.isArray(parsedData.products) && parsedData.products.length > 0;
+    const isCredit    = parsedData.sale_type === 'credit';
+    const debtorName  = parsedData.debtor_name || null;
+    const fmt = (n) => Number(n || 0).toLocaleString('en-NG');
+
     if (hasProducts) {
-      const date = todayWAT();
+      const date    = todayWAT();
       const summary = await ProductService.processProductTransactions(user.id, user, parsedData.products, null, date, WhatsAppService).catch(() => []);
-      const lines = summary.length > 0
+      const lines   = summary.length > 0
         ? summary.map(s => `📦 ${s.name}: ${s.stock} ${s.unit} remaining  ${s.emoji} ${s.status.replace('_', ' ').toLowerCase()}`)
         : parsedData.products.map(p => `📦 ${p.product_name}: -${p.quantity || '?'} ${p.unit || 'units'} sold`);
-      await WhatsAppService.sendMessage(from, `✅ Sale recorded!\n\n${lines.join('\n')}`);
+
+      if (isCredit && debtorName) {
+        // Credit sale: stock deducted, no revenue yet — record the debt
+        const creditTotal = parsedData.products.reduce((s, p) => s + parseFloat(p.total_amount || 0), 0);
+        await DebtorModel.create({
+          userId:      user.id,
+          debtorName:  debtorName,
+          amount:      creditTotal,
+          productName: parsedData.products.map(p => p.product_name).join(', '),
+          notes:       original_message,
+        });
+        await WhatsAppService.sendMessage(from,
+          `📝 *Credit sale recorded!*\n\n` +
+          `${lines.join('\n')}\n\n` +
+          `💳 *${debtorName}* owes you ₦${fmt(creditTotal)}.\n\n` +
+          `When they pay, send:\n_"${debtorName} paid me [amount]"_ 💰`
+        );
+      } else {
+        await WhatsAppService.sendMessage(from, `✅ Sale recorded!\n\n${lines.join('\n')}`);
+      }
     } else {
       const rowOut = await InventoryService.sellStock(user, parsedData);
       await WhatsAppService.sendMessage(from,
@@ -593,6 +637,54 @@ async function handleConfirmedEntry(user, from, pending) {
       `🔴 *${product_name}* marked as out of stock (${qty.toLocaleString('en-NG')} units cleared).\n\n` +
       `When you restock, send:\n_"received [number] ${product_name} at [price] each"_\nand I'll update your inventory. 📦`
     );
+    return;
+  }
+
+  if (entry_type === 'debt_payment') {
+    const { debtor_name, amount } = parsedData;
+    const fmt = (n) => Number(n || 0).toLocaleString('en-NG');
+
+    // Find matching outstanding debt
+    const debtor = await DebtorModel.findPending(user.id, debtor_name).catch(() => null);
+
+    // Record as revenue regardless of whether a debtor record exists
+    await TransactionModel.create({
+      userId:         user.id,
+      revenue:        amount,
+      totalExpenses:  0,
+      expenseBreakdown: {},
+      profit:         amount,
+      margin:         100,
+      customers:      0,
+      notes:          `Debt payment received from ${debtor_name}`,
+      rawMessage:     original_message,
+      entryMethod:    'text',
+    });
+    await UserModel.touchLastEntry(user.id);
+
+    if (debtor) {
+      const updated   = await DebtorModel.markPaid(debtor.id, amount);
+      const remaining = Math.max(0, parseFloat(updated.amount) - parseFloat(updated.amount_paid));
+      if (remaining <= 0) {
+        await WhatsAppService.sendMessage(from,
+          `✅ *${debtor_name} is fully settled!*\n\n` +
+          `₦${fmt(amount)} received. Full debt of ₦${fmt(debtor.amount)} cleared. 🎉\n\n` +
+          `Revenue logged: ₦${fmt(amount)}`
+        );
+      } else {
+        await WhatsAppService.sendMessage(from,
+          `✅ *Partial payment recorded — ${debtor_name}*\n\n` +
+          `Received: ₦${fmt(amount)}\n` +
+          `Still outstanding: ₦${fmt(remaining)}\n\n` +
+          `Revenue logged: ₦${fmt(amount)} 💰`
+        );
+      }
+    } else {
+      await WhatsAppService.sendMessage(from,
+        `✅ *₦${fmt(amount)} from ${debtor_name}* logged as today's revenue. 💰\n\n` +
+        `(No outstanding debt found for this name — recorded as income.)`
+      );
+    }
     return;
   }
 }

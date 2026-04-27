@@ -159,6 +159,7 @@ function buildConfirmationMessage(entryType, parsedData) {
   if (entryType === 'inventory_out') return buildStockOutConfirmation(parsedData);
   if (entryType === 'opening_stock') return buildOpeningStockConfirmation(parsedData);
   if (entryType === 'stock_zero')    return buildStockZeroConfirmation(parsedData);
+  if (entryType === 'debt_payment')  return buildDebtPaymentConfirmation(parsedData);
   return buildDailyEntryConfirmation(parsedData);
 }
 
@@ -257,13 +258,44 @@ function buildStockInConfirmation(data) {
 }
 
 function buildStockOutConfirmation(data) {
-  const { item, quantity } = data;
+  const { item, quantity, sale_type, debtor_name, products } = data;
+  const isCredit = sale_type === 'credit';
+  const lines = ['Got it — confirm this is correct:\n'];
+
+  lines.push(isCredit ? '📝 *CREDIT SALE*' : '📦 *SOLD*');
+
+  const sales = (products || []).filter(p => p.transaction_type === 'sale');
+  if (sales.length > 0) {
+    for (const p of sales) {
+      const priceNote = p.unit_price ? ` at ${fmt(p.unit_price)} each` : '';
+      const totalNote = p.total_amount ? ` — total: ${fmt(p.total_amount)}` : '';
+      lines.push(`- ${p.product_name}: ${p.quantity || '?'} ${p.unit || 'units'}${priceNote}${totalNote}`);
+    }
+  } else {
+    lines.push(`- ${item || 'item'}: ${quantity || '?'} units`);
+  }
+
+  if (isCredit && debtor_name) {
+    lines.push('');
+    lines.push(`💳 *On credit — ${debtor_name} will pay later*`);
+    lines.push(`(Stock will be deducted. Revenue recorded when they pay.)`);
+  }
+
+  lines.push('');
+  lines.push('Reply *YES* to log ✅');
+  lines.push('Reply *EDIT* if something is wrong ❌');
+  return lines.join('\n');
+}
+
+function buildDebtPaymentConfirmation(data) {
+  const { debtor_name, amount } = data;
   return [
     'Got it — confirm this is correct:\n',
-    '📦 *SOLD*',
-    `- ${item}: ${quantity} units`,
+    '💰 *PAYMENT RECEIVED*',
+    `- From: *${debtor_name}*`,
+    `- Amount: *${fmt(amount)}*`,
     '',
-    'Reply *YES* to log ✅',
+    'Reply *YES* to log this as revenue ✅',
     'Reply *EDIT* if something is wrong ❌',
   ].join('\n');
 }
@@ -328,5 +360,6 @@ module.exports = {
   markReminderSent,
   getRecentEditedEntry,
   buildConfirmationMessage,
+  buildDebtPaymentConfirmation,
   getConfirmationMetrics,
 };

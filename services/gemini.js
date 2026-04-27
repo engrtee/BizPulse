@@ -106,7 +106,9 @@ Classify as EXACTLY ONE of these types:
    Return: { "type": "inventory_in", "item": string, "quantity": number, "unitPrice": number, "totalValue": number, "products": [ { "product_name": string, "transaction_type": "stock_in", "quantity": number, "unit_price": number|null, "total_amount": number, "unit": string, "channel": "retail" } ] }
 
 3. inventory_out — they sold specific inventory items (not revenue logging)
-   Return: { "type": "inventory_out", "item": string, "quantity": number, "products": [ { "product_name": string, "transaction_type": "sale", "quantity": number, "unit_price": number|null, "total_amount": number|null, "unit": string, "channel": "retail"|"wholesale" } ] }
+   Return: { "type": "inventory_out", "item": string, "quantity": number, "sale_type": "cash"|"credit", "debtor_name": string|null, "products": [ { "product_name": string, "transaction_type": "sale", "quantity": number, "unit_price": number|null, "total_amount": number|null, "unit": string, "channel": "retail"|"wholesale" } ] }
+   sale_type = "credit" when message contains: "on credit", "they go pay", "will pay later", "owe me", "collect and pay", "pay me later", "balance later", "go pay", "dey owe", "e go pay", "she go pay", "he go pay", "credit sale"
+   debtor_name = the name of the buyer if mentioned, else null
 
 4. opening_stock — they are declaring what stock they currently have (not a sale or purchase)
    Trigger phrases: "I have", "I get", "my stock is", "currently have", "na this I get",
@@ -134,7 +136,15 @@ Classify as EXACTLY ONE of these types:
 6. customer_log — they are only reporting a customer count, with no financial figures
    Return: { "type": "customer_log", "count": number, "notes": string }
 
-7. greeting — hello, good morning, how are you, general pleasantries
+7. debt_payment — someone is paying back money they owe the user
+   Trigger phrases: "[Name] paid me", "[Name] don pay", "she settle the balance", "they paid their debt", "he paid back", "Emeka pay me", "Ngozi don settle", "received payment from", "they cleared their debt", "balance don pay"
+   Return: { "type": "debt_payment", "debtor_name": string, "amount": number, "notes": string }
+   debtor_name: the person's name who is paying. amount: how much they paid.
+   Example: "Ngozi paid me 25k" → { "type": "debt_payment", "debtor_name": "Ngozi", "amount": 25000 }
+   Example: "Emeka settle 15k balance" → { "type": "debt_payment", "debtor_name": "Emeka", "amount": 15000 }
+   Do NOT classify as debt_payment if the money is from a new customer paying on the spot (that is daily_entry revenue).
+
+8. greeting — hello, good morning, how are you, general pleasantries
    Return: { "type": "greeting", "message": string }
    The message must be a warm, encouraging reply (2-3 sentences max) as their personal business assistant. Reference their business type or name naturally.
 
@@ -290,6 +300,14 @@ If the user says "I sell [item]" or quantity × price implies resale → product
     }
     if (parsed.type === 'stock_zero') {
       parsed.product_name = parsed.product_name || null;
+    }
+    if (parsed.type === 'inventory_out') {
+      parsed.sale_type    = parsed.sale_type === 'credit' ? 'credit' : 'cash';
+      parsed.debtor_name  = parsed.debtor_name || null;
+    }
+    if (parsed.type === 'debt_payment') {
+      parsed.amount      = parseFloat(parsed.amount) || 0;
+      parsed.debtor_name = parsed.debtor_name || 'Unknown';
     }
 
     // Log for training dataset — non-blocking, never affects response

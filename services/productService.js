@@ -8,7 +8,8 @@
 
 'use strict';
 
-const ProductModel = require('../models/product');
+const ProductModel    = require('../models/product');
+const InventoryModel  = require('../models/inventory');
 
 // ── Nigerian product name dictionary ─────────────────────────────────────────
 // Maps common variants / misspellings to a canonical display name.
@@ -156,9 +157,36 @@ async function findOrCreateProduct(userId, rawName, unit = 'units') {
   const found = await findProductFuzzy(userId, rawName);
   if (found) return found;
 
-  const displayName  = normalizeProductName(rawName);
+  const displayName   = normalizeProductName(rawName);
   const normalizedKey = normalizeForStorage(rawName);
-  return ProductModel.create(userId, displayName, normalizedKey, unit);
+  const product = await ProductModel.create(userId, displayName, normalizedKey, unit);
+
+  // Auto-migrate: if the old inventory table has stock for this item, carry it over
+  try {
+    const oldItem = await InventoryModel.getItemFuzzy(userId, rawName);
+    const oldBalance = parseFloat(oldItem?.current_balance) || 0;
+    if (oldBalance > 0) {
+      const oldPrice = parseFloat(oldItem?.unit_price) || null;
+      await ProductModel.setOpeningBalance(product.id, oldBalance, oldPrice);
+      const date = new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Lagos' });
+      await ProductModel.recordTransaction({
+        userId,
+        productId:    product.id,
+        type:         'stock_in',
+        quantity:     oldBalance,
+        unitPrice:    oldPrice,
+        totalAmount:  oldPrice ? oldBalance * oldPrice : 0,
+        dailyEntryId: null,
+        date,
+        channel:      'retail',
+      });
+      console.log(`[Products] 📦 Auto-migrated ${oldBalance} ${unit} of "${displayName}" from old inventory`);
+    }
+  } catch (e) {
+    console.warn('[Products] Old inventory migration skipped:', e.message);
+  }
+
+  return product;
 }
 
 // ── Low-stock alert ───────────────────────────────────────────────────────────
@@ -247,8 +275,9 @@ async function processProductTransactions(userId, user, products, dailyEntryId, 
       // Resolve product (fuzzy match or create)
       const product = await findOrCreateProduct(userId, rawName, unit);
 
-      // Check for oversell before applying delta
+      // Check for oversell before applying delta — cap recorded qty at available stock
       let oversellWarning = null;
+      let effectiveQty = qty;
       if (type === 'sale' && qty !== null) {
         const currentStock = await ProductModel.getCurrentStock(product.id);
         if (currentStock > 0 && qty > currentStock) {
@@ -257,12 +286,13 @@ async function processProductTransactions(userId, user, products, dailyEntryId, 
             `but your stock showed only ${currentStock} left.\n` +
             `Did you restock without logging?\n` +
             `Stock set to 0 — send a correction if needed.`;
+          effectiveQty = currentStock; // cap: only deduct what was actually available
         }
       }
 
-      // Apply stock delta
+      // Apply stock delta (using capped quantity for sales)
       const delta = type === 'sale'
-        ? -(qty || 0)
+        ? -(effectiveQty || 0)
         :  (qty || 0);
 
       await ProductModel.applyStockChange(product.id, {
@@ -271,14 +301,16 @@ async function processProductTransactions(userId, user, products, dailyEntryId, 
         salePrice:     type === 'sale'       ? price : null,
       });
 
-      // Record transaction row
+      // Record transaction row (use effectiveQty for sales so the log matches what moved)
+      const recordedQty   = type === 'sale' ? effectiveQty : qty;
+      const recordedTotal = (recordedQty !== null && price) ? recordedQty * price : total;
       await ProductModel.recordTransaction({
         userId,
         productId:    product.id,
         type,
-        quantity:     qty,
+        quantity:     recordedQty,
         unitPrice:    price,
-        totalAmount:  total,
+        totalAmount:  recordedTotal,
         dailyEntryId,
         date,
         channel,

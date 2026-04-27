@@ -518,6 +518,39 @@ async function sendNotRegistered(to) {
   return sendMessage(to, body);
 }
 
+/**
+ * Send list of outstanding debtors.
+ * @param {string} to        WhatsApp number
+ * @param {string} firstName User's first name
+ * @param {Array}  debtors   Rows from DebtorModel.getPendingAll()
+ */
+async function sendDebtorList(to, firstName, debtors) {
+  const fmt = (n) => Number(n || 0).toLocaleString('en-NG');
+
+  if (!debtors || debtors.length === 0) {
+    return sendMessage(to,
+      `✅ No outstanding debts, ${firstName}! Everyone is settled. 🎉\n\n` +
+      `When someone buys on credit, just say:\n_"Sold [item] to [Name] on credit"_`
+    );
+  }
+
+  const lines = debtors.map(d => {
+    const remaining = parseFloat(d.amount) - parseFloat(d.amount_paid || 0);
+    const daysAgo   = Math.round((Date.now() - new Date(d.created_at).getTime()) / 86400000);
+    const product   = d.product_name ? `\n   For: ${d.product_name}` : '';
+    return `💳 *${d.debtor_name}* — ₦${fmt(remaining)}${product}\n   (${daysAgo} day${daysAgo === 1 ? '' : 's'} ago)`;
+  });
+
+  const total = debtors.reduce((s, d) => s + parseFloat(d.amount) - parseFloat(d.amount_paid || 0), 0);
+
+  return sendMessage(to,
+    `📋 *${firstName}'s Outstanding Debts*\n\n` +
+    lines.join('\n\n') +
+    `\n\n*Total owed to you: ₦${fmt(total)}*\n\n` +
+    `When someone pays, send:\n_"[Name] paid me [amount]"_`
+  );
+}
+
 module.exports = {
   sendMessage,
   sendEntryAck,
@@ -533,4 +566,5 @@ module.exports = {
   sendMorningBroadcast,
   sendEveningReminder,
   sendEveningSummaryWhatsApp,
+  sendDebtorList,
 };

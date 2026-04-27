@@ -116,9 +116,12 @@ function parseMessage(message) {
   const lower = message.trim().toLowerCase();
 
   // Exact shortcut commands — no AI cost needed
-  if (INTENT_PATTERNS.help.test(lower))        return { type: 'help',        data: {}, needsAI: false };
-  if (INTENT_PATTERNS.stock_check.test(lower)) return { type: 'stock_check', data: {}, needsAI: false };
-  if (INTENT_PATTERNS.summary.test(lower))     return { type: 'summary',     data: {}, needsAI: false };
+  if (INTENT_PATTERNS.help.test(lower))        return { type: 'help',           data: {}, needsAI: false };
+  if (INTENT_PATTERNS.stock_check.test(lower)) return { type: 'stock_check',    data: {}, needsAI: false };
+  if (INTENT_PATTERNS.summary.test(lower))     return { type: 'summary',        data: {}, needsAI: false };
+  if (/^(debtors?|who owe me|who owes me|my debtors?|outstanding|owe me)\??$/i.test(lower)) {
+    return { type: 'debtors_check', data: {}, needsAI: false };
+  }
 
   // Natural summary requests — "summary of my numbers", "give me my summary", "business report" etc.
   // Runs before period-check so "last week summary" still gets the date-range handler below
