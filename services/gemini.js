@@ -40,6 +40,48 @@ function logInference({ userId, callType, model, inputText, outputText, parsedTy
   ).catch(e => console.error('[Gemini] logInference failed:', e.message));
 }
 
+// ── Unit extraction from raw message ─────────────────────────────────────────
+// Gemini normalises units based on training data (e.g. rice → cups).
+// This function scans the ORIGINAL message text for recognised unit words
+// next to a quantity number and returns the verbatim unit the user typed.
+// It runs AFTER the AI parse and overrides whatever the AI returned.
+const UNIT_WORDS = [
+  'bags', 'bag', 'cartons', 'carton', 'tins', 'tin', 'tubers', 'tuber',
+  'yards', 'yard', 'packs', 'pack', 'pieces', 'piece', 'bottles', 'bottle',
+  'crates', 'crate', 'bundles', 'bundle', 'rolls', 'roll',
+  'sachets', 'sachet', 'wraps', 'wrap', 'dozens', 'dozen', 'pairs', 'pair',
+  'cups', 'cup', 'litres', 'litre', 'liters', 'liter',
+  'kg', 'kgs', 'grams', 'gram', 'tons', 'ton', 'tonnes', 'tonne',
+  'boxes', 'box', 'trays', 'tray', 'buckets', 'bucket',
+  'sheets', 'sheet', 'reams', 'ream', 'units', 'unit',
+];
+
+function extractUnitFromMessage(rawMessage, quantity) {
+  if (!quantity || !rawMessage) return null;
+  const lowerMsg = rawMessage.toLowerCase().replace(/,/g, ' ');
+  const qty      = parseFloat(quantity);
+  if (!qty || isNaN(qty)) return null;
+
+  // Escape the quantity for use in regex (handles decimals like 1.5)
+  const escapedQty = String(qty).replace('.', '\\.');
+
+  for (const unit of UNIT_WORDS) {
+    // Match "{qty} {unit}" — e.g. "5 bags" or "5bags"
+    const re = new RegExp(`\\b${escapedQty}\\s+${unit}\\b`, 'i');
+    if (re.test(lowerMsg)) return unit;
+  }
+  return null;
+}
+
+function applyExtractedUnits(rawMessage, products) {
+  if (!Array.isArray(products) || !rawMessage) return products;
+  return products.map(p => {
+    if (!p.quantity) return p;
+    const extracted = extractUnitFromMessage(rawMessage, p.quantity);
+    return extracted ? { ...p, unit: extracted } : p;
+  });
+}
+
 function getClient() {
   if (!genAI) {
     if (!process.env.GEMINI_API_KEY) {
@@ -333,12 +375,15 @@ Maximum backdating: 7 days. If older → add to notes but do NOT set entry_date.
       parsed.customers     = parseInt(parsed.customers, 10) || 0;
       parsed.products      = Array.isArray(parsed.products)      ? parsed.products      : [];
       parsed.expenseItems  = Array.isArray(parsed.expenseItems)  ? parsed.expenseItems  : [];
+      parsed.products      = applyExtractedUnits(message, parsed.products);
     }
     if (parsed.type === 'inventory_in' || parsed.type === 'inventory_out') {
       parsed.products = Array.isArray(parsed.products) ? parsed.products : [];
+      parsed.products = applyExtractedUnits(message, parsed.products);
     }
     if (parsed.type === 'opening_stock') {
       parsed.products = Array.isArray(parsed.products) ? parsed.products : [];
+      parsed.products = applyExtractedUnits(message, parsed.products);
     }
     if (parsed.type === 'stock_zero') {
       parsed.product_name = parsed.product_name || null;
