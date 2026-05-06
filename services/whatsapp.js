@@ -364,7 +364,7 @@ async function sendEveningSummaryWhatsApp(to, firstName, summaryData, aiRec, low
     `📊 *${firstName}, today's summary*\n\n` +
     topLine +
     `Revenue: ₦${fmt(revenue)}\n` +
-    `Stock cost: ₦${fmt(totalExpenses)}\n` +
+    `Expenses: ₦${fmt(totalExpenses)}\n` +
     `${profitLine}\n` +
     (customers > 0 ? `Customers: ${customers}\n` : '') +
     stockNote +

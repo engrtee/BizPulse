@@ -11,6 +11,7 @@
 'use strict';
 
 const InventoryModel  = require('../models/inventory');
+const ProductModel    = require('../models/product');
 const WhatsAppService = require('./whatsapp');
 
 /**
@@ -41,8 +42,8 @@ async function receiveStock(user, { item, quantity, unitPrice }) {
 async function sellStock(user, { item, quantity }) {
   const qty = parseFloat(quantity) || 0;
 
-  // Check for oversell BEFORE applying movement
-  const existing = await InventoryModel.getItem(user.id, item);
+  // Check for oversell BEFORE applying movement — use fuzzy match (same as applyMovement)
+  const existing = await InventoryModel.getItemFuzzy(user.id, item);
   if (existing && qty > parseFloat(existing.current_balance) && parseFloat(existing.current_balance) > 0) {
     const available = parseFloat(existing.current_balance);
     if (user.whatsapp_number) {

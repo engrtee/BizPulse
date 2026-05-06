@@ -38,6 +38,7 @@ const ProductService      = require('../services/productService');
 const ProductModel        = require('../models/product');
 const DebtorModel         = require('../models/debtor');
 const LearningService     = require('../services/learningService');
+const OnboardingModel     = require('../models/onboarding');
 
 const { calcHealthScore, healthLabel, topExpenseCategory, todayWAT } = require('../utils/formatter');
 const { calcMargin } = require('../utils/naira');
@@ -97,7 +98,17 @@ router.post('/', async (req, res) => {
       // Look up user early so we can send a holding message
       const voiceUser = await UserModel.findByWhatsapp(from);
       if (!voiceUser) {
-        await WhatsAppService.sendNotRegistered(from);
+        const voiceSession = await OnboardingModel.getSession(from);
+        if (voiceSession) {
+          await WhatsAppService.sendMessage(from,
+            `Almost there! Please reply to my last question as a text message to complete setup. 😊`);
+        } else {
+          await OnboardingModel.createSession(from);
+          await WhatsAppService.sendMessage(from,
+            `👋 Hi! Welcome to *BizPulse*.\n\n` +
+            `Let's get you set up first — *what's your name?* 😊`
+          );
+        }
         return;
       }
 
@@ -141,7 +152,17 @@ router.post('/', async (req, res) => {
 
       const photoUser = await UserModel.findByWhatsapp(from);
       if (!photoUser) {
-        await WhatsAppService.sendNotRegistered(from);
+        const photoSession = await OnboardingModel.getSession(from);
+        if (photoSession) {
+          await WhatsAppService.sendMessage(from,
+            `Almost there! Please reply to my last question as a text message to complete setup. 😊`);
+        } else {
+          await OnboardingModel.createSession(from);
+          await WhatsAppService.sendMessage(from,
+            `👋 Hi! Welcome to *BizPulse*.\n\n` +
+            `Let's get you set up first — *what's your name?* 😊`
+          );
+        }
         return;
       }
 
@@ -231,10 +252,21 @@ router.post('/', async (req, res) => {
     // ── Look up user ──
     const user = await UserModel.findByWhatsapp(from);
     if (!user) {
-      await WhatsAppService.sendNotRegistered(from);
-      // Still log the unregistered attempt
+      // Route to WhatsApp-native conversational registration
+      const session = await OnboardingModel.getSession(from);
+      if (session) {
+        await handleOnboarding(from, text, session);
+      } else {
+        await OnboardingModel.createSession(from);
+        await WhatsAppService.sendMessage(from,
+          `👋 Hi! Welcome to *BizPulse* — your WhatsApp business tracker.\n\n` +
+          `I help Nigerian business owners track sales, expenses, and stock — ` +
+          `all from WhatsApp. No app needed.\n\n` +
+          `*What's your name?* (Just your first name is fine 😊)`
+        );
+      }
       await MessageModel.logInbound(from, null, text).then(id =>
-        MessageModel.updateLog(id, { intent: 'unregistered', status: 'no_user' })
+        MessageModel.updateLog(id, { intent: 'onboarding', status: 'in_progress' })
       ).catch(() => {});
       return;
     }
@@ -1030,6 +1062,166 @@ async function gatherUserFinancialData(userId) {
     avgMetrics: { avgRevenue, avgExpenses, avgMargin },
     inventory: inventoryRes.rows || [],
   };
+}
+
+// ─────────────────────────────────────────────
+// Internal: WhatsApp-native conversational registration
+// ─────────────────────────────────────────────
+const BIZ_TYPES = {
+  '1': 'Retail',
+  '2': 'Fashion',
+  '3': 'Food/Restaurant',
+  '4': 'Beauty/Hair',
+  '5': 'Electronics',
+  '6': 'Fragrance/Perfume',
+};
+
+async function handleOnboarding(from, text, session) {
+  const step      = session.step;
+  const collected = typeof session.collected === 'string'
+    ? JSON.parse(session.collected)
+    : (session.collected || {});
+
+  if (step === 'name') {
+    const raw  = text.trim().replace(/[^a-zA-Z\s'.-]/g, '').trim();
+    const name = raw.split(' ').slice(0, 3).join(' '); // cap at 3 words
+
+    if (!name || name.length < 2) {
+      await WhatsAppService.sendMessage(from,
+        `Just your first name — e.g. "Amina" or "Chukwuemeka" 😊`);
+      return;
+    }
+
+    collected.name = name;
+    await OnboardingModel.updateSession(from, 'biz_type', collected);
+    await WhatsAppService.sendMessage(from,
+      `Hi ${name.split(' ')[0]}! 🙌\n\n` +
+      `What type of business do you run?\n\n` +
+      `1. Provision/Retail shop\n` +
+      `2. Fashion/Clothing\n` +
+      `3. Food/Restaurant\n` +
+      `4. Beauty/Hair\n` +
+      `5. Electronics/Phones\n` +
+      `6. Fragrance/Perfume\n` +
+      `7. Other\n\n` +
+      `Reply with the number or describe your business.`
+    );
+    return;
+  }
+
+  if (step === 'biz_type') {
+    const t       = text.trim();
+    const bizType = BIZ_TYPES[t] || (t === '7' ? null : t);
+
+    if (!bizType && t === '7') {
+      // "Other" chosen — ask them to describe
+      await OnboardingModel.updateSession(from, 'biz_type_other', collected);
+      await WhatsAppService.sendMessage(from,
+        `No problem! Briefly describe your business:\n_(e.g. "I sell provisions", "Online store", "Spare parts")_`
+      );
+      return;
+    }
+
+    collected.biz_type = bizType || t;
+    await OnboardingModel.updateSession(from, 'state', collected);
+    await WhatsAppService.sendMessage(from,
+      `Got it — ${collected.biz_type}! 👌\n\n` +
+      `Which state are you in?\n\n` +
+      `(e.g. Lagos, Abuja, Kano, Rivers, Ogun...)`
+    );
+    return;
+  }
+
+  if (step === 'biz_type_other') {
+    // Free-text business type from "Other" branch
+    collected.biz_type = text.trim() || 'Other';
+    await OnboardingModel.updateSession(from, 'state', collected);
+    await WhatsAppService.sendMessage(from,
+      `Got it — ${collected.biz_type}! 👌\n\n` +
+      `Which state are you in?\n\n` +
+      `(e.g. Lagos, Abuja, Kano, Rivers, Ogun...)`
+    );
+    return;
+  }
+
+  if (step === 'state') {
+    const stateVal = text.trim();
+    if (!stateVal || stateVal.length < 2) {
+      await WhatsAppService.sendMessage(from,
+        `Which Nigerian state? e.g. "Lagos" or "Abuja" 📍`);
+      return;
+    }
+    collected.state = stateVal;
+    await OnboardingModel.updateSession(from, 'email', collected);
+    await WhatsAppService.sendMessage(from,
+      `📍 ${stateVal}!\n\n` +
+      `Last step — drop your email so I can send your evening profit report.\n\n` +
+      `_(Type "skip" if you don't have one)_`
+    );
+    return;
+  }
+
+  if (step === 'email') {
+    const input      = text.trim().toLowerCase();
+    const isSkip     = input === 'skip' || input === 'no' || input === 'none';
+    const emailToUse = isSkip
+      ? `wa_${from}@bizpulse.local`
+      : input;
+
+    if (!isSkip && !input.match(/^[^\s@]+@[^\s@]+\.[^\s@]+$/)) {
+      await WhatsAppService.sendMessage(from,
+        `That doesn't look like a valid email — try again.\n\n` +
+        `(e.g. yourname@gmail.com)\n\n` +
+        `Or reply *skip* to continue without email.`
+      );
+      return;
+    }
+
+    // Block duplicate email registrations
+    if (!isSkip) {
+      const existing = await UserModel.findByEmail(emailToUse);
+      if (existing) {
+        await WhatsAppService.sendMessage(from,
+          `That email already has a BizPulse account. 📱\n\n` +
+          `To link this WhatsApp number, log in at mybizpulse.app → Settings → Update WhatsApp number.\n\n` +
+          `Or use a different email to create a new account.`
+        );
+        return;
+      }
+    }
+
+    const firstName = (collected.name || '').split(' ')[0];
+
+    try {
+      await UserModel.create({
+        name:           collected.name,
+        email:          emailToUse,
+        bizName:        `${firstName}'s Business`,
+        bizType:        collected.biz_type,
+        state:          collected.state,
+        whatsappNumber: from,
+      });
+    } catch (err) {
+      // email uniqueness collision on the local placeholder is extremely unlikely
+      // but handle it gracefully
+      console.error('[Onboarding] create user error:', err.message);
+      await WhatsAppService.sendMessage(from,
+        `Something went wrong on our side. Try again in a moment — just send any message.`);
+      await OnboardingModel.deleteSession(from);
+      return;
+    }
+
+    await OnboardingModel.deleteSession(from);
+
+    await WhatsAppService.sendMessage(from,
+      `✅ You're in, ${firstName}! Welcome to BizPulse.\n\n` +
+      `I'm tracking your *${collected.biz_type}* in *${collected.state}*.\n\n` +
+      `Everything runs right here on WhatsApp — no app to download.`
+    );
+
+    // Fire the standard onboarding message (asks for opening stock)
+    await WhatsAppService.sendOnboarding(from, firstName, collected.biz_type);
+  }
 }
 
 // ─────────────────────────────────────────────

@@ -111,12 +111,19 @@ const ProductModel = {
 
   // ── Velocity & health ───────────────────────────────────────────────────
 
-  /** Average units sold per day over last 7 days. */
+  /** Average units sold per day over last 7 days.
+   *  Divides by actual elapsed days (not always 7) so a new product's velocity
+   *  isn't massively understated on its first few days. */
   async getVelocity(productId) {
     const res = await query(
-      `SELECT COALESCE(SUM(quantity), 0) / 7.0 AS velocity
+      `SELECT
+         COALESCE(SUM(quantity), 0) /
+         LEAST(
+           GREATEST((CURRENT_DATE - MIN(transaction_date))::int + 1, 1),
+           7
+         )::numeric AS velocity
        FROM product_transactions
-       WHERE product_id    = $1
+       WHERE product_id       = $1
          AND transaction_type = 'sale'
          AND transaction_date >= CURRENT_DATE - INTERVAL '7 days'`,
       [productId]

@@ -280,7 +280,14 @@ async function processProductTransactions(userId, user, products, dailyEntryId, 
       let effectiveQty = qty;
       if (type === 'sale' && qty !== null) {
         const currentStock = await ProductModel.getCurrentStock(product.id);
-        if (currentStock > 0 && qty > currentStock) {
+        if (currentStock <= 0) {
+          // Nothing in stock — no movement, but warn the user
+          oversellWarning =
+            `⚠️ *${normalizeProductName(rawName)}* shows 0 units in stock. ` +
+            `Nothing deducted.\n\nSend your current stock first:\n` +
+            `_"I have [number] ${normalizeProductName(rawName)}"_`;
+          effectiveQty = 0;
+        } else if (qty > currentStock) {
           oversellWarning =
             `⚠️ You sold ${qty} ${unit} of ${normalizeProductName(rawName)} ` +
             `but your stock showed only ${currentStock} left.\n` +
@@ -301,20 +308,26 @@ async function processProductTransactions(userId, user, products, dailyEntryId, 
         salePrice:     type === 'sale'       ? price : null,
       });
 
-      // Record transaction row (use effectiveQty for sales so the log matches what moved)
+      // Record transaction row only when something actually moved
       const recordedQty   = type === 'sale' ? effectiveQty : qty;
-      const recordedTotal = (recordedQty !== null && price) ? recordedQty * price : total;
-      await ProductModel.recordTransaction({
-        userId,
-        productId:    product.id,
-        type,
-        quantity:     recordedQty,
-        unitPrice:    price,
-        totalAmount:  recordedTotal,
-        dailyEntryId,
-        date,
-        channel,
-      });
+      const recordedTotal = (recordedQty !== null && recordedQty > 0 && price)
+        ? recordedQty * price
+        : (recordedQty > 0 ? total : 0);
+
+      // Skip recording a 0-unit sale — it creates phantom velocity data
+      if (!(type === 'sale' && (recordedQty === null || recordedQty <= 0))) {
+        await ProductModel.recordTransaction({
+          userId,
+          productId:    product.id,
+          type,
+          quantity:     recordedQty,
+          unitPrice:    price,
+          totalAmount:  recordedTotal,
+          dailyEntryId,
+          date,
+          channel,
+        });
+      }
 
       // Refresh product from DB for current stock values
       const refreshed = await ProductModel.getById(product.id);

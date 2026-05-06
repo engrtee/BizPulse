@@ -148,11 +148,11 @@ Classify as EXACTLY ONE of these types:
    Return: { "type": "greeting", "message": string }
    The message must be a warm, encouraging reply (2-3 sentences max) as their personal business assistant. Reference their business type or name naturally.
 
-8. question — asking for advice, explanation, or help about their business, BizPulse features, or finances
+9. question — asking for advice, explanation, or help about their business, BizPulse features, or finances
    Return: { "type": "question", "message": string }
    The message must be a helpful, specific answer (2-3 sentences max) grounded in Nigerian business context.
 
-9. unknown — completely off-topic, cannot be classified
+10. unknown — completely off-topic, cannot be classified
    Return: { "type": "unknown" }
 
 Expense categories to use: Stock / Inventory, Rent, Staff Wages, Transport, Utilities, Marketing, Packaging, Equipment, Food & Supplies, Professional Fees, Data / Internet, Uncategorised

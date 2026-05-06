@@ -412,6 +412,15 @@ async function initDb() {
   )`, 'CREATE debtors');
   await run(`CREATE INDEX IF NOT EXISTS idx_debtors_user_status ON debtors(user_id, status)`, 'INDEX debtors');
 
+  // ── Layer 0: WhatsApp-native onboarding sessions ─────────────────────
+  await run(`CREATE TABLE IF NOT EXISTS onboarding_sessions (
+    phone       TEXT PRIMARY KEY,
+    step        TEXT NOT NULL DEFAULT 'name',
+    collected   JSONB NOT NULL DEFAULT '{}',
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    expires_at  TIMESTAMPTZ NOT NULL DEFAULT NOW() + INTERVAL '30 minutes'
+  )`, 'CREATE onboarding_sessions');
+
   // ── AI inference log (training dataset capture) ───────────────────────
   // Every Gemini parse call is logged here. outcome is filled in when the
   // user confirms (YES) or edits — giving us labeled fine-tuning data.
