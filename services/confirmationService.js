@@ -164,8 +164,19 @@ function buildConfirmationMessage(entryType, parsedData) {
 }
 
 function buildDailyEntryConfirmation(data) {
-  const { revenue, totalExpenses, profit, expenseBreakdown, expenseItems, products } = data;
+  const { revenue, totalExpenses, profit, expenseBreakdown, expenseItems, products, entry_date } = data;
   const lines = ['Got it — confirm this is correct:\n'];
+
+  // Show date label when entry is backdated
+  if (entry_date) {
+    try {
+      const d          = new Date(entry_date + 'T12:00:00Z');
+      const dateStr    = d.toLocaleDateString('en-NG', { weekday: 'short', day: 'numeric', month: 'short' });
+      const yesterday  = new Date(Date.now() - 86400000).toLocaleDateString('en-CA', { timeZone: 'Africa/Lagos' });
+      const label      = entry_date === yesterday ? `${dateStr} (yesterday)` : dateStr;
+      lines.push(`📅 *Date: ${label}*\n`);
+    } catch (_) { /* ignore malformed dates */ }
+  }
 
   const sales   = (products || []).filter(p => p.transaction_type === 'sale');
   const stockIns = (products || []).filter(p => p.transaction_type === 'stock_in');

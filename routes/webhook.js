@@ -630,7 +630,44 @@ async function handleConfirmedEntry(user, from, pending) {
           `When they pay, send:\n_"${debtorName} paid me [amount]"_ 💰`
         );
       } else {
-        await WhatsAppService.sendMessage(from, `✅ Sale recorded!\n\n${lines.join('\n')}`);
+        // Calculate true gross profit using stored cost prices
+        let totalRevenue = 0;
+        let totalCogs    = 0;
+        const noCostItems = [];
+
+        for (const p of parsedData.products) {
+          const qty       = parseFloat(p.quantity)    || 0;
+          const sellPrice = parseFloat(p.unit_price)  || 0;
+          const lineRev   = qty * sellPrice || parseFloat(p.total_amount) || 0;
+          totalRevenue += lineRev;
+
+          if (qty > 0) {
+            const found     = await ProductService.findProductFuzzy(user.id, p.product_name).catch(() => null);
+            const costPrice = parseFloat(found?.last_purchase_price) || 0;
+            if (costPrice > 0) {
+              totalCogs += costPrice * qty;
+            } else if (sellPrice > 0) {
+              noCostItems.push(p.product_name);
+            }
+          }
+        }
+
+        let profitLine = '';
+        if (totalRevenue > 0 && totalCogs > 0) {
+          const grossProfit = totalRevenue - totalCogs;
+          const grossMargin = ((grossProfit / totalRevenue) * 100).toFixed(1);
+          profitLine =
+            `\nRevenue: ₦${fmt(totalRevenue)}\n` +
+            `Cost:    ₦${fmt(totalCogs)}\n` +
+            `Profit:  ₦${fmt(grossProfit)} (${grossMargin}% margin)`;
+        } else if (totalRevenue > 0 && noCostItems.length > 0) {
+          profitLine =
+            `\nRevenue: ₦${fmt(totalRevenue)}\n` +
+            `⚠️ No buying price saved for ${noCostItems.slice(0, 2).join(', ')}.\n` +
+            `Send: "${noCostItems[0]} buying price is [amount]" to track real profit.`;
+        }
+
+        await WhatsAppService.sendMessage(from, `✅ Sale recorded!\n\n${lines.join('\n')}${profitLine}`);
       }
     } else {
       const rowOut = await InventoryService.sellStock(user, parsedData);
@@ -725,9 +762,9 @@ async function handleConfirmedEntry(user, from, pending) {
 // Internal: handle daily_entry messages
 // ─────────────────────────────────────────────
 async function handleDailyEntry(user, from, data, rawMessage, entryMethod = 'text') {
-  const { revenue, totalExpenses, expenseBreakdown, profit, margin, customers, notes } = data;
+  const { revenue, totalExpenses, expenseBreakdown, profit, margin, customers, notes, entry_date } = data;
 
-  // Save to PostgreSQL
+  // Save to PostgreSQL — use entry_date if Gemini detected a past date
   const txRow = await TransactionModel.create({
     userId: user.id,
     revenue,
@@ -739,6 +776,7 @@ async function handleDailyEntry(user, from, data, rawMessage, entryMethod = 'tex
     notes: notes || rawMessage,
     rawMessage,
     entryMethod,
+    entryDate: entry_date || null,
   });
 
   // Update last_entry_date and streak
@@ -750,7 +788,7 @@ async function handleDailyEntry(user, from, data, rawMessage, entryMethod = 'tex
   // Process product-level transactions extracted by Gemini
   let stockSummary = [];
   if (Array.isArray(data.products) && data.products.length > 0) {
-    const prodDate = todayWAT();
+    const prodDate = entry_date || todayWAT();
     stockSummary = await ProductService.processProductTransactions(
       user.id, user, data.products, txRow?.id || null, prodDate, WhatsAppService
     ).catch(e => { console.error('[Products] processProductTransactions error:', e.message); return []; });
@@ -770,8 +808,8 @@ async function handleDailyEntry(user, from, data, rawMessage, entryMethod = 'tex
     }).catch((err) => console.error('[Sheets] appendTransaction error:', err.message));
   }
 
-  // ✅ CRITICAL FIX: Fetch TODAY'S CUMULATIVE TOTALS from all entries today (not just this entry)
-  const date = todayWAT();
+  // Fetch cumulative totals for the entry's date (today, or the backdated date)
+  const date = entry_date || todayWAT();
   const dailyTotals = await TransactionModel.getDailyTotals(user.id, date);
   const expenseBreakdowns = await TransactionModel.getExpenseBreakdowns(user.id, date);
   

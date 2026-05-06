@@ -8,25 +8,31 @@
 const { query } = require('./db');
 
 const TransactionModel = {
-  /** Insert a daily entry (revenue + expenses) */
-  async create({ userId, revenue, totalExpenses, expenseBreakdown, profit, margin, customers, notes, rawMessage, entryMethod }) {
+  /** Insert a daily entry (revenue + expenses). Pass entryDate (YYYY-MM-DD) to backdate. */
+  async create({ userId, revenue, totalExpenses, expenseBreakdown, profit, margin, customers, notes, rawMessage, entryMethod, entryDate }) {
+    const params = [
+      userId,
+      revenue || 0,
+      totalExpenses || 0,
+      JSON.stringify(expenseBreakdown || {}),
+      profit || 0,
+      margin || 0,
+      customers || 0,
+      notes || null,
+      rawMessage || null,
+      entryMethod || 'text',
+    ];
+    let dateClause = `(CURRENT_TIMESTAMP AT TIME ZONE 'Africa/Lagos')::DATE`;
+    if (entryDate) {
+      params.push(entryDate);
+      dateClause = `$${params.length}::DATE`;
+    }
     const res = await query(
       `INSERT INTO transactions
          (user_id, date, revenue, total_expenses, expense_breakdown, profit, margin, customers, notes, raw_message, entry_method)
-       VALUES ($1, (CURRENT_TIMESTAMP AT TIME ZONE 'Africa/Lagos')::DATE, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+       VALUES ($1, ${dateClause}, $2, $3, $4, $5, $6, $7, $8, $9, $10)
        RETURNING *`,
-      [
-        userId,
-        revenue || 0,
-        totalExpenses || 0,
-        JSON.stringify(expenseBreakdown || {}),
-        profit || 0,
-        margin || 0,
-        customers || 0,
-        notes || null,
-        rawMessage || null,
-        entryMethod || 'text',
-      ]
+      params
     );
     return res.rows[0];
   },

@@ -81,6 +81,9 @@ Always respond in plain English, not accounting jargon. Be warm and encouraging.
 async function parseWithAI(message, user) {
   const learnedContext = await getLearningService().getLearnedContext().catch(() => '');
 
+  const todayWAT     = new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Lagos' });
+  const yesterdayWAT = new Date(Date.now() - 86400000).toLocaleDateString('en-CA', { timeZone: 'Africa/Lagos' });
+
   const prompt = `
 ${NIGERIA_CONTEXT}
 ${learnedContext}
@@ -198,6 +201,13 @@ CRITICAL: "sell iPhone 1 piece 980000" → daily_entry, revenue=980000
 
 When ambiguous between purchase and sale — default to inventory_in.
 
+CRITICAL — inventory_out vs daily_entry:
+- "sold 30 laptops at 200k each" → inventory_out (specific product + quantity named)
+- "sold 5 bags rice" → inventory_out (specific product + quantity named)
+- "made 45k today" → daily_entry (aggregate revenue, no specific product)
+- "sales was 200k, expenses 30k" → daily_entry (aggregate with expenses)
+When a specific product name AND quantity is mentioned with "sold/sell", classify as inventory_out NOT daily_entry.
+
 ════ WHOLESALE / FMCG REVENUE RULES ════
 Nigerian traders — especially FMCG, wholesale, and market traders — often list
 sales WITHOUT using the word "sell". Treat these as daily_entry (revenue):
@@ -235,6 +245,19 @@ Examples:
 
 If only total revenue is mentioned with no product breakdown (e.g. "made 45k today"), return products: [].
 
+════ CRITICAL UNIT RULES ════
+NEVER normalize, convert, or change units. Use EXACTLY the unit the user typed.
+- "bags" → unit: "bags"    NEVER convert to cups, litres, kg, or any other unit
+- "cartons" → unit: "cartons"
+- "tins" → unit: "tins"
+- "tubers" → unit: "tubers"
+- "yards" → unit: "yards"
+- "pieces" → unit: "pieces"
+- "packs" → unit: "packs"
+- "bottles" → unit: "bottles"
+NEVER perform unit arithmetic or conversions of any kind.
+If no unit is mentioned by the user → unit: "units"
+
 ════ INGREDIENT vs RESALE CONTEXT ════
 The same item (e.g. tomatoes, palm oil, yam) can be either:
   a) An ingredient/raw material the user buys to make something else (→ put in expenseItems, NOT products)
@@ -259,6 +282,18 @@ FASHION / TAILORING business type:
 When biz_type is ambiguous or not listed above: use context clues.
 If the user says "I use [item] to make [other item]" → ingredient (expenseItems).
 If the user says "I sell [item]" or quantity × price implies resale → product.
+
+════ DATE RULES ════
+Today's date (WAT): ${todayWAT}
+Yesterday's date:   ${yesterdayWAT}
+
+If the message refers to a past date, add "entry_date": "YYYY-MM-DD" to the response.
+- "yesterday" → entry_date: "${yesterdayWAT}"
+- "last Monday" / "on Monday" → calculate the most recent Monday before today
+- "2 days ago" → subtract 2 days from today
+- "on [weekday]" → most recent occurrence of that weekday before today
+Omit "entry_date" completely when referring to today or when no past date is mentioned.
+Maximum backdating: 7 days. If older → add to notes but do NOT set entry_date.
 
 ════ GENERAL RULES ════
 - All amounts must be numbers. "k" = thousands (30k = 30000). "m" = millions (1.5m = 1500000).
