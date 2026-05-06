@@ -46,6 +46,7 @@ const ProductModel = {
        VALUES ($1, $2, $3, $4)
        ON CONFLICT (user_id, product_name_normalized) DO UPDATE
          SET product_name = EXCLUDED.product_name,
+             unit         = CASE WHEN EXCLUDED.unit != 'units' THEN EXCLUDED.unit ELSE products.unit END,
              updated_at   = NOW()
        RETURNING *`,
       [userId, productName, normalizedName, unit]

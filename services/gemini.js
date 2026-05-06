@@ -246,17 +246,24 @@ Examples:
 If only total revenue is mentioned with no product breakdown (e.g. "made 45k today"), return products: [].
 
 ════ CRITICAL UNIT RULES ════
-NEVER normalize, convert, or change units. Use EXACTLY the unit the user typed.
-- "bags" → unit: "bags"    NEVER convert to cups, litres, kg, or any other unit
-- "cartons" → unit: "cartons"
-- "tins" → unit: "tins"
-- "tubers" → unit: "tubers"
-- "yards" → unit: "yards"
-- "pieces" → unit: "pieces"
-- "packs" → unit: "packs"
-- "bottles" → unit: "bottles"
-NEVER perform unit arithmetic or conversions of any kind.
-If no unit is mentioned by the user → unit: "units"
+The unit field MUST contain the EXACT word the user typed next to the quantity.
+Extract it from the user's own words. NEVER use cooking or standard measurement units.
+
+HOW TO EXTRACT THE UNIT — look at the word directly next to the number:
+"5 bags of rice"     → unit: "bags"     ← the word next to 5 is "bags"
+"20 cartons indomie" → unit: "cartons"
+"10 tins sardine"    → unit: "tins"
+"3 tubers of yam"    → unit: "tubers"
+"50 yards ankara"    → unit: "yards"
+"30 packs water"     → unit: "packs"
+
+ABSOLUTELY FORBIDDEN substitutions:
+"5 bags of rice"  → unit: "cups"   ← WRONG. Rice is NOT measured in cups here
+"5 bags of rice"  → unit: "kg"     ← WRONG. Never convert to weight
+"3 cartons"       → unit: "boxes"  ← WRONG. Never rename
+"3 tubers of yam" → unit: "pieces" ← WRONG. Never normalize
+
+If no unit word appears in the message → unit: "units"
 
 ════ INGREDIENT vs RESALE CONTEXT ════
 The same item (e.g. tomatoes, palm oil, yam) can be either:
