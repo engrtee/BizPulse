@@ -81,8 +81,9 @@ router.post('/', async (req, res) => {
     // Handle text, audio (voice note), and image messages
     if (msg.type !== 'text' && msg.type !== 'audio' && msg.type !== 'image') return;
 
-    const from = normalizePhone(msg.from); // canonical 234XXXXXXXXXX format
-    const name = contact?.profile?.name || 'there';
+    const from      = normalizePhone(msg.from); // canonical 234XXXXXXXXXX format
+    const name      = contact?.profile?.name || 'there';
+    const wasMsgId  = msg.id || null;          // Meta message ID — used for dedup
     let text        = '';
     let entryMethod = 'text';
 
@@ -265,14 +266,19 @@ router.post('/', async (req, res) => {
           `*What's your name?* (Just your first name is fine 😊)`
         );
       }
-      await MessageModel.logInbound(from, null, text).then(id =>
-        MessageModel.updateLog(id, { intent: 'onboarding', status: 'in_progress' })
+      await MessageModel.logInbound(from, null, text, wasMsgId).then(r =>
+        MessageModel.updateLog(r?.id, { intent: 'onboarding', status: 'in_progress' })
       ).catch(() => {});
       return;
     }
 
-    // ── Log inbound message (update with intent/result after processing) ──
-    const msgLogId = await MessageModel.logInbound(from, user.id, text).catch(() => null);
+    // ── Dedup: skip if Meta already delivered this message_id ──
+    const logResult = await MessageModel.logInbound(from, user.id, text, wasMsgId).catch(() => ({ id: null, duplicate: false }));
+    if (logResult.duplicate) {
+      console.log(`[Webhook] ⏭ Duplicate message_id ${wasMsgId} — skipping`);
+      return;
+    }
+    const msgLogId = logResult.id;
 
     // ── New user onboarding: first ever WhatsApp message ──
     if (!user.first_message_date) {
@@ -297,11 +303,31 @@ router.post('/', async (req, res) => {
       return;
     }
 
-    // ── Confirmation intercept (YES / EDIT) ──────────────────────────────────
+    // ── Confirmation intercept (YES / EDIT / CANCEL) ─────────────────────────
     const upperText = text.trim().toUpperCase();
+
+    // CANCEL — only meaningful for oversell_confirmation
+    if (upperText === 'CANCEL') {
+      const pending = await ConfirmationService.getPendingEntry(user.id);
+      if (pending && pending.entry_type === 'oversell_confirmation') {
+        await ConfirmationService.discardEntry(pending.id);
+        await WhatsAppService.sendMessage(from,
+          `✅ Sale cancelled. No changes made to your stock.`);
+        await MessageModel.updateLog(msgLogId, { intent: 'oversell_cancel', status: 'processed' }).catch(() => {});
+        return;
+      }
+    }
+
     if (upperText === 'YES' || upperText === 'Y' || upperText === 'CONFIRM') {
       const pending = await ConfirmationService.getPendingEntry(user.id);
       if (pending) {
+        // Oversell YES — add missing stock then process sale
+        if (pending.entry_type === 'oversell_confirmation') {
+          await ConfirmationService.confirmEntry(pending.id);
+          await handleOversellYes(user, from, pending);
+          await MessageModel.updateLog(msgLogId, { intent: 'oversell_yes', status: 'processed' }).catch(() => {});
+          return;
+        }
         await ConfirmationService.confirmEntry(pending.id);
 
         // ── Learning: record correction if this YES follows an EDIT ──────────
@@ -332,6 +358,13 @@ router.post('/', async (req, res) => {
     } else if (upperText === 'EDIT' || upperText === 'NO' || upperText === 'N') {
       const pending = await ConfirmationService.getPendingEntry(user.id);
       if (pending) {
+        // Oversell NO — sell from unlogged stock, cap at 0, log warning
+        if (pending.entry_type === 'oversell_confirmation' && (upperText === 'NO' || upperText === 'N')) {
+          await ConfirmationService.confirmEntry(pending.id);
+          await handleOversellNo(user, from, pending);
+          await MessageModel.updateLog(msgLogId, { intent: 'oversell_no', status: 'processed' }).catch(() => {});
+          return;
+        }
         await ConfirmationService.editEntry(pending.id);
         await WhatsAppService.sendMessage(from,
           `No problem, ${user.name.split(' ')[0]}! 📝\n\nSend me the corrected numbers and I'll log them.`);
@@ -615,11 +648,45 @@ async function handleConfirmedEntry(user, from, pending) {
     return;
   }
 
+  if (entry_type === 'oversell_confirmation') {
+    // Handled via handleOversellYes / handleOversellNo — should not reach here directly
+    return;
+  }
+
   if (entry_type === 'inventory_out') {
     const hasProducts = Array.isArray(parsedData.products) && parsedData.products.length > 0;
     const isCredit    = parsedData.sale_type === 'credit';
     const debtorName  = parsedData.debtor_name || null;
     const fmt = (n) => Number(n || 0).toLocaleString('en-NG');
+
+    // ── Oversell pre-flight check ──
+    if (hasProducts && !isCredit) {
+      const oversells = [];
+      for (const p of parsedData.products) {
+        if (p.transaction_type !== 'sale' || !p.quantity) continue;
+        const found = await ProductService.findProductFuzzy(user.id, p.product_name).catch(() => null);
+        if (!found) continue;
+        const currentStock = await ProductModel.getCurrentStock(found.id);
+        if (currentStock > 0 && parseFloat(p.quantity) > currentStock) {
+          oversells.push({
+            product_name:  found.product_name,
+            product_id:    found.id,
+            requested_qty: parseFloat(p.quantity),
+            available_qty: currentStock,
+            difference:    parseFloat(p.quantity) - currentStock,
+          });
+        }
+      }
+      if (oversells.length > 0) {
+        await ConfirmationService.savePending(user.id, 'oversell_confirmation', {
+          original_entry: parsedData,
+          oversells,
+        }, original_message);
+        const question = ConfirmationService.buildOversellQuestion(oversells);
+        await WhatsAppService.sendMessage(from, question);
+        return;
+      }
+    }
 
     if (hasProducts) {
       const date    = todayWAT();
@@ -771,6 +838,74 @@ async function handleConfirmedEntry(user, from, pending) {
     }
     return;
   }
+}
+
+// ─────────────────────────────────────────────
+// Internal: oversell YES — add missing stock, then deduct full qty
+// ─────────────────────────────────────────────
+async function handleOversellYes(user, from, pending) {
+  const { original_entry, oversells } = typeof pending.parsed_data === 'string'
+    ? JSON.parse(pending.parsed_data) : pending.parsed_data;
+  const date = todayWAT();
+  const fmt  = (n) => Number(n || 0).toLocaleString('en-NG');
+
+  // Auto-restock: add the missing units for each oversold product
+  for (const o of oversells) {
+    const restockProducts = [{
+      product_name:     o.product_name,
+      transaction_type: 'stock_in',
+      quantity:         o.difference,
+      unit_price:       null,
+      total_amount:     0,
+      unit:             'units',
+      channel:          'retail',
+    }];
+    await ProductService.processProductTransactions(
+      user.id, user, restockProducts, null, date, WhatsAppService
+    ).catch(e => console.error('[Oversell YES] Restock failed:', e.message));
+  }
+
+  // Now process the original sale at the full requested quantity
+  const summary = await ProductService.processProductTransactions(
+    user.id, user, original_entry.products, null, date, WhatsAppService
+  ).catch(() => []);
+
+  const lines = summary.length > 0
+    ? summary.map(s => `📦 ${s.name}: ${s.stock} ${s.unit} remaining`)
+    : original_entry.products.map(p => `📦 ${p.product_name}: sold ${p.quantity || '?'} ${p.unit || 'units'}`);
+
+  const restockNote = oversells.map(o =>
+    `↳ Auto-added ${fmt(o.difference)} ${o.product_name} to balance your stock`
+  ).join('\n');
+
+  await WhatsAppService.sendMessage(from,
+    `✅ *Sale recorded!*\n\n${lines.join('\n')}\n\n` +
+    `📝 *Auto-corrected restock:*\n${restockNote}`
+  );
+}
+
+// ─────────────────────────────────────────────
+// Internal: oversell NO — sell from unlogged stock, cap at 0
+// ─────────────────────────────────────────────
+async function handleOversellNo(user, from, pending) {
+  const { original_entry, oversells } = typeof pending.parsed_data === 'string'
+    ? JSON.parse(pending.parsed_data) : pending.parsed_data;
+  const date = todayWAT();
+
+  // Process sale normally — productService already caps at 0 via GREATEST
+  const summary = await ProductService.processProductTransactions(
+    user.id, user, original_entry.products, null, date, WhatsAppService
+  ).catch(() => []);
+
+  const lines = summary.length > 0
+    ? summary.map(s => `📦 ${s.name}: ${s.stock} ${s.unit} remaining`)
+    : oversells.map(o => `📦 ${o.product_name}: set to 0 (sold from unlogged stock)`);
+
+  await WhatsAppService.sendMessage(from,
+    `✅ *Sale recorded!*\n\n${lines.join('\n')}\n\n` +
+    `⚠️ Stock went to 0 — you may have unlogged inventory. ` +
+    `Send _"received [qty] [product]"_ when you're ready to update it.`
+  );
 }
 
 // ─────────────────────────────────────────────

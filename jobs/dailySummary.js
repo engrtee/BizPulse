@@ -284,6 +284,13 @@ cron.schedule('*/30 * * * *', async () => {
     const pending = await ConfirmationService.getPendingNeedingReminder();
     for (const entry of pending) {
       try {
+        // Re-fetch status right before sending to guard against race conditions
+        // (user may have replied YES between the query and now)
+        const fresh = await ConfirmationService.getPendingEntry(entry.user_id);
+        if (!fresh || fresh.id !== entry.id) {
+          // Entry was confirmed/discarded after the query — skip silently
+          continue;
+        }
         const parsedData = typeof entry.parsed_data === 'string'
           ? JSON.parse(entry.parsed_data)
           : entry.parsed_data;

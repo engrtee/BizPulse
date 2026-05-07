@@ -117,6 +117,8 @@ async function initDb() {
     created_at    TIMESTAMPTZ DEFAULT NOW()
   )`, 'CREATE whatsapp_messages');
 
+  await run(`ALTER TABLE whatsapp_messages ADD COLUMN IF NOT EXISTS whatsapp_message_id VARCHAR(100)`, 'ADD whatsapp_message_id');
+  await run(`CREATE UNIQUE INDEX IF NOT EXISTS idx_wa_messages_msgid ON whatsapp_messages(whatsapp_message_id) WHERE whatsapp_message_id IS NOT NULL`, 'INDEX msgid');
   await run(`CREATE INDEX IF NOT EXISTS idx_wa_messages_phone   ON whatsapp_messages(phone_number)`,   'INDEX phone');
   await run(`CREATE INDEX IF NOT EXISTS idx_wa_messages_user    ON whatsapp_messages(user_id)`,        'INDEX user');
   await run(`CREATE INDEX IF NOT EXISTS idx_wa_messages_created ON whatsapp_messages(created_at DESC)`,'INDEX created');
@@ -447,15 +449,29 @@ async function initDb() {
 // Used by webhook to record every inbound message and its processing result.
 // ─────────────────────────────────────────────
 const MessageModel = {
-  /** Insert a new inbound message row. Returns the row id so it can be updated later. */
-  async logInbound(phoneNumber, userId, messageText) {
+  /**
+   * Insert a new inbound message row. Returns { id, duplicate }.
+   * If whatsappMessageId already exists, returns { id: existing_id, duplicate: true }
+   * so the caller can skip processing.
+   */
+  async logInbound(phoneNumber, userId, messageText, whatsappMessageId = null) {
+    // Dedup check — Meta retries can send the same message_id twice
+    if (whatsappMessageId) {
+      const existing = await pool.query(
+        `SELECT id FROM whatsapp_messages WHERE whatsapp_message_id = $1 LIMIT 1`,
+        [whatsappMessageId]
+      );
+      if (existing.rows.length > 0) {
+        return { id: existing.rows[0].id, duplicate: true };
+      }
+    }
     const res = await pool.query(
-      `INSERT INTO whatsapp_messages (phone_number, user_id, message_text, direction, status)
-       VALUES ($1, $2, $3, 'inbound', 'received')
+      `INSERT INTO whatsapp_messages (phone_number, user_id, message_text, direction, status, whatsapp_message_id)
+       VALUES ($1, $2, $3, 'inbound', 'received', $4)
        RETURNING id`,
-      [phoneNumber, userId || null, messageText]
+      [phoneNumber, userId || null, messageText, whatsappMessageId || null]
     );
-    return res.rows[0]?.id;
+    return { id: res.rows[0]?.id, duplicate: false };
   },
 
   /** Log an outbound message (every reply BizPulse sends). Non-blocking by design. */

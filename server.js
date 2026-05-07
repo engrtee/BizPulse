@@ -85,6 +85,11 @@ async function start() {
     // Create tables if they don't exist
     await initDb();
 
+    // Migrate old inventory → new products table (idempotent, non-blocking)
+    require('./scripts/migrate-old-inventory').run().catch(e =>
+      console.warn('[Startup] Inventory migration skipped:', e.message)
+    );
+
     // Start HTTP server
     app.listen(PORT, '0.0.0.0', () => {
       console.log(`\n🚀 BizPulse running at http://localhost:${PORT}`);

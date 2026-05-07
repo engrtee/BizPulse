@@ -142,4 +142,9 @@ async function run() {
   process.exit(0);
 }
 
-run().catch(e => { console.error('Migration failed:', e.message); process.exit(1); });
+// Allow direct execution: node scripts/migrate-old-inventory.js
+if (require.main === module) {
+  run().catch(e => { console.error('Migration failed:', e.message); process.exit(1); });
+}
+
+module.exports = { run };

@@ -226,10 +226,20 @@ function buildDailyEntryConfirmation(data) {
     lines.push('');
   }
 
-  // Profit line
-  const p = parseFloat(profit) || 0;
-  const profitStr = p >= 0 ? fmt(p) : `-${fmt(Math.abs(p))}`;
-  lines.push(`💰 *Profit today so far: ${profitStr}*\n`);
+  // Revenue / profit summary for this entry
+  const rev = parseFloat(revenue) || 0;
+  const exp = parseFloat(totalExpenses) || 0;
+  const p   = rev - exp; // always recalculate — never trust Gemini's profit field directly
+  if (rev > 0) {
+    lines.push(`💰 *Revenue (this entry): ${fmt(rev)}*`);
+    if (exp > 0) {
+      lines.push(`📉 Expenses: ${fmt(exp)}`);
+      const profitStr = p >= 0 ? fmt(p) : `-${fmt(Math.abs(p))}`;
+      lines.push(`📊 Profit: *${profitStr}*\n`);
+    } else {
+      lines.push('');
+    }
+  }
   lines.push('Reply *YES* to log ✅');
   lines.push('Reply *EDIT* if something is wrong ❌');
 
@@ -295,6 +305,22 @@ function buildStockOutConfirmation(data) {
   lines.push('');
   lines.push('Reply *YES* to log ✅');
   lines.push('Reply *EDIT* if something is wrong ❌');
+  return lines.join('\n');
+}
+
+function buildOversellQuestion(oversells) {
+  const lines = [];
+  for (const o of oversells) {
+    lines.push(
+      `⚠️ You only have *${o.available_qty.toLocaleString('en-NG')} ${o.product_name}* logged, but you sold *${o.requested_qty.toLocaleString('en-NG')}*.`
+    );
+  }
+  lines.push('');
+  lines.push('Did you restock without logging it?');
+  lines.push('');
+  lines.push('*YES* — Add the missing stock automatically ✅');
+  lines.push('*NO* — I sold from old unlogged stock (set to 0) 📦');
+  lines.push('*CANCEL* — Ignore this sale ❌');
   return lines.join('\n');
 }
 
@@ -372,5 +398,6 @@ module.exports = {
   getRecentEditedEntry,
   buildConfirmationMessage,
   buildDebtPaymentConfirmation,
+  buildOversellQuestion,
   getConfirmationMetrics,
 };
