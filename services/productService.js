@@ -155,7 +155,15 @@ async function findProductFuzzy(userId, rawName) {
 
 async function findOrCreateProduct(userId, rawName, unit = 'units') {
   const found = await findProductFuzzy(userId, rawName);
-  if (found) return found;
+  if (found) {
+    // Update unit in DB when a specific unit is now known and differs from stored
+    if (unit && unit !== 'units' && found.unit !== unit) {
+      const { query } = require('../models/db');
+      await query('UPDATE products SET unit = $1, updated_at = NOW() WHERE id = $2', [unit, found.id]);
+      found.unit = unit;
+    }
+    return found;
+  }
 
   const displayName   = normalizeProductName(rawName);
   const normalizedKey = normalizeForStorage(rawName);

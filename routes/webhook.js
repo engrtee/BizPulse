@@ -473,6 +473,21 @@ router.post('/', async (req, res) => {
         break;
       }
 
+      case 'opening_stock': {
+        const hasOpeningProducts = Array.isArray(data.products) && data.products.length > 0;
+        if (!hasOpeningProducts) {
+          await WhatsAppService.sendMessage(from,
+            `I couldn't find any stock items, ${user.name.split(' ')[0]}.\n\nTry:\n_"I have 50 bags rice, 20 packs indomie"_`);
+          await MessageModel.updateLog(msgLogId, { intent: 'opening_stock', status: 'parse_error' }).catch(() => {});
+          break;
+        }
+        await ConfirmationService.savePending(user.id, 'opening_stock', data, text);
+        const confirmOpeningMsg = ConfirmationService.buildConfirmationMessage('opening_stock', data);
+        await WhatsAppService.sendMessage(from, confirmOpeningMsg);
+        await MessageModel.updateLog(msgLogId, { intent: 'opening_stock', parsedData: data, status: 'pending_confirm' }).catch(() => {});
+        break;
+      }
+
       case 'inventory_out': {
         const hasProductsOut = Array.isArray(data.products) && data.products.length > 0;
         if (!hasProductsOut && (!data.item || !data.quantity)) {
