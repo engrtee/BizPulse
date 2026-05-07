@@ -398,7 +398,23 @@ router.post('/', async (req, res) => {
 
     // ── Upgrade with Gemini if needed ──
     if (needsAI) {
+      // Instant ack — user sees this immediately while Gemini processes (can take 3-12s)
+      await WhatsAppService.sendMessage(from,
+        `Analyzing your message, ${user.name.split(' ')[0]}... ⏳`
+      ).catch(() => {});
+
       const aiResult = await GeminiService.parseWithAI(text, user);
+
+      // Gemini timed out — tell the user to try again rather than silently failing
+      if (aiResult.type === 'parse_timeout') {
+        await WhatsAppService.sendMessage(from,
+          `Sorry ${user.name.split(' ')[0]}, I'm taking longer than usual right now. ` +
+          `Send your message again and I'll handle it straight away! 🔄`
+        );
+        await MessageModel.updateLog(msgLogId, { intent: 'parse_timeout', status: 'timeout' }).catch(() => {});
+        return;
+      }
+
       type = aiResult.type || 'unknown';
       data = aiResult;
 

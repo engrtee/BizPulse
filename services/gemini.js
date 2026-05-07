@@ -92,6 +92,14 @@ function getClient() {
   return genAI;
 }
 
+// Wrap any promise with a timeout. Rejects with Error('GEMINI_TIMEOUT') after ms.
+function withTimeout(promise, ms = 12000) {
+  const timer = new Promise((_, reject) =>
+    setTimeout(() => reject(new Error('GEMINI_TIMEOUT')), ms)
+  );
+  return Promise.race([promise, timer]);
+}
+
 // ---------- Nigerian business context ----------
 const NIGERIA_CONTEXT = `
 You are a financial assistant for small business owners (SMEs) in Nigeria.
@@ -357,7 +365,7 @@ Maximum backdating: 7 days. If older → add to notes but do NOT set entry_date.
   try {
     const modelName = 'gemini-2.5-flash';
     const model = getClient().getGenerativeModel({ model: modelName });
-    const result = await model.generateContent(prompt);
+    const result = await withTimeout(model.generateContent(prompt), 12000);
     const text = result.response.text().trim();
 
     // Strip any accidental markdown fences
@@ -410,17 +418,18 @@ Maximum backdating: 7 days. If older → add to notes but do NOT set entry_date.
 
     return parsed;
   } catch (err) {
-    console.error('[Gemini] parseWithAI error:', err.message);
+    const isTimeout = err.message === 'GEMINI_TIMEOUT';
+    console.error(`[Gemini] parseWithAI ${isTimeout ? 'TIMEOUT' : 'error'}:`, err.message);
     logInference({
       userId:     user?.id,
       callType:   'parse',
       model:      'gemini-2.5-flash',
       inputText:  message,
       outputText: 'ERROR: ' + err.message,
-      parsedType: 'error',
+      parsedType: isTimeout ? 'timeout' : 'error',
       latencyMs:  Date.now() - t0,
     });
-    return { type: 'unknown' };
+    return { type: isTimeout ? 'parse_timeout' : 'unknown' };
   }
 }
 
@@ -488,7 +497,7 @@ Rules:
 
   try {
     const model = getClient().getGenerativeModel({ model: 'gemini-2.5-flash' });
-    const result = await model.generateContent(prompt);
+    const result = await withTimeout(model.generateContent(prompt), 20000);
     const text = result.response.text().trim();
     const clean = text.replace(/^```json\s*/i, '').replace(/```$/i, '').trim();
     return JSON.parse(clean);
@@ -541,7 +550,7 @@ Return ONLY valid JSON — no markdown, no explanation:
 
   try {
     const model = getClient().getGenerativeModel({ model: 'gemini-2.5-flash' });
-    const result = await model.generateContent([
+    const result = await withTimeout(model.generateContent([
       {
         inlineData: {
           mimeType: mimeType || 'audio/ogg; codecs=opus',
@@ -549,7 +558,7 @@ Return ONLY valid JSON — no markdown, no explanation:
         },
       },
       { text: prompt },
-    ]);
+    ]), 20000);
     const text   = result.response.text().trim();
     const clean  = text.replace(/^```json\s*/i, '').replace(/```$/i, '').trim();
     const parsed = JSON.parse(clean);
@@ -627,7 +636,7 @@ If the image is too dark, blurry, or contains no product information: return []`
 
   try {
     const model = getClient().getGenerativeModel({ model: 'gemini-2.5-flash' });
-    const result = await model.generateContent([
+    const result = await withTimeout(model.generateContent([
       {
         inlineData: {
           mimeType: mimeType || 'image/jpeg',
@@ -635,7 +644,7 @@ If the image is too dark, blurry, or contains no product information: return []`
         },
       },
       { text: prompt },
-    ]);
+    ]), 20000);
     const text   = result.response.text().trim();
     const clean  = text.replace(/^```json\s*/i, '').replace(/```$/i, '').trim();
     const parsed = JSON.parse(clean);
