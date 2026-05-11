@@ -195,7 +195,11 @@ async function sendSummaryEmail(user, summary, aiRec, lowStock = []) {
   const firstName = user.name.split(' ')[0];
   const dateStr   = formatDate(summary.date || new Date());
   const html      = buildEmailHtml(user, summary, aiRec, lowStock);
-  const fromEmail = process.env.BREVO_FROM_EMAIL || process.env.GMAIL_USER;
+  const fromEmail = process.env.BREVO_FROM_EMAIL;
+  if (!fromEmail) {
+    console.warn('[Email] BREVO_FROM_EMAIL not set — skipping email for', user.email);
+    return { status: 'no_sender' };
+  }
 
   const res = await axios.post(
     'https://api.brevo.com/v3/smtp/email',

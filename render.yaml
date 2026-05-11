@@ -59,20 +59,17 @@ services:
       - key: BIZPULSE_NUMBER
         sync: false          # e.g. +15551676111
 
-      - key: GOOGLE_CLIENT_ID
-        sync: false
-
-      - key: GOOGLE_CLIENT_SECRET
-        sync: false
-
-      - key: GOOGLE_REDIRECT_URI
-        sync: false          # https://bizpulse.onrender.com/api/auth/callback
-
       - key: GEMINI_API_KEY
         sync: false
 
-      - key: GMAIL_USER
-        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false          # Claude AI coaching + business questions
 
-      - key: GMAIL_APP_PASSWORD
-        sync: false
+      - key: BREVO_API_KEY
+        sync: false          # Required for ALL outbound email
+
+      - key: BREVO_FROM_EMAIL
+        sync: false          # Verified sender address in Brevo
+
+      - key: ADMIN_PASSWORD
+        sync: false          # /admin dashboard access

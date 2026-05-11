@@ -18,7 +18,8 @@ const ProductModel      = require('../models/product');
 const ProductService    = require('../services/productService');
 
 async function run() {
-  await initDb();
+  // initDb() is intentionally NOT called here — when invoked from server.js,
+  // the DB is already initialised. For direct execution, see the block below.
 
   console.log('=== Old Inventory → Products Migration ===\n');
 
@@ -32,7 +33,7 @@ async function run() {
 
   if (inv.rows.length === 0) {
     console.log('No old inventory rows with non-zero balance. Nothing to migrate.');
-    process.exit(0);
+    return;
   }
 
   console.log(`Found ${inv.rows.length} old inventory items to check:\n`);
@@ -139,12 +140,14 @@ async function run() {
   console.log(`\n=== Done ===`);
   console.log(`Migrated/fixed: ${migrated} items`);
   console.log(`Already correct: ${skipped} items`);
-  process.exit(0);
 }
 
 // Allow direct execution: node scripts/migrate-old-inventory.js
 if (require.main === module) {
-  run().catch(e => { console.error('Migration failed:', e.message); process.exit(1); });
+  initDb()
+    .then(() => run())
+    .then(() => process.exit(0))
+    .catch(e => { console.error('Migration failed:', e.message); process.exit(1); });
 }
 
 module.exports = { run };
