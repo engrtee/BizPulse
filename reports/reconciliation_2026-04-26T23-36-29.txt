@@ -1,0 +1,35 @@
+BizPulse Database Audit & Fix Report
+======================================
+Date: 27/04/2026, 00:36:29
+
+=== DATA FIXES APPLIED ===
+F1 Human hair normalized key: FIXED ✅ {"product_name":"Human hair","product_name_normalized":"human hair"}
+F2 Lace fabric total_received: FIXED ✅ {"item_name":"Lace fabric","current_balance":"20.00","total_received":"20.00"}
+F3 Amaka Obi last_message_date=SET ✅ first_message_date=SET ✅
+F3 Tosin Oladapo Ilesanmi last_message_date=SET ✅ first_message_date=SET ✅
+F4 Power bank tx capped: FIXED ✅ {"quantity":"10.00","total_amount":"50000.00"}
+
+=== SCHEMA ADDITIONS ===
+debtors table: EXISTS ✅ (10 columns)
+transactions.sale_type: EXISTS ✅
+product_transactions.sale_type: EXISTS ✅
+
+=== STOCK RECONCILIATION (post-fix) ===
+  Result: 17/17 products reconcile exactly. Mismatches: 0
+
+=== CREDIT/CASH SALE SYSTEM (Phase 2 brought forward) ===
+  debtors table: created
+  transactions.sale_type: added (default cash)
+  product_transactions.sale_type: added (default cash)
+  models/debtor.js: new — create, findPending, getPendingAll, markPaid, getTotalOwed
+  services/gemini.js: debt_payment type added; inventory_out gains sale_type + debtor_name fields
+  services/parser.js: debtors_check shortcut command ("debtors?", "who owes me")
+  services/confirmationService.js: buildDebtPaymentConfirmation + credit sale confirmation
+  services/whatsapp.js: sendDebtorList added
+  routes/webhook.js: debtors_check + debt_payment cases; credit sale creates debtor record on confirm
+  services/productService.js: oversell capped — recorded qty = min(requested, available)
+
+=== COMMANDS NOW AVAILABLE VIA WHATSAPP ===
+  "debtors" or "who owes me"  → list all outstanding debts
+  "[Name] paid me 25k"         → record payment, clear debt, log as revenue
+  "Sold [item] to [Name] on credit"  → credit sale: deduct stock, record debtor, revenue=0

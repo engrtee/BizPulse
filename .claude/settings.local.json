@@ -3,7 +3,24 @@
     "allow": [
       "Bash(node -e \"require\\('dotenv'\\).config\\(\\); const axios = require\\('axios'\\); const BASE = process.env.BASE_URL; console.log\\('BASE_URL:', BASE\\);\")",
       "Bash(curl -s \"https://bizpulse-urub.onrender.com/api/test/whatsapp-config\")",
-      "Bash(curl -s \"https://bizpulse-urub.onrender.com/api/test/parse?message=Today+was+good+made+45k+from+sales+paid+10k+for+stock+3k+transport\")"
+      "Bash(curl -s \"https://bizpulse-urub.onrender.com/api/test/parse?message=Today+was+good+made+45k+from+sales+paid+10k+for+stock+3k+transport\")",
+      "Bash(node --check routes/webhook.js)",
+      "Bash(node --check models/onboarding.js)",
+      "Bash(node --check models/db.js)",
+      "Bash(cd \"/c/Users/USER/Desktop/Development Project/BizPulse\" && grep -n \"whatsapp_messages\\\\|CREATE TABLE.*whatsapp\" models/db.js | head -10)",
+      "Read(//c/c/Users/USER/Desktop/Development Project/BizPulse/models/**)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)",
+      "Bash(node -e \"require\\('bcrypt'\\); console.log\\('bcrypt available'\\)\")",
+      "Bash(node -e \"require\\('bcryptjs'\\); console.log\\('bcryptjs available'\\)\")",
+      "Bash(node -e \"const p = require\\('./package.json'\\); console.log\\(JSON.stringify\\(Object.keys\\(p.dependencies\\), null, 2\\)\\)\")",
+      "Bash(npm install *)",
+      "Bash(grep -o \"postgresql://[^[:space:]'\\\\\"\\\\\\\\\\\\\\\\]*pooler[^[:space:]'\\\\\"\\\\\\\\\\\\\\\\]*\" \"C:\\\\Users\\\\USER\\\\.claude\\\\projects\\\\C--Users-USER-Desktop-Development-Project-BizPulse\\\\64b1251c-cd5d-442b-a7b9-6b4bd59b459a.jsonl\")",
+      "Bash(grep -o \"postgres://[^[:space:]'\\\\\"\\\\\\\\\\\\\\\\]*supabase[^[:space:]'\\\\\"\\\\\\\\\\\\\\\\]*\\\\|postgresql://[^[:space:]'\\\\\"\\\\\\\\\\\\\\\\]*supabase[^[:space:]'\\\\\"\\\\\\\\\\\\\\\\]*\" \"C:\\\\Users\\\\USER\\\\.claude\\\\projects\\\\C--Users-USER-Desktop-Development-Project-BizPulse\\\\64b1251c-cd5d-442b-a7b9-6b4bd59b459a.jsonl\")",
+      "PowerShell(cd \"C:\\\\Users\\\\USER\\\\Desktop\\\\Development Project\\\\BizPulse\"; node -e \"require\\('dotenv'\\).config\\(\\); const {Pool}=require\\('pg'\\); const p=new Pool\\({connectionString:process.env.DATABASE_URL}\\); p.query\\('SELECT table_name FROM information_schema.tables WHERE table_schema=$1 ORDER BY table_name',['public']\\).then\\(r=>{console.log\\('Tables:',r.rows.map\\(x=>x.table_name\\).join\\(', '\\)\\); p.end\\(\\);}\\).catch\\(e=>{console.error\\('DB error:',e.message\\); p.end\\(\\);}\\)\")",
+      "PowerShell(cd \"C:\\\\Users\\\\USER\\\\Desktop\\\\Development Project\\\\BizPulse\"; node scripts/reset-test-user.js; node kemi-test-script.js > kemi-test-run.log 2>&1; echo \"Exit code: $LASTEXITCODE\")",
+      "PowerShell(Out-File *)"
     ]
   }
 }

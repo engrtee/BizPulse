@@ -304,17 +304,12 @@ async function sendHelp(to) {
  * @param {number} streak    User's current streak
  */
 async function sendMorningBroadcast(to, firstName, bizName, quote, streak) {
-  const s = parseInt(streak, 10) || 0;
-  let streakLine = '';
-  if (s >= 2)       streakLine = `🔥 Day ${s} streak — keep it going!\n\n`;
-  else if (s === 1) streakLine = `🌱 Day 1 streak — let's build it!\n\n`;
-  else              streakLine = `📅 Today is a great day to start your streak.\n\n`;
-
   const body =
-    `Good morning ${firstName}! ☀️\n\n` +
-    streakLine +
-    `"${quote}"\n\n` +
-    `I'm here when you're ready to log today. 📊`;
+    `👋 Good morning ${firstName}!\n\n` +
+    `Ready to track today?\n\n` +
+    `Send your sales and expenses anytime — ` +
+    `by text, voice note 🎤, or photo 📸\n\n` +
+    `Your business stays sharp when your numbers are up to date. 💪`;
   return sendMessage(to, body);
 }
 

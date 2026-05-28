@@ -658,4 +658,73 @@ If the image is too dark, blurry, or contains no product information: return []`
   }
 }
 
-module.exports = { parseWithAI, generateRecommendation, transcribeAudio, analyzePhoto };
+/**
+ * Analyse a photo of a receipt, handwritten notebook, or invoice for financial data.
+ * Returns structured revenue, expenses, and product data for confirmation by the user.
+ *
+ * @param {Buffer} imageBuffer  Raw image bytes downloaded from Meta
+ * @param {string} mimeType     e.g. 'image/jpeg'
+ * @param {object} user         User record (for biz_type context)
+ * @returns {{ type, revenue, expenses, products, raw_text, confidence, notes }}
+ */
+async function analyzeReceipt(imageBuffer, mimeType, user) {
+  const prompt = `You are reading a photo sent by a Nigerian small business owner. The photo may show:
+- A handwritten notebook with sales or stock records
+- A printed or handwritten receipt
+- A delivery note or invoice
+- A shelf or stock photo
+- A price list
+
+Extract ALL financial data visible:
+- Revenue or sales amounts
+- Expense items and amounts
+- Product names and quantities
+- Prices per unit if shown
+
+Nigerian context:
+- Amounts may be written as 45k = 45000, 1.5m = 1500000
+- Products may have local brand names
+- Handwriting may be informal
+- Mixed English and Yoruba/Igbo labels are normal
+
+Return JSON only. No explanation. No markdown.
+{
+  "type": "receipt|notebook|stock|pricelist|unknown",
+  "revenue": number or null,
+  "expenses": [{"category": "string", "amount": number}],
+  "products": [{"name": "string", "quantity": number or null, "price": number or null, "unit": "string"}],
+  "raw_text": "everything you can read from the image",
+  "confidence": "high|medium|low",
+  "notes": "anything unclear or uncertain"
+}`;
+
+  try {
+    const model = getClient().getGenerativeModel({ model: 'gemini-2.5-flash' });
+    const result = await withTimeout(model.generateContent([
+      {
+        inlineData: {
+          mimeType: mimeType || 'image/jpeg',
+          data: imageBuffer.toString('base64'),
+        },
+      },
+      { text: prompt },
+    ]), 20000);
+    const raw   = result.response.text().trim();
+    const clean = raw.replace(/^```json\s*/i, '').replace(/```$/i, '').trim();
+    const parsed = JSON.parse(clean);
+    return {
+      type:       parsed.type       || 'unknown',
+      revenue:    parsed.revenue    != null ? parseFloat(parsed.revenue)  : null,
+      expenses:   Array.isArray(parsed.expenses) ? parsed.expenses        : [],
+      products:   Array.isArray(parsed.products) ? parsed.products        : [],
+      raw_text:   parsed.raw_text   || '',
+      confidence: parsed.confidence || 'low',
+      notes:      parsed.notes      || '',
+    };
+  } catch (err) {
+    console.error('[Gemini] analyzeReceipt error:', err.message);
+    return { type: 'unknown', revenue: null, expenses: [], products: [], raw_text: '', confidence: 'low', notes: '' };
+  }
+}
+
+module.exports = { parseWithAI, generateRecommendation, transcribeAudio, analyzePhoto, analyzeReceipt };

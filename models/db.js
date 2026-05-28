@@ -441,6 +441,56 @@ async function initDb() {
   await run(`CREATE INDEX IF NOT EXISTS idx_ailog_user   ON ai_inference_log(user_id, created_at DESC)`, 'INDEX ailog_user');
   await run(`CREATE INDEX IF NOT EXISTS idx_ailog_outcome ON ai_inference_log(outcome, call_type)`,       'INDEX ailog_outcome');
 
+  // ── Kemi Agent tables ────────────────────────────────────────────────────
+  await run(`CREATE TABLE IF NOT EXISTS conversation_history (
+    id              UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+    whatsapp_number VARCHAR     NOT NULL,
+    role            VARCHAR     NOT NULL CHECK (role IN ('user','assistant')),
+    content         TEXT        NOT NULL,
+    created_at      TIMESTAMPTZ DEFAULT now(),
+    session_date    DATE        DEFAULT CURRENT_DATE
+  )`, 'CREATE conversation_history');
+  await run(`CREATE INDEX IF NOT EXISTS idx_conv_hist_number_date
+    ON conversation_history(whatsapp_number, created_at DESC)`, 'INDEX conversation_history');
+
+  await run(`CREATE TABLE IF NOT EXISTS trader_facts (
+    id                      UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+    whatsapp_number         VARCHAR     UNIQUE NOT NULL,
+    language_preference     VARCHAR     DEFAULT 'auto',
+    business_type           VARCHAR,
+    top_products            JSONB       DEFAULT '[]',
+    typical_lead_time_days  INTEGER     DEFAULT 2,
+    rolling_summary         TEXT,
+    summary_updated_at      TIMESTAMPTZ,
+    updated_at              TIMESTAMPTZ DEFAULT now()
+  )`, 'CREATE trader_facts');
+
+  await run(`CREATE TABLE IF NOT EXISTS debts (
+    id              UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+    whatsapp_number VARCHAR     NOT NULL,
+    debtor_name     VARCHAR     NOT NULL,
+    amount          BIGINT      NOT NULL,
+    item            VARCHAR,
+    note            TEXT,
+    status          VARCHAR     DEFAULT 'outstanding'
+                    CHECK (status IN ('outstanding','settled')),
+    created_at      TIMESTAMPTZ DEFAULT now(),
+    settled_at      TIMESTAMPTZ
+  )`, 'CREATE debts');
+  await run(`CREATE INDEX IF NOT EXISTS idx_debts_number_status
+    ON debts(whatsapp_number, status)`, 'INDEX debts');
+
+  await run(`CREATE TABLE IF NOT EXISTS goals (
+    id              UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+    whatsapp_number VARCHAR     NOT NULL,
+    type            VARCHAR     NOT NULL CHECK (type IN ('revenue','profit')),
+    amount          BIGINT      NOT NULL,
+    period          VARCHAR     NOT NULL CHECK (period IN ('daily','weekly','monthly')),
+    created_at      TIMESTAMPTZ DEFAULT now(),
+    updated_at      TIMESTAMPTZ DEFAULT now()
+  )`, 'CREATE goals');
+  await run(`CREATE INDEX IF NOT EXISTS idx_goals_number ON goals(whatsapp_number)`, 'INDEX goals');
+
   console.log('✅ Database tables ready.');
 }
 

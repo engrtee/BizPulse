@@ -202,13 +202,6 @@ async function runDailySummary() {
  * Softer tone than the retention nudge — it's same-day, not re-engagement.
  */
 function buildEveningReminder(firstName, persona, streak) {
-  const emoji   = persona.craft_emoji    || '📊';
-  const metric  = persona.key_metric     || 'daily profit';
-  const bizType = persona.business_type  || 'business';
-  const exAmt   = nairaShort(persona.example_amount || 30000);
-  const exExp   = nairaShort((persona.example_amount || 30000) * 0.3);
-  const exItem  = persona.example_expense || 'operations';
-
   const s = parseInt(streak, 10) || 0;
   const streakLine = s >= 3
     ? `\n\n🔥 Your ${s}-day streak is on the line — one message keeps it alive.`
@@ -217,11 +210,11 @@ function buildEveningReminder(firstName, persona, streak) {
     : '';
 
   return (
-    `${firstName} ${emoji}\n\n` +
-    `Have you logged today's ${bizType} numbers?\n\n` +
-    `Your *${metric}* for today is waiting to be recorded. Just send:\n` +
-    `_"made ${exAmt} today spent ${exExp} on ${exItem}"_\n\n` +
-    `I'll handle the full breakdown instantly. 📊` +
+    `👋 Hey ${firstName}!\n\n` +
+    `Ready to track today?\n\n` +
+    `Send your sales and expenses anytime — ` +
+    `by text, voice note 🎤, or photo 📸\n\n` +
+    `Your business stays sharp when your numbers are up to date. 💪` +
     streakLine
   );
 }
@@ -249,8 +242,8 @@ async function runReminderJob() {
         } else {
           // Fallback if persona lookup fails
           const s = parseInt(user.streak, 10) || 0;
-          const streakLine = s >= 3 ? `\n\n🔥 ${s}-day streak on the line — don't break it now!` : '';
-          msg = `Hey ${firstName} 👋 Have you logged today's numbers?\n\nJust send: "Made 50k, spent 15k on stock"\nI'll handle the rest. 📊${streakLine}`;
+          const streakLine = s >= 3 ? `\n\n🔥 Your ${s}-day streak is on the line — one message keeps it alive.` : '';
+          msg = `👋 Hey ${firstName}!\n\nReady to track today?\n\nSend your sales and expenses anytime — by text, voice note 🎤, or photo 📸\n\nYour business stays sharp when your numbers are up to date. 💪${streakLine}`;
         }
 
         await WhatsAppService.sendMessage(user.whatsapp_number, msg);

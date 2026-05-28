@@ -90,7 +90,7 @@ router.post('/', async (req, res) => {
     if (msg.type === 'text') {
       text = msg.text.body.trim();
       console.log(`[Webhook] Text message from ${from}: "${text}"`);
-    } else {
+    } else if (msg.type === 'audio') {
       // ── Audio / voice note ──
       entryMethod = 'voice';
       const mediaId = msg.audio?.id;
@@ -121,6 +121,7 @@ router.post('/', async (req, res) => {
       try {
         const { buffer, mimeType } = await downloadWhatsAppAudio(mediaId);
         const { transcript, confidence } = await GeminiService.transcribeAudio(buffer, mimeType, voiceUser);
+        console.log(`[Webhook] Voice transcribed (confidence: ${confidence.toFixed(2)}): "${transcript}"`);
 
         if (!transcript || confidence < 0.5) {
           await WhatsAppService.sendMessage(from,
@@ -129,12 +130,29 @@ router.post('/', async (req, res) => {
           return;
         }
 
-        console.log(`[Webhook] Voice transcribed (confidence: ${confidence.toFixed(2)}): "${transcript}"`);
+        // Parse the transcript so we can decide how to handle it
+        const parsedAudio = await GeminiService.parseWithAI(transcript, voiceUser);
+
+        if (parsedAudio.type === 'daily_entry') {
+          if (confidence < 0.7) {
+            // Low confidence: show what was heard and ask for confirmation
+            await ConfirmationService.savePending(voiceUser.id, 'daily_entry', parsedAudio, transcript);
+            await WhatsAppService.sendMessage(from,
+              `🎤 I heard your voice note but I'm not 100% sure of the amounts.\n\n` +
+              `Here's what I think I heard:\n_${transcript}_\n\n` +
+              `Reply *YES* if correct or send the right numbers directly.`
+            );
+            return;
+          }
+          // High confidence: save directly to DB — no YES step needed
+          await handleDailyEntry(voiceUser, from, parsedAudio, transcript, 'voice');
+          return;
+        }
+
+        // For non-daily_entry types (stock check, summary, help, etc):
+        // set text so the normal routing below handles it
         text = transcript;
 
-        if (confidence < 0.7) {
-          console.log(`[Webhook] Low-confidence voice transcript (${confidence.toFixed(2)}) — processing anyway`);
-        }
       } catch (err) {
         console.error('[Webhook] Audio processing failed:', err.message);
         await WhatsAppService.sendMessage(from,
@@ -148,7 +166,6 @@ router.post('/', async (req, res) => {
       // ── Photo / image ──
       entryMethod = 'photo';
       const mediaId = msg.image?.id;
-      const caption = (msg.image?.caption || '').trim();
       console.log(`[Webhook] Image from ${from}, media_id: ${mediaId}`);
 
       const photoUser = await UserModel.findByWhatsapp(from);
@@ -173,79 +190,85 @@ router.post('/', async (req, res) => {
 
       try {
         const { buffer, mimeType } = await downloadWhatsAppAudio(mediaId);
+        const parsed = await GeminiService.analyzeReceipt(buffer, mimeType, photoUser);
 
-        // ── Buying calculator mode: caption contains a margin target ──
-        const marginCaption = caption.match(/(\d+)\s*%|(\d+)\s*margin|margin\s*(\d+)|sell.*?(\d+)|what.*?(\d+)/i);
-        if (marginCaption) {
-          const targetMargin = parseInt(
-            marginCaption[1] || marginCaption[2] || marginCaption[3] ||
-            marginCaption[4] || marginCaption[5]
-          );
-          const { products: receiptItems } = await GeminiService.analyzePhoto(buffer, mimeType, photoUser, 'stock_in');
-          const normalizedCalc = (receiptItems || []).map(p => ({
-            product_name: p.product || p.product_name || 'Unknown',
-            unit_price:   p.price   || p.unit_price   || null,
-            unit:         p.unit    || 'units',
-          }));
-          const calcReply = buildCalcReply(normalizedCalc, targetMargin);
-          await WhatsAppService.sendMessage(from, calcReply);
-          await ConfirmationService.savePending(
-            photoUser.id, 'calc_context',
-            { products: normalizedCalc, lastMargin: targetMargin },
-            caption
-          );
-          return;
-        }
-
-        // ── Stock photo mode: opening stock or inventory receipt ──
-        const isOpeningStock = !photoUser.opening_stock_logged ||
-          /\bopening\b|\bi have\b|\bi get\b|\bmy stock\b/i.test(caption);
-        const intent = isOpeningStock ? 'opening_stock' : 'inventory_in';
-        const { products: rawProducts } = await GeminiService.analyzePhoto(buffer, mimeType, photoUser, intent);
-
-        // Normalise field names from analyzePhoto format → system format
-        const normalized = (rawProducts || []).map(p => ({
-          product_name: p.product    || p.product_name || 'Unknown',
-          quantity:     p.quantity   || null,
-          unit:         p.unit       || 'units',
-          unit_price:   p.price      || p.unit_price   || null,
-          confidence:   p.confidence || 'medium',
-        }));
-
-        // Derive overall confidence from item-level values
-        const overallConf = normalized.some(p => p.confidence === 'low') ? 'low'
-          : normalized.every(p => p.confidence === 'high') ? 'high' : 'medium';
-
-        // Log media attempt (non-blocking)
-        const { query: dbQuery } = require('../models/db');
-        dbQuery(
-          `INSERT INTO media_log (user_id, media_type, intent, parse_success, product_count)
-           VALUES ($1, 'image', $2, $3, $4)`,
-          [photoUser.id, intent, normalized.length > 0, normalized.length]
-        ).catch(() => {});
-
-        if (normalized.length === 0) {
+        if (parsed.confidence === 'low') {
           await WhatsAppService.sendMessage(from,
-            `📸 I couldn't identify any products in that photo, ${photoUser.name.split(' ')[0]}.\n\n` +
-            `Try a clearer photo of your stock shelf or handwritten list, ` +
-            `or type it out:\n_"I have 50 bags rice, 20 packs indomie"_`);
+            `📸 I got your photo but couldn't read it clearly.\n\n` +
+            `What I could make out:\n${parsed.raw_text || 'Not much visible'}\n\n` +
+            `Could you send a clearer photo or type the numbers directly?`
+          );
           return;
         }
 
-        const confNote = overallConf === 'low'
-          ? `\n\n⚠️ I'm not 100% certain about some items — check the numbers carefully.`
-          : '';
+        // Nothing financial found in the image
+        if (!parsed.revenue && !parsed.expenses?.length && !parsed.products?.length) {
+          await WhatsAppService.sendMessage(from,
+            `📸 I couldn't find any financial data in that photo, ${photoUser.name.split(' ')[0]}.\n\n` +
+            `Try a photo of:\n• A receipt or invoice\n• A handwritten sales record\n• Your stock list\n\n` +
+            `Or type your numbers: _"Made 45k today, spent 10k on stock"_`
+          );
+          return;
+        }
 
-        const entryType   = isOpeningStock ? 'opening_stock' : 'inventory_in';
-        const pendingData = { products: normalized, source: 'photo' };
-        await ConfirmationService.savePending(photoUser.id, entryType, pendingData, caption || '[photo]');
-        const confirmMsg = ConfirmationService.buildConfirmationMessage(entryType, pendingData) + confNote;
-        await WhatsAppService.sendMessage(from, confirmMsg);
+        // Build confirmation message
+        let confirmation = `📸 I read your photo!\n\n`;
+        if (parsed.revenue) {
+          confirmation += `Revenue: ₦${Number(parsed.revenue).toLocaleString('en-NG')}\n`;
+        }
+        if (parsed.expenses?.length) {
+          parsed.expenses.forEach(e => {
+            confirmation += `${e.category}: ₦${Number(e.amount).toLocaleString('en-NG')}\n`;
+          });
+        }
+        if (parsed.products?.length) {
+          confirmation += `\nProducts found:\n`;
+          parsed.products.forEach(p => {
+            confirmation += `• ${p.name}`;
+            if (p.quantity) confirmation += ` — ${p.quantity} ${p.unit || 'units'}`;
+            if (p.price)    confirmation += ` @ ₦${Number(p.price).toLocaleString('en-NG')}`;
+            confirmation += `\n`;
+          });
+        }
+        confirmation += `\nReply *YES* to log this ✅\nReply *EDIT* if something is wrong ❌`;
+
+        // Map to daily_entry format so the existing YES confirmation handler saves it
+        const totalExpenses = (parsed.expenses || []).reduce((s, e) => s + (e.amount || 0), 0);
+        const expenseBreakdown = {};
+        (parsed.expenses || []).forEach(e => {
+          expenseBreakdown[e.category] = (expenseBreakdown[e.category] || 0) + (e.amount || 0);
+        });
+        const revenue = parsed.revenue || 0;
+        const profit  = revenue - totalExpenses;
+        const margin  = revenue > 0 ? parseFloat(((profit / revenue) * 100).toFixed(2)) : 0;
+
+        const pendingData = {
+          revenue,
+          totalExpenses,
+          expenseBreakdown,
+          profit,
+          margin,
+          customers: 0,
+          notes: `Photo entry: ${parsed.notes || parsed.raw_text || ''}`,
+          expenseItems: (parsed.expenses || []).map(e => ({ name: e.category, amount: e.amount })),
+          products: (parsed.products || []).map(p => ({
+            product_name:     p.name,
+            quantity:         p.quantity  || null,
+            unit:             p.unit      || 'units',
+            unit_price:       p.price     || null,
+            total_amount:     p.quantity && p.price ? p.quantity * p.price : null,
+            transaction_type: 'sale',
+            channel:          'retail',
+          })),
+        };
+
+        await ConfirmationService.savePending(photoUser.id, 'daily_entry', pendingData, '[photo]');
+        await WhatsAppService.sendMessage(from, confirmation);
       } catch (err) {
         console.error('[Webhook] Image processing failed:', err.message);
         await WhatsAppService.sendMessage(from,
           `📸 Sorry, I had trouble reading that photo, ${photoUser.name.split(' ')[0]}.\n\n` +
-          `You can type your stock instead:\n_"I have 50 bags rice, 20 packs indomie"_`);
+          `You can type your numbers instead:\n_"Made 45k today, spent 10k on stock"_`);
       }
       return;
     }
@@ -393,241 +416,11 @@ router.post('/', async (req, res) => {
     }
     // ────────────────────────────────────────────────────────────────────────
 
-    // ── Parse intent ──
-    let { type, data, needsAI } = ParserService.parseMessage(text);
-
-    // ── Upgrade with Gemini if needed ──
-    if (needsAI) {
-      // Instant ack — user sees this immediately while Gemini processes (can take 3-12s)
-      await WhatsAppService.sendMessage(from,
-        `Analyzing your message, ${user.name.split(' ')[0]}... ⏳`
-      ).catch(() => {});
-
-      const aiResult = await GeminiService.parseWithAI(text, user);
-
-      // Gemini timed out — tell the user to try again rather than silently failing
-      if (aiResult.type === 'parse_timeout') {
-        await WhatsAppService.sendMessage(from,
-          `Sorry ${user.name.split(' ')[0]}, I'm taking longer than usual right now. ` +
-          `Send your message again and I'll handle it straight away! 🔄`
-        );
-        await MessageModel.updateLog(msgLogId, { intent: 'parse_timeout', status: 'timeout' }).catch(() => {});
-        return;
-      }
-
-      type = aiResult.type || 'unknown';
-      data = aiResult;
-
-      // ── Fallback: if Gemini failed or returned unknown, try rule-based extraction ──
-      if (type === 'unknown') {
-        const revenue = ParserService.extractRevenue(text);
-        if (revenue > 0) {
-          const breakdown    = ParserService.extractExpenses(text);
-          const totalExpenses = Object.values(breakdown).reduce((s, v) => s + v, 0);
-          const profit       = revenue - totalExpenses;
-          const margin       = revenue > 0 ? parseFloat(((profit / revenue) * 100).toFixed(2)) : 0;
-          const custMatch    = text.match(/(\d+)\s*(?:customers?|clients?|people|transactions?)/i);
-          const customers    = custMatch ? parseInt(custMatch[1], 10) : 0;
-          type = 'daily_entry';
-          data = { revenue, totalExpenses, expenseBreakdown: breakdown, profit, margin, customers };
-        }
-      }
-    }
-
-    // ── Route to correct handler ──
-    switch (type) {
-
-      case 'help': {
-        await WhatsAppService.sendHelp(from);
-        await MessageModel.updateLog(msgLogId, { intent: 'help', status: 'processed' }).catch(() => {});
-        break;
-      }
-
-      case 'stock_check': {
-        const products = await ProductModel.getWithHealth(user.id);
-        if (products.length > 0) {
-          await WhatsAppService.sendStockIntelligenceReply(from, user.name.split(' ')[0], products);
-        } else {
-          const items = await InventoryService.getStock(user.id);
-          await WhatsAppService.sendStockReply(from, items);
-        }
-        await MessageModel.updateLog(msgLogId, { intent: 'stock_check', status: 'processed' }).catch(() => {});
-        break;
-      }
-
-      case 'debtors_check': {
-        const pendingDebtors = await DebtorModel.getPendingAll(user.id);
-        await WhatsAppService.sendDebtorList(from, user.name.split(' ')[0], pendingDebtors);
-        await MessageModel.updateLog(msgLogId, { intent: 'debtors_check', status: 'processed' }).catch(() => {});
-        break;
-      }
-
-      case 'debt_payment': {
-        const hasAmount = parseFloat(data.amount) > 0;
-        if (!hasAmount || !data.debtor_name) {
-          await WhatsAppService.sendMessage(from,
-            `Who paid you, and how much?\n\nSend it like:\n_"Ngozi paid me 25k"_`);
-          await MessageModel.updateLog(msgLogId, { intent: 'debt_payment', status: 'parse_error' }).catch(() => {});
-          break;
-        }
-        await ConfirmationService.savePending(user.id, 'debt_payment', data, text);
-        const confirmDebt = ConfirmationService.buildConfirmationMessage('debt_payment', data);
-        await WhatsAppService.sendMessage(from, confirmDebt);
-        await MessageModel.updateLog(msgLogId, { intent: 'debt_payment', parsedData: data, status: 'pending_confirm' }).catch(() => {});
-        break;
-      }
-
-      case 'summary': {
-        await handleSummaryRequest(user, from);
-        await MessageModel.updateLog(msgLogId, { intent: 'summary', status: 'processed' }).catch(() => {});
-        break;
-      }
-
-      case 'on_demand_summary': {
-        await handleOnDemandSummary(user, from, text);
-        await MessageModel.updateLog(msgLogId, { intent: 'on_demand_summary', status: 'processed' }).catch(() => {});
-        break;
-      }
-
-      case 'business_question': {
-        await handleBusinessQuestion(user, from, text);
-        await MessageModel.updateLog(msgLogId, { intent: 'business_question', status: 'processed' }).catch(() => {});
-        break;
-      }
-
-      case 'daily_entry': {
-        const pendingId = await ConfirmationService.savePending(user.id, 'daily_entry', data, text);
-        const confirmMsg = ConfirmationService.buildConfirmationMessage('daily_entry', data);
-        await WhatsAppService.sendMessage(from, confirmMsg);
-        await MessageModel.updateLog(msgLogId, {
-          intent: 'daily_entry',
-          parsedData: { revenue: data.revenue, totalExpenses: data.totalExpenses, profit: data.profit },
-          status: 'pending_confirm',
-        }).catch(() => {});
-        break;
-      }
-
-      case 'inventory_in': {
-        const hasProducts = Array.isArray(data.products) && data.products.length > 0;
-        if (!hasProducts && (!data.item || !data.quantity)) {
-          await WhatsAppService.sendMessage(from,
-            "I couldn't quite get the item details. Try:\n\"received 50 bags rice at 900 each\"");
-          await MessageModel.updateLog(msgLogId, { intent: 'inventory_in', status: 'parse_error' }).catch(() => {});
-          break;
-        }
-        await ConfirmationService.savePending(user.id, 'inventory_in', data, text);
-        const confirmMsgIn = ConfirmationService.buildConfirmationMessage('inventory_in', data);
-        await WhatsAppService.sendMessage(from, confirmMsgIn);
-        await MessageModel.updateLog(msgLogId, { intent: 'inventory_in', parsedData: data, status: 'pending_confirm' }).catch(() => {});
-        break;
-      }
-
-      case 'opening_stock': {
-        const hasOpeningProducts = Array.isArray(data.products) && data.products.length > 0;
-        if (!hasOpeningProducts) {
-          await WhatsAppService.sendMessage(from,
-            `I couldn't find any stock items, ${user.name.split(' ')[0]}.\n\nTry:\n_"I have 50 bags rice, 20 packs indomie"_`);
-          await MessageModel.updateLog(msgLogId, { intent: 'opening_stock', status: 'parse_error' }).catch(() => {});
-          break;
-        }
-        await ConfirmationService.savePending(user.id, 'opening_stock', data, text);
-        const confirmOpeningMsg = ConfirmationService.buildConfirmationMessage('opening_stock', data);
-        await WhatsAppService.sendMessage(from, confirmOpeningMsg);
-        await MessageModel.updateLog(msgLogId, { intent: 'opening_stock', parsedData: data, status: 'pending_confirm' }).catch(() => {});
-        break;
-      }
-
-      case 'inventory_out': {
-        const hasProductsOut = Array.isArray(data.products) && data.products.length > 0;
-        if (!hasProductsOut && (!data.item || !data.quantity)) {
-          await WhatsAppService.sendMessage(from,
-            "I couldn't quite get the details. Try:\n\"sold 12 bags rice today\"");
-          await MessageModel.updateLog(msgLogId, { intent: 'inventory_out', status: 'parse_error' }).catch(() => {});
-          break;
-        }
-        await ConfirmationService.savePending(user.id, 'inventory_out', data, text);
-        const confirmMsgOut = ConfirmationService.buildConfirmationMessage('inventory_out', data);
-        await WhatsAppService.sendMessage(from, confirmMsgOut);
-        await MessageModel.updateLog(msgLogId, { intent: 'inventory_out', parsedData: data, status: 'pending_confirm' }).catch(() => {});
-        break;
-      }
-
-      case 'stock_zero': {
-        const rawProductName = data.product_name;
-        if (!rawProductName) {
-          await WhatsAppService.sendMessage(from,
-            `Which product finished? Just send the name — e.g. *Milo* — and I'll mark it as out of stock. 🔴`);
-          await MessageModel.updateLog(msgLogId, { intent: 'stock_zero', status: 'needs_product' }).catch(() => {});
-          break;
-        }
-        const foundProduct = await ProductService.findProductFuzzy(user.id, rawProductName).catch(() => null);
-        if (!foundProduct) {
-          await WhatsAppService.sendMessage(from,
-            `I don't have *${rawProductName}* in your stock records yet.\n\n` +
-            `To add it first, send:\n_"I have [number] ${rawProductName}"_\nor\n_"received [number] ${rawProductName} at [price] each"_ 📦`);
-          await MessageModel.updateLog(msgLogId, { intent: 'stock_zero', status: 'product_not_found' }).catch(() => {});
-          break;
-        }
-        const currentStock = await ProductModel.getCurrentStock(foundProduct.id);
-        if (currentStock === 0) {
-          await WhatsAppService.sendMessage(from,
-            `🔴 *${foundProduct.product_name}* is already out of stock. Nothing to update.`);
-          break;
-        }
-        const pendingData = {
-          product_name:  foundProduct.product_name,
-          product_id:    foundProduct.id,
-          current_stock: currentStock,
-        };
-        await ConfirmationService.savePending(user.id, 'stock_zero', pendingData, text);
-        const confirmMsgZero = ConfirmationService.buildConfirmationMessage('stock_zero', pendingData);
-        await WhatsAppService.sendMessage(from, confirmMsgZero);
-        await MessageModel.updateLog(msgLogId, { intent: 'stock_zero', parsedData: pendingData, status: 'pending_confirm' }).catch(() => {});
-        break;
-      }
-
-      case 'customer_log': {
-        const count = parseInt(data.count, 10) || 0;
-        await CustomerService.logCustomers(user, count, text);
-        await WhatsAppService.sendMessage(from,
-          `✅ Logged ${count} customers today for ${user.name.split(' ')[0]}! 👥`);
-        await MessageModel.updateLog(msgLogId, { intent: 'customer_log', parsedData: { count }, status: 'processed' }).catch(() => {});
-        break;
-      }
-
-      case 'greeting': {
-        if (data.message) {
-          await WhatsAppService.sendMessage(from, data.message);
-        } else {
-          await WhatsAppService.sendMessage(from,
-            `Hey ${user.name.split(' ')[0]}! 👋 I'm your BizPulse data assistant. Send me your sales and expenses anytime — or type "help" to see what I can do.`);
-        }
-        // Update last_message_date/streak without inserting a 0-revenue transaction
-        const newStreak = await UserModel.touchLastEntry(user.id);
-        const s = parseInt(newStreak, 10) || 1;
-        await WhatsAppService.sendMessage(from,
-          `📅 Check-in logged — Day ${s} streak${s >= 3 ? ' 🔥' : ''}. Send your numbers whenever you're ready!`
-        ).catch(() => {});
-        await MessageModel.updateLog(msgLogId, { intent: 'greeting', status: 'processed' }).catch(() => {});
-        break;
-      }
-
-      case 'question': {
-        // Gemini classified this as a question — route to Claude for full financial coaching
-        // (covers follow-ups that don't match the rule-based business_question pattern)
-        await handleBusinessQuestion(user, from, text);
-        await UserModel.touchLastEntry(user.id).catch(() => {});
-        await MessageModel.updateLog(msgLogId, { intent: 'question', status: 'processed' }).catch(() => {});
-        break;
-      }
-
-      default: {
-        await WhatsAppService.sendMessage(from,
-          `I didn't quite get that, ${user.name.split(' ')[0]}.\n\nJust tell me how your business went today — like:\n"Made 45k today, spent 10k on stock and 3k transport"\n\nOr type "help" for commands. 😊`);
-        await MessageModel.updateLog(msgLogId, { intent: 'unknown', status: 'unhandled' }).catch(() => {});
-        break;
-      }
-    }
+    // ── Kemi Agent ──
+    const { runAgent } = require('../src/agent/agentLoop');
+    const kemisResponse = await runAgent(from, text);
+    await WhatsAppService.sendMessage(from, kemisResponse);
+    await MessageModel.updateLog(msgLogId, { intent: 'kemi_agent', status: 'processed' }).catch(() => {});
   } catch (err) {
     console.error('[Webhook] Unhandled error:', err.message);
   }
