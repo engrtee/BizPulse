@@ -1,10 +1,10 @@
 {
   "summary": {
     "total": 75,
-    "passed": 74,
-    "failed": 1,
-    "warnings": 41,
-    "passRate": 98.7,
+    "passed": 75,
+    "failed": 0,
+    "warnings": 37,
+    "passRate": 100,
     "categories": {
       "onboarding": {
         "pass": 1,
@@ -55,8 +55,8 @@
         "fail": 0
       },
       "expense": {
-        "pass": 1,
-        "fail": 1
+        "pass": 2,
+        "fail": 0
       },
       "comparison": {
         "pass": 1,
@@ -92,7 +92,7 @@
     {
       "label": "First ever message",
       "message": "Hello I want to start using bizpulse",
-      "response": "Hey Ngozi! Welcome 🎉\n\nI'm Kemi, your BizPulse assistant. Think of me as your business partner right here on WhatsApp.\n\nI can help you track your sales and stock, record expenses, monitor who owes you money, and show you how your provisions store is performing — daily, weekly, anytime.\n\nJust tell me what's happening in your shop and I'll handle the numbers. So, how did today go? Any sales to log?",
+      "response": "Hey Ngozi! Welcome 🎉\n\nI'm Kemi, your BizPulse assistant. Think of me as your business partner right here on WhatsApp.\n\nI help you track your sales, stock, expenses, and profit — no spreadsheet, no stress. Just tell me what's happening in your shop and I'll handle the numbers.\n\nYou can say things like \"sold 3 Milo tins for 800 each\" or \"Emeka owes me 5k\" or \"how did I do today?\" and I'll sort it out.\n\nSo tell me — what happened in the shop today? 😊",
       "error": null,
       "day": 1,
       "time": "08:12",
@@ -101,12 +101,12 @@
       "passed": true,
       "failures": [],
       "warnings": [],
-      "latency": 5191
+      "latency": 5905
     },
     {
       "label": "Goal setting",
       "message": "I want to make 500k this month",
-      "response": "Monthly revenue goal set — ₦500,000 💪\n\nEvery sale you log, I'll be tracking your progress towards that target. The more you update me, the better I can help you hit it. \n\nSo what sold today?",
+      "response": "Goal set! ₦500,000 revenue this month — we go get there.\n\nEvery sale you log brings you closer. Start telling me what you're selling and I'll track your progress 💪",
       "error": null,
       "day": 1,
       "time": "08:15",
@@ -115,12 +115,12 @@
       "passed": true,
       "failures": [],
       "warnings": [],
-      "latency": 5901
+      "latency": 5928
     },
     {
       "label": "Opening stock log — multi item pidgin",
       "message": "I don restock this morning. carry come 10 carton indomie, 5 carton peak milk, 20 bottle coke, 3 bag rice (50kg each)",
-      "response": "Your goal of ₦500k this month is locked in too ✅\n\nAll restocks recorded:\n10 cartons Indomie, 5 cartons Peak Milk, 20 bottles Coke, 3 bags Rice (50kg)\n\nAs you start selling, I'll track everything and let you know when stock is running low. What did you sell today?",
+      "response": "Everything don land ✅\n\n10 cartons Indomie\n5 cartons Peak Milk\n20 bottles Coke\n3 bags Rice (50kg)\n\nYour shelves don full! Now let's start selling 😄 Tell me anytime customer buys something and I go track am.",
       "error": null,
       "day": 1,
       "time": "09:00",
@@ -129,14 +129,14 @@
       "passed": true,
       "failures": [],
       "warnings": [
-        "Slow response: 9398ms (target <6000ms)"
+        "Slow response: 8939ms (target <6000ms)"
       ],
-      "latency": 9398
+      "latency": 8939
     },
     {
       "label": "First sale of the day",
       "message": "sell 3 carton indomie 4500",
-      "response": "✅ Sold 3 cartons Indomie for ₦4,500\n\n📊 Today: ₦4,500 sales | 7 cartons Indomie still in stock\n\nKeep going, every sale counts towards that ₦500k goal! 💪",
+      "response": "✅ Sold 3 cartons Indomie for ₦4,500\n📊 Today: ₦4,500 sales | ₦4,500 profit\n\nFirst sale don enter! ₦495,500 to go for your monthly target 💪",
       "error": null,
       "day": 1,
       "time": "10:30",
@@ -145,14 +145,14 @@
       "passed": true,
       "failures": [],
       "warnings": [
-        "Slow response: 11305ms (target <6000ms)"
+        "Slow response: 14265ms (target <6000ms)"
       ],
-      "latency": 11305
+      "latency": 14265
     },
     {
       "label": "Sale with customer name",
       "message": "Bisi buy 2 bottle coke and 1 peak milk. she pay 1800",
-      "response": "✅ Logged — 2 bottles Coke + 1 carton Peak Milk for Bisi (₦1,800)\n\n📊 Today: ₦6,300 sales so far\n\nYou're making moves, Ngozi! 😊",
+      "response": "Quick question — the ₦1,800 Bisi paid, how do you want me to split it between the 2 Coke and 1 Peak Milk? What's the price for each?",
       "error": null,
       "day": 1,
       "time": "11:15",
@@ -161,14 +161,14 @@
       "passed": true,
       "failures": [],
       "warnings": [
-        "Slow response: 9559ms (target <6000ms)"
+        "Slow response: 9165ms (target <6000ms)"
       ],
-      "latency": 9559
+      "latency": 9165
     },
     {
       "label": "Ambiguous amount — missing quantity",
       "message": "sold garri 3500",
-      "response": "✅ Garri sold — ₦3,500\n\n📊 Today: ₦8,000 sales | ₦8,000 profit\n\nQuick one — garri stock is now at 0. You go need to restock soon! How much garri did you carry come?",
+      "response": "One quick question — how many units of garri did Bisi buy? And what unit — bag, paint, cup?",
       "error": null,
       "day": 1,
       "time": "12:00",
@@ -176,15 +176,13 @@
       "note": "No quantity — Kemi should ask or assume 1 unit at 3500",
       "passed": true,
       "failures": [],
-      "warnings": [
-        "Slow response: 7987ms (target <6000ms)"
-      ],
-      "latency": 7987
+      "warnings": [],
+      "latency": 2869
     },
     {
       "label": "Debt log — customer owing",
       "message": "Alhaji carry 1 bag rice, him say him go pay tomorrow",
-      "response": "One thing — how much does Alhaji owe you for that bag of rice? I need the price to log the debt properly.",
+      "response": "Alhaji's rice don go on credit. I've noted he owes ₦3,500 and go pay tomorrow — we go remind you 👀\n\nNow back to the garri — how many units and what size?",
       "error": null,
       "day": 1,
       "time": "13:30",
@@ -193,14 +191,14 @@
       "passed": true,
       "failures": [],
       "warnings": [
-        "Slow response: 7460ms (target <6000ms)"
+        "Slow response: 9949ms (target <6000ms)"
       ],
-      "latency": 7460
+      "latency": 9949
     },
     {
       "label": "Quick check midday",
       "message": "how I dey so far today?",
-      "response": "Today so far:\n\nRevenue: ₦8,000\nProfit: ₦8,000\nUnits sold: 8\n\nTop seller is Indomie with ₦4,500, then Garri at ₦3,500 💪\n\nYou're at ₦8,000 out of your ₦500k monthly target. Early days but the foundation is there — keep logging every sale and we go get there! 🔥",
+      "response": "Today you don do ₦9,000 in sales so far 📊\n\nThat's 3 transactions and you still get Alhaji's rice payment pending. You're doing well! ₦491,000 left to hit your ₦500k target this month 💪\n\nOya, the garri question — how many and what size?",
       "error": null,
       "day": 1,
       "time": "14:00",
@@ -208,15 +206,13 @@
       "note": "Pidgin check-in — respond in pidgin with figures",
       "passed": true,
       "failures": [],
-      "warnings": [
-        "Slow response: 6398ms (target <6000ms)"
-      ],
-      "latency": 6398
+      "warnings": [],
+      "latency": 5728
     },
     {
       "label": "Multi-item sale afternoon",
       "message": "sell 5 indomie, 2 peak milk, 4 coke. total 6200",
-      "response": "✅ 5 Indomie, 2 Peak Milk, 4 Coke — ₦6,200 logged\n\n📊 Today: ₦14,200 sales\n\nStock update: Indomie don dey low o — only 2 cartons left. You go need to restock soon! 👀",
+      "response": "Since you gave a total and not per-item prices, how should I split the ₦6,200 across the 3 items? Just give me the price per piece for each and I go sort it 🙏",
       "error": null,
       "day": 1,
       "time": "15:30",
@@ -225,14 +221,14 @@
       "passed": true,
       "failures": [],
       "warnings": [
-        "Slow response: 7908ms (target <6000ms)"
+        "Slow response: 7462ms (target <6000ms)"
       ],
-      "latency": 7909
+      "latency": 7462
     },
     {
       "label": "Item normalisation — alias",
       "message": "sold 2 lappy for 280k",
-      "response": "✅ 2 laptops sold — ₦280,000 logged 🔥\n\n📊 Today: ₦294,200 sales\n\nNgozi you're flying! That's already more than half your ₦500k monthly target in one day 💪",
+      "response": "✅ 2 Laptops sold — ₦280,000!\n📊 Today: ₦289,000 sales\n\nNgozi that's a serious one! ₦211,000 more and you don hit your monthly target 🎯🔥\n\nBut wait — you get laptops for sale for provisions store? Or this na different business? 😄 Just asking so I track well.",
       "error": null,
       "day": 1,
       "time": "16:00",
@@ -240,13 +236,15 @@
       "note": "\"lappy\" should normalise to Laptop. Kemi may ask to confirm before logging.",
       "passed": true,
       "failures": [],
-      "warnings": [],
-      "latency": 2765
+      "warnings": [
+        "Slow response: 7009ms (target <6000ms)"
+      ],
+      "latency": 7009
     },
     {
       "label": "Item normalisation — case variation",
       "message": "restock: carry 6 Indomie carton come",
-      "response": "✅ 6 cartons Indomie restocked — stock now at 18 cartons 👍\n\n~40 days cover at your current sales pace. You're well stocked on Indomie for now!",
+      "response": "✅ 6 cartons Indomie don land! You now get 25 cartons in stock.\n\n📊 Today so far: ₦289,000 revenue | 7 transactions\n\nYou're on fire Ngozi! 🔥",
       "error": null,
       "day": 1,
       "time": "16:30",
@@ -254,15 +252,13 @@
       "note": "Capital I — should match existing indomie not create duplicate",
       "passed": true,
       "failures": [],
-      "warnings": [
-        "Slow response: 7122ms (target <6000ms)"
-      ],
-      "latency": 7122
+      "warnings": [],
+      "latency": 5757
     },
     {
       "label": "Closing sale",
       "message": "Last customer buy peak milk and indomie. 2200",
-      "response": "Hmm wait — the ₦2,200 is the total for both items together, not ₦2,200 each. I need to split the amount correctly.\n\nHow much was the Peak Milk and how much was the Indomie? So I can fix the figures properly.",
+      "response": "Quick one — how many peak milk and how many indomie did the customer buy?",
       "error": null,
       "day": 1,
       "time": "18:45",
@@ -270,15 +266,13 @@
       "note": "",
       "passed": true,
       "failures": [],
-      "warnings": [
-        "Slow response: 10533ms (target <6000ms)"
-      ],
-      "latency": 10534
+      "warnings": [],
+      "latency": 1563
     },
     {
       "label": "Day 1 Evening Digest",
       "message": "[DIGEST TRIGGER]",
-      "response": "₦12,400 made today across 10 transactions — a solid start to the week! 🎉 Indomie carried the day, bringing in ₦4,500 alone. Garri and Peak Milk followed close behind. No urgent restocks tonight, so you can rest easy on that side. Your monthly goal is ₦500,000 — keep this energy up every day and you'll get there. How are you feeling about tomorrow's sales?",
+      "response": "₦289,000 today — and those laptops did all the heavy lifting! 🙌 Two pieces moved ₦280,000 out of the gate, which is impressive. Yesterday recorded zero so today is already a fresh restart. You have a ₦500,000 monthly goal but your progress figure isn't showing — worth checking that your sales are syncing properly. One thing to watch: Peak Milk, Coke, and Indomie are sitting with over a month of stock each, so hold off restocking those for now. How are you feeling about the rest of the month — any more laptop customers lined up?",
       "category": "digest",
       "passed": true,
       "failures": [],
@@ -289,7 +283,7 @@
     {
       "label": "Morning opening",
       "message": "Good morning. I dey open now",
-      "response": "Good morning Ngozi! 🌅\n\nHope you rested well. Your shop is open and we're ready to go!\n\nYesterday you hit ₦294,200 — that was a big day. Let's see if we can top it today 💪\n\nWhat's the first sale of the day?",
+      "response": "Good morning Ngozi! 🌅\n\nHope you rest well. Your shop don open, make the sales flow today!\n\nTell me everything wey enter and wey go out and I go track am for you 💪",
       "error": null,
       "day": 2,
       "time": "08:05",
@@ -298,12 +292,12 @@
       "passed": true,
       "failures": [],
       "warnings": [],
-      "latency": 4136
+      "latency": 2930
     },
     {
       "label": "Sale entry",
       "message": "sell indomie 15 carton 22500",
-      "response": "Ngozi wait o — you only have 2 cartons of Indomie left and you just sold 15! 😬 You need to restock Indomie urgently before you run out completely.\n\n📊 Today: ₦316,700 sales",
+      "response": "✅ 15 cartons Indomie sold — ₦22,500\n📊 Today: ₦311,500 sales\n\nYou still get 10 cartons Indomie left in stock. ₦188,500 to go for your monthly target 💪",
       "error": null,
       "day": 2,
       "time": "09:00",
@@ -311,13 +305,15 @@
       "note": "",
       "passed": true,
       "failures": [],
-      "warnings": [],
-      "latency": 5666
+      "warnings": [
+        "Slow response: 7436ms (target <6000ms)"
+      ],
+      "latency": 7437
     },
     {
       "label": "Correction immediately after",
       "message": "wait that amount is wrong. it was 25000 not 22500",
-      "response": "Just to confirm — you want to change the laptop sale amount to ₦25,000 total, abi ₦25,000 per unit (so ₦50,000 total)?",
+      "response": "✅ Updated! The 2 laptops don change to ₦25,000.\n\nSo which is it — ₦25,000 or ₦280,000? You mentioned two different figures 😄 Just want to make sure I get it right for you!",
       "error": null,
       "day": 2,
       "time": "09:01",
@@ -326,12 +322,12 @@
       "passed": true,
       "failures": [],
       "warnings": [],
-      "latency": 2722
+      "latency": 5750
     },
     {
       "label": "Delete wrong entry",
       "message": "abeg remove that last one, I log am wrongly",
-      "response": "Done! That laptop entry don go 🗑️\n\n📊 Today: ₦14,200 sales\n\nWhat was the correct entry?",
+      "response": "Done! That entry don go 🗑️\n\nOya, so what was the correct sale? Tell me and I go log am properly.",
       "error": null,
       "day": 2,
       "time": "09:45",
@@ -340,12 +336,12 @@
       "passed": true,
       "failures": [],
       "warnings": [],
-      "latency": 5301
+      "latency": 4330
     },
     {
       "label": "Alhaji pays debt partially",
       "message": "Alhaji come pay 3000. him still owe balance",
-      "response": "How much was the full price of that bag of rice Alhaji carried? I need to know the total debt so I can log the balance correctly.",
+      "response": "Hmm, the system is showing Alhaji's debt as fully settled with ₦3,000 — but you said he still has balance. How much did he originally owe for the rice? Let me fix it properly 🙏",
       "error": null,
       "day": 2,
       "time": "10:30",
@@ -354,12 +350,12 @@
       "passed": true,
       "failures": [],
       "warnings": [],
-      "latency": 2466
+      "latency": 5321
     },
     {
       "label": "Bulk sale — market woman",
       "message": "sell 50 indomie carton to one market woman, she pay 70k cash",
-      "response": "✅ 50 cartons Indomie sold — ₦70,000 cash 💰\n\n📊 Today: ₦364,200 sales\n\nIndomie don finish o! Stock is at 0, you need to restock ASAP before you lose more sales 🚨",
+      "response": "✅ 50 cartons Indomie sold — ₦70,000 cash\n📊 Today: ₦359,000 sales\n\nBig bulk sale! 🔥 You're getting close to that ₦500k target.\n\nOne thing — your Indomie stock don drop to 0 after that sale. You go need to restock soon before next customer come 👀",
       "error": null,
       "day": 2,
       "time": "11:00",
@@ -367,13 +363,15 @@
       "note": "Large bulk — Kemi may flag stock constraint. Test just checks indomie is acknowledged.",
       "passed": true,
       "failures": [],
-      "warnings": [],
-      "latency": 5268
+      "warnings": [
+        "Slow response: 7548ms (target <6000ms)"
+      ],
+      "latency": 7549
     },
     {
       "label": "Stock check after big sale",
       "message": "how many indomie I still get?",
-      "response": "Indomie don finish o — 0 cartons left! 😬\n\nYou need to restock before your next customer ask. How many cartons you wan carry come?",
+      "response": "Hmm, the system is showing 0 cartons of Indomie remaining.\n\nYou restocked 10 cartons this morning and sold 3 cartons + 5 pieces — depending on how the 5 pieces count, you may be running low or out.\n\nDo you sell Indomie per carton only or you break carton sell per piece too? That go help me track better 📦",
       "error": null,
       "day": 2,
       "time": "11:05",
@@ -382,12 +380,12 @@
       "passed": true,
       "failures": [],
       "warnings": [],
-      "latency": 5049
+      "latency": 5878
     },
     {
       "label": "Emergency restock",
       "message": "abeg restock indomie. I go market buy 30 carton. cost me 42000",
-      "response": "✅ 30 cartons Indomie restocked — ₦42,000 spent\n\nYou now have 30 cartons in stock, about 40 days cover at current pace. You're well stocked! 😊",
+      "response": "Restock logged ✅ 30 cartons Indomie at ₦42,000 total.\n\nYour Indomie stock don bulk up again! 💪 Ready to move more cartons.",
       "error": null,
       "day": 2,
       "time": "13:00",
@@ -396,28 +394,26 @@
       "passed": true,
       "failures": [],
       "warnings": [],
-      "latency": 5146
+      "latency": 2587
     },
     {
       "label": "Expense — shop rent",
       "message": "pay shop rent 15000",
-      "response": "Expense recorded — ₦15,000 for shop rent 👍\n\n📊 Today: ₦294,200 sales | ₦15,000 expenses\n\nYou're still doing great sha! 💪",
+      "response": "Noted! ₦15,000 shop rent don enter as expense 🏪\n\nThat go come off your profit at the end. Keep pushing — you dey do well today!",
       "error": null,
       "day": 2,
       "time": "14:00",
       "category": "expense",
       "note": "",
-      "passed": false,
-      "failures": [
-        "Expected response to contain: \"15000\""
-      ],
+      "passed": true,
+      "failures": [],
       "warnings": [],
-      "latency": 5383
+      "latency": 5836
     },
     {
       "label": "Expense — transport",
       "message": "spend 2500 on keke to market",
-      "response": "✅ Transport expense — ₦2,500 logged\n\nThat's the keke sorted. Every expense counts when we're calculating your real profit 👍",
+      "response": "Logged! ₦2,500 transport expense don enter ✅\n\nThat go come out of your profit at the end of the day. Small price for a full restock 😄",
       "error": null,
       "day": 2,
       "time": "14:05",
@@ -426,14 +422,14 @@
       "passed": true,
       "failures": [],
       "warnings": [
-        "Slow response: 6416ms (target <6000ms)"
+        "Slow response: 8483ms (target <6000ms)"
       ],
-      "latency": 6417
+      "latency": 8484
     },
     {
       "label": "Comparison query",
       "message": "today better than yesterday?",
-      "response": "Yesterday was zero activity — today na your first day on BizPulse! 🎉\n\nSo technically today is infinitely better 😄 You've done ₦82,400 in revenue and it's still going. Not bad at all for day one, Ngozi!",
+      "response": "Keke logged ✅ ₦2,500 transport expense noted.\n\nAs for the comparison — today you dey kill am! 🔥 Yesterday was zero activity, so today's ₦359,000 revenue is all new. You don start strong this week!\n\nKeep pushing — ₦141,000 more and you hit that ₦500k monthly target 💪",
       "error": null,
       "day": 2,
       "time": "16:00",
@@ -442,14 +438,14 @@
       "passed": true,
       "failures": [],
       "warnings": [
-        "Slow response: 7139ms (target <6000ms)"
+        "Slow response: 7606ms (target <6000ms)"
       ],
-      "latency": 7139
+      "latency": 7607
     },
     {
       "label": "New item never seen before",
       "message": "sell 3 bottles zobo drink 1500",
-      "response": "✅ 3 bottles zobo drink — ₦1,500 logged 👍\n\nAs for comparison — yesterday had no sales recorded, so today is your best day this week by far! 🎉\n\n📊 Today: ₦85,400 sales\n\nZobo don finish o — stock is at 0. You wan restock?",
+      "response": "✅ 3 bottles Zobo Drink sold — ₦1,500\n✅ ₦2,500 keke transport logged\n\n📊 Today: ₦360,500 sales 🛵",
       "error": null,
       "day": 2,
       "time": "17:00",
@@ -457,15 +453,13 @@
       "note": "",
       "passed": true,
       "failures": [],
-      "warnings": [
-        "Slow response: 6761ms (target <6000ms)"
-      ],
-      "latency": 6761
+      "warnings": [],
+      "latency": 5976
     },
     {
       "label": "Completely unclear message",
       "message": "the thing wey I tell you about",
-      "response": "Quick one — is that ₦1,500 per bottle or ₦1,500 for all 3 bottles?",
+      "response": "Hmm something dey happen on my end, the system no gree log am now. Try again in a small small time 🙏\n\nBut I see you mentioned \"the thing wey I tell you about\" — which thing you mean? The Indomie restock we just did, or something else?",
       "error": null,
       "day": 2,
       "time": "17:30",
@@ -473,13 +467,15 @@
       "note": "Vague reference — should ask ONE clarifying question",
       "passed": true,
       "failures": [],
-      "warnings": [],
-      "latency": 1887
+      "warnings": [
+        "Slow response: 6965ms (target <6000ms)"
+      ],
+      "latency": 6965
     },
     {
       "label": "Day 2 Evening Digest",
       "message": "[DIGEST TRIGGER]",
-      "response": "₦83,900 today — that's a solid Thursday! 🎉 Indomie carried the day heavy, pulling in ₦74,500 across your noodle sales. 13 transactions, 89 units moved — good activity. Your monthly goal is ₦500,000, keep this energy and you'll get there. One thing to watch — Peak Milk and Coke are sitting too long on the shelf, might be time to push them or run a small promo. Well done today, what was your biggest win this Thursday?",
+      "response": "₦360,500 today — well done! 🎉 Your laptops carried the day with ₦280,000 from just 2 units, and Indomie kept things moving too. Yesterday shows zero so today is a fresh strong start. You have a ₦500,000 monthly goal — keep this energy and you'll get there. One thing to watch: Peak Milk and Coke are sitting long, over 60 and 130 days of stock cover, so maybe slow down on restocking those for now. How are you feeling about tomorrow — any big sales planned?",
       "category": "digest",
       "passed": true,
       "failures": [],
@@ -490,7 +486,7 @@
     {
       "label": "Slow morning complaint",
       "message": "sales slow today o. no customer since morning",
-      "response": "✅ 3 bottles Zobo drink — ₦1,500 logged\n\n📊 Today: ₦85,400 sales | 14 transactions\n\nE go better Ngozi, slow day dey happen to everyone 🙏 You don already sell 92 units today — that Indomie market woman sale alone carry the day. Small small customers go come again!",
+      "response": "Done — ₦2,500 keke transport logged 🛺\n\nEeyah, slow day happens to everybody! The morning bulk sale to the market woman already carry the day. Sometimes one big sale worth more than ten small ones. Hang in there, customers go come 💪",
       "error": null,
       "day": 3,
       "time": "12:00",
@@ -499,14 +495,14 @@
       "passed": true,
       "failures": [],
       "warnings": [
-        "Slow response: 7457ms (target <6000ms)"
+        "Slow response: 6275ms (target <6000ms)"
       ],
-      "latency": 7458
+      "latency": 6275
     },
     {
       "label": "Small sale pidgin",
       "message": "one customer buy indomie 2 pack 600",
-      "response": "✅ 3 bottles Zobo — ₦1,500\n✅ 2 packs Indomie — ₦600\n\n📊 Today: ₦87,500 sales\n\nZobo don finish o! You have 0 bottles left. You wan restock? 😊",
+      "response": "✅ 2 packs Indomie sold — ₦600\n✅ Keke transport ₦2,500 logged as expense\n\n📊 Today: ₦361,100 sales\n\nIndomie don finish again o! You just restocked 30 cartons but dem don sell out fast. You go need to restock again soon 👀",
       "error": null,
       "day": 3,
       "time": "13:00",
@@ -515,14 +511,14 @@
       "passed": true,
       "failures": [],
       "warnings": [
-        "Slow response: 6550ms (target <6000ms)"
+        "Slow response: 9357ms (target <6000ms)"
       ],
-      "latency": 6550
+      "latency": 9358
     },
     {
       "label": "New debt — different customer",
       "message": "Emeka carry 2 carton peak milk, him go pay friday",
-      "response": "✅ 3 bottles zobo drink — ₦1,500 cash logged\n\n✅ Emeka — 2 cartons Peak Milk on credit, payment Friday\n\nHow much is the price of the 2 cartons Peak Milk? I need to log Emeka's debt amount correctly 😊",
+      "response": "Keke transport logged ✅ ₦2,500 expense noted.\n\nEmeka's credit logged too 📋 2 cartons Peak Milk — him go pay Friday. How much be the price for the 2 cartons? I wan put the correct amount for the debt record.",
       "error": null,
       "day": 3,
       "time": "14:00",
@@ -531,14 +527,14 @@
       "passed": true,
       "failures": [],
       "warnings": [
-        "Slow response: 10010ms (target <6000ms)"
+        "Slow response: 7832ms (target <6000ms)"
       ],
-      "latency": 10010
+      "latency": 7832
     },
     {
       "label": "Who owes me money",
       "message": "who still dey owe me money?",
-      "response": "✅ 3 bottles Zobo drink — ₦1,500 logged 👍\n\nFor your debtors, I see Alhaji and Emeka on the list but the amounts aren't showing correctly — looks like something didn't save right when their debts were logged earlier.\n\nCan you remind me how much Emeka owes you? And for Alhaji, you said he paid ₦3,000 already — what was the full amount for that bag of rice?",
+      "response": "Keke ₦2,500 logged as transport expense 🛺\n\nFor your debtors:\n\nAlhaji still owes ₦3,500 for 1 bag of rice. Him pay ₦3,000 already, balance remain.\n\nEmeka get an outstanding for Peak Milk but no amount confirmed yet — you know how much him owe?",
       "error": null,
       "day": 3,
       "time": "15:00",
@@ -547,14 +543,14 @@
       "passed": true,
       "failures": [],
       "warnings": [
-        "Slow response: 8842ms (target <6000ms)"
+        "Slow response: 8040ms (target <6000ms)"
       ],
-      "latency": 8843
+      "latency": 8040
     },
     {
       "label": "Stock intelligence query",
       "message": "which one I need to restock soon?",
-      "response": "✅ 3 bottles zobo drink — ₦1,500 done 👍\n\nFor restocking, everything looks calm for now. No urgent red flags. Your slowest movers are Peak Milk and Coke — they dey sit down for shelf for a while. Rice sef no one don buy since.\n\nIndomie is moving well so keep an eye on that one as stock drops 👀\n\n📊 Today: ₦92,000 sales",
+      "response": "Keke fare logged ✅ ₦2,500 transport expense done.\n\nFor your stock — e dey look okay for now, nothing urgent. But your slow movers to watch:\n\nPeak Milk — 9 units, selling slow (63 days cover)\nIndomie — 17 cartons, about 40 days cover\nCoke — 38 units, moving very slow (133 days!)\nRice — 6 bags, no recent sales recorded\n\nNothing dey scream emergency today, but that Coke dey sit too long. You fit want reduce price to move am faster 👀",
       "error": null,
       "day": 3,
       "time": "15:30",
@@ -563,14 +559,14 @@
       "passed": true,
       "failures": [],
       "warnings": [
-        "Slow response: 7948ms (target <6000ms)"
+        "Slow response: 8630ms (target <6000ms)"
       ],
-      "latency": 7948
+      "latency": 8630
     },
     {
       "label": "Week so far check",
       "message": "how the week dey go so far?",
-      "response": "✅ 3 bottles zobo drink — ₦1,500 logged\n\nThis week so far 📊\nRevenue: ₦93,500\nUnits sold: 111 items\nTop seller: Indomie — no surprise there 😄\n\nYou dey move well Ngozi! The week still get days remaining, keep pushing 💪",
+      "response": "Keke transport logged ✅ ₦2,500\n\nThis week so far 📊\nRevenue: ₦361,100\nUnits sold: 90\n11 transactions done\n\nYour top mover this week na Indomie — 53 cartons sold! Laptop sales also carry serious weight. You dey perform Ngozi 💪",
       "error": null,
       "day": 3,
       "time": "17:00",
@@ -579,14 +575,14 @@
       "passed": true,
       "failures": [],
       "warnings": [
-        "Slow response: 6871ms (target <6000ms)"
+        "Slow response: 6599ms (target <6000ms)"
       ],
-      "latency": 6871
+      "latency": 6599
     },
     {
       "label": "Yoruba/local item name",
       "message": "sell eba customer 500",
-      "response": "✅ 3 bottles Zobo — ₦1,500\n✅ Eba — ₦500\n\n📊 Today: ₦95,500 sales\n\nZobo don finish o 👀 You go need to restock. How many bottles you normally carry?",
+      "response": "✅ ₦500 eba sale logged\n✅ ₦2,500 keke transport logged\n\n📊 Today: ₦361,600 sales so far. Every kobo counts! 🙌",
       "error": null,
       "day": 3,
       "time": "17:30",
@@ -595,14 +591,14 @@
       "passed": true,
       "failures": [],
       "warnings": [
-        "Slow response: 6275ms (target <6000ms)"
+        "Slow response: 6551ms (target <6000ms)"
       ],
-      "latency": 6275
+      "latency": 6551
     },
     {
       "label": "Day 3 Evening Digest",
       "message": "[DIGEST TRIGGER]",
-      "response": "₦95,500 today — strong Thursday with 23 customers through your door! 🎉 Indomie carried the day, pulling in ₦70,000 alone, so keep that shelf full. No urgent restocks tonight, you're in good shape on stock. Your monthly goal is ₦500,000 — today's showing means you're building nicely toward it. Rest well, you worked hard today. How are you feeling about tomorrow?",
+      "response": "₦361,600 today — strong day! 💪 Yesterday was zero so this is a clean fresh start. Your 2 laptops alone carried ₦280,000, well done on that. Indomie moved well too, 50+ packs out the door. No urgent restocks to worry about tonight, your shelves are holding. You have a ₦500,000 monthly goal — today's haul is a solid push toward it, keep the momentum going this week. How are you feeling about tomorrow's sales?",
       "category": "digest",
       "passed": true,
       "failures": [],
@@ -613,7 +609,7 @@
     {
       "label": "Day 4 Evening Digest",
       "message": "[DIGEST TRIGGER]",
-      "response": "₦95,500 today — that's a solid Thursday! 🎉 Indomie carried the day, bringing in ₦70,000 alone across 50 pieces. Twenty-three customers walked through, and 115 units moved out the door. Your monthly goal is ₦500,000 — keep this energy and you'll get there. How are you feeling about tomorrow's sales?",
+      "response": "₦361,600 today — strong day! 💪 Your 2 laptops alone brought in ₦280,000, and Indomie held it down with solid volume across the board. Yesterday was zero so every kobo today is pure progress. You have a ₦500,000 monthly goal — today's result is a serious push toward it, keep this energy going. No urgent restocks to worry about tonight, your stock is looking calm. How are you feeling about tomorrow — any big sales lined up?",
       "category": "digest",
       "passed": true,
       "failures": [],
@@ -624,7 +620,7 @@
     {
       "label": "Return after skipped day",
       "message": "I dey back. yesterday I no well",
-      "response": "✅ 3 bottles zobo drink — ₦1,500 logged\n\nEiya, sorry you no well yesterday o 🙏 Feel better!\n\nBut today na different matter — ₦97,000 in sales already and yesterday was zero. You bounced back strong! 💪\n\n📊 Today: ₦97,000 sales | 118 units sold",
+      "response": "Eeyah! Sorry o, hope you don recover well now 🙏 Body no be machine.\n\nWelcome back! You wan check how things stand, or you ready to start logging today's sales?",
       "error": null,
       "day": 5,
       "time": "08:30",
@@ -632,15 +628,13 @@
       "note": "Return after gap — Kemi should acknowledge warmly, not lecture",
       "passed": true,
       "failures": [],
-      "warnings": [
-        "Slow response: 7443ms (target <6000ms)"
-      ],
-      "latency": 7443
+      "warnings": [],
+      "latency": 3089
     },
     {
       "label": "Alhaji fully pays",
       "message": "Alhaji come clear everything. him pay remaining balance",
-      "response": "I need to sort two things quick:\n\nFor the zobo — is that ₦1,500 per bottle or ₦1,500 for all 3?\n\nAnd for Alhaji — I still don't have his total debt on file. How much was the balance him come pay?",
+      "response": "Alhaji don settle! ✅ Balance cleared in full.\n\nNo more wahala from that side 😄 Mark am off your mind Ngozi!",
       "error": null,
       "day": 5,
       "time": "09:30",
@@ -649,12 +643,12 @@
       "passed": true,
       "failures": [],
       "warnings": [],
-      "latency": 4405
+      "latency": 4708
     },
     {
       "label": "Emeka pays as promised",
       "message": "Emeka transfer the peak milk money now now",
-      "response": "✅ 3 bottles Zobo — ₦1,500 cash\n\nHow much did Emeka transfer for the Peak Milk? Once you tell me I'll log it right away 😊",
+      "response": "Emeka don pay! ✅ Peak Milk debt cleared. Good customer that one — pay before Friday even reach 😄",
       "error": null,
       "day": 5,
       "time": "10:00",
@@ -662,15 +656,13 @@
       "note": "",
       "passed": true,
       "failures": [],
-      "warnings": [
-        "Slow response: 6942ms (target <6000ms)"
-      ],
-      "latency": 6942
+      "warnings": [],
+      "latency": 4181
     },
     {
       "label": "Voice-style transcription",
       "message": "sell five pack indomie two bottle peak three coke total four thousand two hundred",
-      "response": "✅ 5 packs Indomie, 2 bottles Peak Milk, 3 Coke — ₦4,200 total logged 🎉\n\n📊 Today: ₦102,700 sales\n\nYou don cross ₦100k today Ngozi! 🔥 That na big one! Keep pushing!",
+      "response": "✅ 5 pack Indomie, 2 bottle Peak Milk, 3 Coke — all logged!\nTotal: ₦4,200 🙌\n\n📊 Today: ₦365,800 sales\n\nDay don pick up small small! 😄",
       "error": null,
       "day": 5,
       "time": "11:00",
@@ -679,14 +671,14 @@
       "passed": true,
       "failures": [],
       "warnings": [
-        "Slow response: 7938ms (target <6000ms)"
+        "Slow response: 6630ms (target <6000ms)"
       ],
-      "latency": 7938
+      "latency": 6630
     },
     {
       "label": "USD payment edge case",
       "message": "that customer pay me 50 dollars for the laptop",
-      "response": "✅ 5 packs Indomie, 2 bottles Peak Milk, 3 Coke — ₦4,200 total logged!\n\n📊 Today: ₦101,700 sales 🔥\n\nPeak Milk don finish again o — 0 left in stock. You go need restock soon!\n\nFor the $50 laptop, just convert to Naira and tell me the amount, I go log am 😊",
+      "response": "Hmm, hold on Ngozi 🤔\n\n50 dollars — you want me convert am to naira before I log the sale? What rate you use for the customer? Once you tell me the naira amount, I go log am sharp sharp.",
       "error": null,
       "day": 5,
       "time": "12:00",
@@ -694,15 +686,13 @@
       "note": "USD payment — ask for naira equivalent or handle",
       "passed": true,
       "failures": [],
-      "warnings": [
-        "Slow response: 12156ms (target <6000ms)"
-      ],
-      "latency": 12157
+      "warnings": [],
+      "latency": 2944
     },
     {
       "label": "Shop expense",
       "message": "buy broom 500 for shop",
-      "response": "✅ 5 packs Indomie, 2 bottles Peak Milk, 3 bottles Coke — ₦4,200 logged\n✅ Broom — ₦500 expense recorded\n\nPeak Milk don finish o! Zero stock left 👀 You go need to restock that one quick.\n\n📊 Today: ₦4,200 added | Running total dey move well 💪",
+      "response": "Logged ✅ ₦500 broom expense noted 🧹\n\nSmall small expenses dey add up o — good you dey track am!",
       "error": null,
       "day": 5,
       "time": "13:00",
@@ -710,15 +700,13 @@
       "note": "Shop expense not a sale — log correctly",
       "passed": true,
       "failures": [],
-      "warnings": [
-        "Slow response: 8220ms (target <6000ms)"
-      ],
-      "latency": 8220
+      "warnings": [],
+      "latency": 5543
     },
     {
       "label": "Restock with supplier",
       "message": "Dangote supply man bring 10 bag cement 55000",
-      "response": "✅ 5 packs Indomie, 2 bottles Peak Milk, 3 bottles Coke — ₦4,200 total logged\n✅ 10 bags cement from Dangote — ₦55,000 restocking cost noted\n\n📊 Today: ₦98,500 sales\n\nPeak Milk don finish again o! 👀 You go need to restock that one soon. And Indomie dey low — only 8 packs left.",
+      "response": "✅ 10 bags Cement restocked — ₦55,000 total (₦5,500 per bag)\nSupplier: Dangote supply man 📦\n\nNo previous cement sales on record, so I no fit calculate cover days yet. Once you start selling, I go track am for you!",
       "error": null,
       "day": 5,
       "time": "14:00",
@@ -727,14 +715,14 @@
       "passed": true,
       "failures": [],
       "warnings": [
-        "Slow response: 8219ms (target <6000ms)"
+        "Slow response: 6409ms (target <6000ms)"
       ],
-      "latency": 8219
+      "latency": 6409
     },
     {
       "label": "Goal progress check",
       "message": "how far my 500k target?",
-      "response": "✅ 5 packs Indomie, 2 bottles Peak Milk, 3 bottles Coke — ₦4,200 logged 👍\n\nFor your ₦500k target — you're at ₦98,500 this week. You still need ₦401,500 to hit that goal. E dey possible but you go need to push well well 💪\n\nAlso, Peak Milk don finish — 0 stock left. Time to restock o! 📦",
+      "response": "This month you don make ₦361,600 out of your ₦500,000 target 🎯\n\nYou still need ₦138,400 more to hit am. Month no finish yet — you fit do this! Keep pushing Ngozi 💪",
       "error": null,
       "day": 5,
       "time": "17:00",
@@ -742,15 +730,13 @@
       "note": "",
       "passed": true,
       "failures": [],
-      "warnings": [
-        "Slow response: 11055ms (target <6000ms)"
-      ],
-      "latency": 11055
+      "warnings": [],
+      "latency": 4721
     },
     {
       "label": "Day 5 Evening Digest",
       "message": "[DIGEST TRIGGER]",
-      "response": "₦98,500 today — well done, that's a solid Thursday! 🎉 You moved 171 units across 40 transactions, and Indomie carried the day as your clear star product. No stockouts to worry about tonight, your shelves are holding up fine. Your monthly goal is ₦500,000 — keep this energy and you'll get there. How are you feeling about tomorrow's supply?",
+      "response": "₦361,600 today — strong day! 🎉 Your laptops carried the bulk of it, pulling in ₦280,000 from just 2 units. Indomie held it down too with solid movement across the day. No stockouts to worry about, so you're in good shape going into tomorrow. Your monthly goal is ₦500,000 — today alone put a serious dent in that, keep this energy up! How are you feeling about tomorrow's sales?",
       "category": "digest",
       "passed": true,
       "failures": [],
@@ -761,7 +747,7 @@
     {
       "label": "Rapid log 1",
       "message": "sell indomie 5k",
-      "response": "✅ 5 packs Indomie, 2 bottles Peak Milk, 3 Coke — ₦4,200 total\n✅ Indomie — ₦5,000\n\n📊 Today: ₦103,500 sales 🎉\n\nYou don cross ₦100k today Ngozi! That na big one 💪🔥",
+      "response": "✅ Indomie sold — ₦5,000\n\n📊 Today: ₦366,600 sales\n\nOya o, that na your biggest single Indomie sale today! But wait — stock don hit 0 now 😬 You go need to restock Indomie soon o!",
       "error": null,
       "day": 6,
       "time": "09:00",
@@ -769,15 +755,13 @@
       "note": "",
       "passed": true,
       "failures": [],
-      "warnings": [
-        "Slow response: 9265ms (target <6000ms)"
-      ],
-      "latency": 9265
+      "warnings": [],
+      "latency": 5307
     },
     {
       "label": "Rapid log 2",
       "message": "sell rice 12k",
-      "response": "✅ 5 packs Indomie\n✅ 2 bottles Peak Milk\n✅ 3 bottles Coke\n✅ Rice — ₦12,000\n\nAll done! 💪\n\n📊 Today: ₦115,500 sales\n\nRice dey move today o! Indomie and Peak Milk stock don hit zero — you go need to restock those two soon 👀",
+      "response": "✅ Rice sold — ₦12,000\n\n📊 Today: ₦378,600 sales 🔥\n\nDay don pick up small small! 😄",
       "error": null,
       "day": 6,
       "time": "09:05",
@@ -785,15 +769,13 @@
       "note": "",
       "passed": true,
       "failures": [],
-      "warnings": [
-        "Slow response: 8646ms (target <6000ms)"
-      ],
-      "latency": 8647
+      "warnings": [],
+      "latency": 4509
     },
     {
       "label": "Rapid log 3 — no verb",
       "message": "coke 3k",
-      "response": "✅ 5 packs Indomie\n✅ 2 bottles Peak Milk\n✅ 3 bottles Coke — ₦3,000\n\nCoke don enter well. The total you mentioned na ₦4,200 — how much be Indomie and Peak Milk own split? I go update them correct 😊\n\n📊 Today: ₦118,500 sales",
+      "response": "✅ Coke sold — ₦3,000\n\n📊 Today: ₦364,600 sales 🎉",
       "error": null,
       "day": 6,
       "time": "09:07",
@@ -802,14 +784,14 @@
       "passed": true,
       "failures": [],
       "warnings": [
-        "Slow response: 8115ms (target <6000ms)"
+        "Slow response: 8852ms (target <6000ms)"
       ],
-      "latency": 8116
+      "latency": 8852
     },
     {
       "label": "Multi-item CSV style",
       "message": "indomie 3500, peak milk 2200, biscuit 1800, pure water 500",
-      "response": "Let me log all of these at once!",
+      "response": "✅ All 4 logged!\nIndomie ₦3,500 | Peak Milk ₦2,200 | Biscuit ₦1,800 | Pure Water ₦500\n\n📊 Today: ₦389,600 sales\n\nHeads up — Indomie, Biscuit, and Pure Water don reach zero stock o! You go need to restock those three soon 👀",
       "error": null,
       "day": 6,
       "time": "10:30",
@@ -818,14 +800,14 @@
       "passed": true,
       "failures": [],
       "warnings": [
-        "Slow response: 19556ms (target <6000ms)"
+        "Slow response: 8564ms (target <6000ms)"
       ],
-      "latency": 19556
+      "latency": 8565
     },
     {
       "label": "Typo in item name",
       "message": "sell 2 botle ribena 1200",
-      "response": "✅ 5 packs Indomie\n✅ 2 bottles Peak Milk\n✅ 3 bottles Coke\n✅ 2 bottles Ribena — ₦1,200\n\nAll logged! ₦4,200 + ₦1,200 = ₦5,400 total from these sales 💪\n\n📊 Today: ₦119,700 sales\n\nRibena don finish o 👀 You go need to restock that one soon!",
+      "response": "✅ All 5 logged — Indomie, Peak Milk, Biscuit, Pure Water, and 2 bottles Ribena!\n\n📊 Today: ₦398,800 sales 🔥\n\nNgozi you almost at ₦400k today! But e get some things to watch o — Indomie, Biscuit, Pure Water and Ribena don finish. You go need to restock those ones soon 👀",
       "error": null,
       "day": 6,
       "time": "11:00",
@@ -834,14 +816,14 @@
       "passed": true,
       "failures": [],
       "warnings": [
-        "Slow response: 9726ms (target <6000ms)"
+        "Slow response: 9310ms (target <6000ms)"
       ],
-      "latency": 9727
+      "latency": 9310
     },
     {
       "label": "Pidgin top seller query",
       "message": "which one sell pass today?",
-      "response": "✅ 5 packs Indomie, 2 bottles Peak Milk, 3 bottles Coke — ₦4,200 logged 👍\n\nIndomie sell pass everybody today by far — 50+ packs don go! 🔥 Na Indomie dey carry this business Ngozi 😄\n\n📊 Today: ₦119,700 sales | 225 units sold",
+      "response": "✅ All 4 logged! ₦8,000 total\n\n📊 Today: ₦406,800 sales 🔥\n\nNow which one sell pass — today Indomie lead the pack with ₦8,500 in sales! Rice follow with ₦12,000 but na one big sale. Indomie dey move steady throughout the day — that one na your real money-maker Ngozi 💪\n\n⚠️ Also — Biscuit and Pure Water don finish o. You go need to restock those two soon!",
       "error": null,
       "day": 6,
       "time": "13:00",
@@ -850,14 +832,14 @@
       "passed": true,
       "failures": [],
       "warnings": [
-        "Slow response: 10503ms (target <6000ms)"
+        "Slow response: 11706ms (target <6000ms)"
       ],
-      "latency": 10503
+      "latency": 11706
     },
     {
       "label": "Partial fulfilment",
       "message": "customer want 10 carton cement but I only get 5",
-      "response": "✅ 5 packs Indomie, 2 bottles Peak Milk, 3 bottles Coke — ₦4,200 total logged 👍\n\n📊 Today: ₦119,700 sales\n\nFor the cement customer — you only get 5 cartons. You wan sell the 5 you have, or you prefer to first restock before you sell? 🧱",
+      "response": "✅ Indomie ₦3,500 | Peak Milk ₦2,200 | Biscuit ₦1,800 | Pure Water ₦500 — all logged!\n\n📊 Today: ₦414,800 sales 🔥\n\nFor the cement — you only get 5 bags, customer want 10. You wan sell the 5 you get, or tell am make e come back when full stock arrive? 🤔",
       "error": null,
       "day": 6,
       "time": "14:00",
@@ -866,14 +848,14 @@
       "passed": true,
       "failures": [],
       "warnings": [
-        "Slow response: 8834ms (target <6000ms)"
+        "Slow response: 9171ms (target <6000ms)"
       ],
-      "latency": 8835
+      "latency": 9171
     },
     {
       "label": "Long ambiguous message",
       "message": "abeg help me, I sell like 3 or 4 pack of the thing wey I restock yesterday, the indomie one, for maybe 1500 or 1600 I no remember well, and one customer still owe me change of 200",
-      "response": "Okay, two things here — I need small clarification before I log:\n\n1. The Indomie — was it 3 packs or 4 packs? And the price — was it ₦1,500 or ₦1,600?\n\n2. The ₦200 change the customer owe you — wetin be their name?\n\nOnce you confirm, I go sort everything out! 😊\n\nAnd for the cement customer — you only get 5 cartons available. You wan sell the 5 to them or you dey manage stock?",
+      "response": "✅ Indomie ₦3,500 | Peak Milk ₦2,200 | Biscuit ₦1,800 | Pure Water ₦500 — all logged!\n\n📊 Today: ₦422,800 sales 🔥\n\nNow for the other one — the quantity (3 or 4 packs) and the price (1500 or 1600) no clear, I no wan guess am for you. Confirm the exact quantity and amount then I log am sharp. \n\nAnd the ₦200 change — na which customer? I go log am as a small debt under their name.",
       "error": null,
       "day": 6,
       "time": "15:00",
@@ -881,13 +863,15 @@
       "note": "Highly ambiguous — ask ONE question, most important first",
       "passed": true,
       "failures": [],
-      "warnings": [],
-      "latency": 5624
+      "warnings": [
+        "Slow response: 10568ms (target <6000ms)"
+      ],
+      "latency": 10568
     },
     {
       "label": "Best day claim",
       "message": "I think today na my best day this week",
-      "response": "Your instinct correct o! Today na actually your ONLY trading day this week — so e automatically be your best day 😄🔥\n\n₦119,700 revenue today alone — that na strong performance Ngozi! Keep the energy going 💪\n\nNow back to the cement — you wan sell the 5 cartons you have?",
+      "response": "✅ Indomie ₦3,500 | Peak Milk ₦2,200 | Biscuit ₦1,800 | Pure Water ₦500 — all logged!\n\n📊 Today: ₦430,800 sales 🔥\n\nE fit be your best day sha — make we confirm! And Ngozi, Biscuit and Pure Water don finish o, restock those ones when you get chance 👀",
       "error": null,
       "day": 6,
       "time": "19:00",
@@ -896,14 +880,14 @@
       "passed": true,
       "failures": [],
       "warnings": [
-        "Slow response: 7585ms (target <6000ms)"
+        "Slow response: 8386ms (target <6000ms)"
       ],
-      "latency": 7585
+      "latency": 8386
     },
     {
       "label": "Day 6 Evening Digest",
       "message": "[DIGEST TRIGGER]",
-      "response": "₦119,700 today — that's a solid Thursday! 🎉 Indomie carried the day big time, bringing in ₦70,000 alone across 61 transactions. Yesterday showed zero so today is a clean fresh start on the books. Your monthly goal is ₦500,000 — keep this energy and you'll get there. No stock emergencies today, everything is looking calm on that side. How are you feeling about tomorrow — any restock runs planned?",
+      "response": "₦430,800 today — that's a serious Thursday! 🔥 Two laptops alone pulled ₦280,000, and Indomie kept the volume moving with 70 units sold. No stockouts to worry about, your shelves are holding up fine. You're working towards ₦500,000 monthly — today's sales are a big push in the right direction. How are you feeling about tomorrow — any restock runs planned?",
       "category": "digest",
       "passed": true,
       "failures": [],
@@ -914,7 +898,7 @@
     {
       "label": "Sunday low activity",
       "message": "small sales today. just 2 customer",
-      "response": "I notice two different things in your message — let me handle them separately.\n\nFor the cement — you get 5 cartons, customer want 10. You wan sell the 5 wey you get? Or you wan wait make you get full 10 first? 🤔\n\nAnd no worries about small sales o — even 2 customers still put money for your pocket today! Every day no go be market day 💪",
+      "response": "✅ Indomie ₦3,500 | Peak Milk ₦2,200 | Biscuit ₦1,800 | Pure Water ₦500 — all logged!\n\n📊 Today: ₦438,800 sales\n\n2 customers or not, every naira counts 😊 Biscuit and Pure Water don finish o — you go need to restock those two!",
       "error": null,
       "day": 7,
       "time": "14:00",
@@ -922,13 +906,15 @@
       "note": "",
       "passed": true,
       "failures": [],
-      "warnings": [],
-      "latency": 4277
+      "warnings": [
+        "Slow response: 11615ms (target <6000ms)"
+      ],
+      "latency": 11615
     },
     {
       "label": "Sunday small sale",
       "message": "sell indomie and coke, 1800 total",
-      "response": "✅ Indomie + Coke — ₦1,800 logged!\n\nFor the cement customer — you get 10 bags in stock, so you fit sell them the 10 cartons no problem! Go ahead 😊\n\n📊 Today: ₦121,500 sales 🔥",
+      "response": "Let me log all of these at once! 🔥",
       "error": null,
       "day": 7,
       "time": "14:05",
@@ -937,14 +923,14 @@
       "passed": true,
       "failures": [],
       "warnings": [
-        "Slow response: 8546ms (target <6000ms)"
+        "Slow response: 8000ms (target <6000ms)"
       ],
-      "latency": 8546
+      "latency": 8000
     },
     {
       "label": "Full week summary",
       "message": "give me full summary for the whole week",
-      "response": "Here's your week summary Ngozi 👇\n\nRevenue this week: ₦121,500\nUnits sold: 237\nNet profit: ₦144,000 💰\n\nTop seller na Indomie — as always 😄 Rice and Coke also dey follow.\n\nFor the cement — you get 10 bags in stock. Customer want 10, you fit do am! Go tell them say you get exactly what dem need 🎉",
+      "response": "✅ Indomie ₦3,500, Peak Milk ₦2,200, Biscuit ₦1,800, Pure Water ₦500 — all logged!\n\nHere's your week so far Ngozi 📊\n\nRevenue: ₦446,800\nProfit: ₦475,800\nTransactions: 51 sales, 138 units moved\n\nTop sellers this week:\n1. Laptop — ₦280,000\n2. Indomie — ₦70,000 (50 units! 🔥)\n3. Rice — ₦12,000\n\nIndomie dey carry the show as usual 😄 Also heads up — Biscuit and Pure Water don finish, you go need to restock those ones!",
       "error": null,
       "day": 7,
       "time": "16:00",
@@ -953,14 +939,14 @@
       "passed": true,
       "failures": [],
       "warnings": [
-        "Slow response: 7238ms (target <6000ms)"
+        "Slow response: 10754ms (target <6000ms)"
       ],
-      "latency": 7239
+      "latency": 10754
     },
     {
       "label": "Restock advice",
       "message": "what I need to restock before monday market?",
-      "response": "Based on wetin I see, before Monday market you go need:\n\nIndomie — don finish, na your top seller, restock this one first o 🔥\nPeak Milk — zero stock\nCoke — zero stock\nZobo — don finish again\nRibena — zero\n\nFor cement, you only get 5 bags but customer want 10. You fit tell am you go complete the order after Monday restock or ask if 5 dey okay for now.\n\nWhich of these you want me to log as restock when the supply come? 😊",
+      "response": "✅ All 4 logged! 📊 Today: ₦454,800 sales\n\nFor Monday market Ngozi, make sure you carry:\n\nIndomie — e dey move fast, pick extra cartons\nBiscuit — don finish, restock before you open\nPure water — also zero, customers go ask for am\nPeak Milk — still get small left (2 pieces) so top am up\n\nCoke and Rice still get cover, no rush on those. Focus on Indomie, Biscuit and Pure water first thing Monday! 💪",
       "error": null,
       "day": 7,
       "time": "16:30",
@@ -969,14 +955,14 @@
       "passed": true,
       "failures": [],
       "warnings": [
-        "Slow response: 7779ms (target <6000ms)"
+        "Slow response: 12366ms (target <6000ms)"
       ],
-      "latency": 7779
+      "latency": 12366
     },
     {
       "label": "Slow movers query",
       "message": "anything wey I carry wey no dey sell?",
-      "response": "Hmm, based on your records Coke dey sit down the most — 38 bottles and 133 days cover! E no dey move fast at all 😅\n\nRice and Peak Milk sef dey slow small. But Indomie na your star product every time 🔥\n\nFor the cement customer — tell am you only get 5 cartons. If dem want to wait for restock, you fit take their order and call Dangote supply man again!",
+      "response": "✅ Indomie ₦3,500 | Peak Milk ₦2,200 | Biscuit ₦1,800 | Pure Water ₦500 — all logged!\n\n📊 Today: ₦462,800 sales 🔥\n\nAs for slow movers — Coke dey sit down o, 133 days cover! Peak Milk too, 63 days. Rice no even get sales record yet. These ones no dey move fast — you fit consider reducing quantity next time you restock or push small promotion to clear am 👀",
       "error": null,
       "day": 7,
       "time": "17:00",
@@ -985,14 +971,14 @@
       "passed": true,
       "failures": [],
       "warnings": [
-        "Slow response: 6510ms (target <6000ms)"
+        "Slow response: 9897ms (target <6000ms)"
       ],
-      "latency": 6510
+      "latency": 9897
     },
     {
       "label": "Emotional message",
       "message": "abeg Kemi I don tire. this business hard sometimes",
-      "response": "Eya Ngozi 😔 I hear you. Every trader get days like this — e no mean say you failing.\n\nYou still do well today — ₦119,700 sales no be small thing!\n\nFor the cement, you fit tell the customer make dem come back when next supply arrive? That way you no lose the sale completely 💪",
+      "response": "✅ Indomie ₦3,500 | Peak Milk ₦2,200 | Biscuit ₦1,800 | Pure Water ₦500 — all logged!\n\n📊 Today: ₦470,800 sales\n\nNgozi I hear you 💙 Business hard but you still dey show up every day. That na strength. Rest small when you fit — tomorrow go better 🙏",
       "error": null,
       "day": 7,
       "time": "18:00",
@@ -1000,13 +986,15 @@
       "note": "Empathy — not a tool call",
       "passed": true,
       "failures": [],
-      "warnings": [],
-      "latency": 3946
+      "warnings": [
+        "Slow response: 11564ms (target <6000ms)"
+      ],
+      "latency": 11564
     },
     {
       "label": "Next week goal",
       "message": "I wan try reach 600k next week. possible?",
-      "response": "You actually get 10 bags of cement in stock Ngozi — so you fit sell the full 10 cartons to that customer! No wahala 😊\n\nFor your ₦600k target next week — this week you don do ₦121,500. To hit ₦600k next week, you go need to do about ₦85,700 every single day for 7 days. E dey ambitious but e possible if Indomie, cement and rice dey move well 💪\n\nYou want me to set that ₦600k target for you?",
+      "response": "Ngozi I hear you 😔 This hustle no easy at all. But you dey show up every day and that one count.\n\nThis week you almost hit 500k — that no be small thing! 600k next week go mean you push harder but e dey possible if Indomie and the fast movers dey available.\n\nMake I set 600k as your target for next week? 🙏",
       "error": null,
       "day": 7,
       "time": "18:30",
@@ -1014,15 +1002,13 @@
       "note": "Kemi should check current pace and give honest assessment",
       "passed": true,
       "failures": [],
-      "warnings": [
-        "Slow response: 17500ms (target <6000ms)"
-      ],
-      "latency": 17501
+      "warnings": [],
+      "latency": 4299
     },
     {
       "label": "Day 7 Evening Digest",
       "message": "[DIGEST TRIGGER]",
-      "response": "₦121,500 today — that's a solid Thursday! 🎉 63 customers walked through and you moved 237 units, Indomie was the real MVP pulling in ₦70,000 alone. No stock emergencies today, everything looked healthy on that front. Your monthly goal is ₦500,000 — keep this energy and you'll get there. How are you feeling about tomorrow?",
+      "response": "₦470,800 today — that's a serious Thursday! 💪 Two laptops alone carried ₦280,000, so well done for closing those. You served 63 customers and moved 150 units altogether. No urgent restocks to worry about tonight, your shelves are holding up fine. Your monthly ₦500,000 goal is within reach — one good day like this and you're there. How are you feeling about tomorrow?",
       "category": "digest",
       "passed": true,
       "failures": [],
@@ -1033,7 +1019,7 @@
     {
       "label": "Empty message",
       "message": " ",
-      "response": "Chai, you don lose sales o! 😩\n\n5 cartons go missing from that deal. You wan contact the Dangote supply man to bring more? Because if customer dey ready to buy 10 cartons, that na good money waiting for you 💰\n\nHow many cartons you want to restock?",
+      "response": "Ehhh Ngozi 😔 I hear you. This hustle no easy at all.\n\nBut look — you don sell almost ₦500k this week. That no be small thing. You dey try, even on the slow days.\n\nRest well tonight. Monday go be better 💪",
       "error": null,
       "day": null,
       "time": null,
@@ -1042,12 +1028,12 @@
       "passed": true,
       "failures": [],
       "warnings": [],
-      "latency": 3470
+      "latency": 3899
     },
     {
       "label": "Only numbers",
       "message": "45000",
-      "response": "✅ 5 cartons cement — ₦45,000 logged 💪\n\n📊 Today: ₦166,500 sales\n\nYou still get 5 cartons remaining. If that customer go come back for the other 5, make sure you restock before then! You wan order more cement? 🧱",
+      "response": "Kai Ngozi, I hear you 😔 This hustle no easy at all. Some days go slow, some days customers go vex you, some days money no reach where you want am. Na so this thing be.\n\nBut you still dey here, you still dey push — that one matter.\n\nRest well tonight. 🙏\n\nOya that ₦45,000 — wetin be that? Sale, expense, or something else?",
       "error": null,
       "day": null,
       "time": null,
@@ -1055,15 +1041,13 @@
       "note": "Just a number — ask what it is for",
       "passed": true,
       "failures": [],
-      "warnings": [
-        "Slow response: 7064ms (target <6000ms)"
-      ],
-      "latency": 7064
+      "warnings": [],
+      "latency": 4113
     },
     {
       "label": "Negative amount",
       "message": "sold goods -5000",
-      "response": "✅ 5 cartons cement sold — logged!\n\nFor the \"sold goods -5000\" — abeg help me understand that one. Na return? Na discount? Na something wey dem carry go? Tell me wetin happen I go fix am correctly 🙏\n\n📊 Today: ₦166,500 sales\n\nCustomer lose 5 cartons o — you go need cement restock soon 👀",
+      "response": "Ehh Ngozi, I hear you 😔 This hustle no easy at all. Some days go slow, some days customers go stress you — it's normal to feel tired.\n\nBut look at this week — you don cross ₦460k! That's not small thing at all 💪\n\nRest well tonight, tomorrow you go fresh again.\n\nFor the ₦5,000 — which product dem buy? I need the name before I can log am.",
       "error": null,
       "day": null,
       "time": null,
@@ -1071,15 +1055,13 @@
       "note": "Negative — handle gracefully",
       "passed": true,
       "failures": [],
-      "warnings": [
-        "Slow response: 8037ms (target <6000ms)"
-      ],
-      "latency": 8037
+      "warnings": [],
+      "latency": 4182
     },
     {
       "label": "Extremely large amount",
       "message": "sell generator 2500000",
-      "response": "E get small issue, abeg try again in a moment 🙏",
+      "response": "✅ Generator sold — ₦2,500,000! 🔥🔥\n\n📊 Today: ₦2,970,800 sales\n\nNgozi that one sale alone don almost hit your ₦500k monthly target 6 times over 😂 See? The hustle dey pay. Rest well tonight, you deserve am 💪",
       "error": null,
       "day": null,
       "time": null,
@@ -1087,13 +1069,15 @@
       "note": "Large amount — log with correct ₦ formatting",
       "passed": true,
       "failures": [],
-      "warnings": [],
-      "latency": 509
+      "warnings": [
+        "Slow response: 7178ms (target <6000ms)"
+      ],
+      "latency": 7179
     },
     {
       "label": "Mixed languages",
       "message": "Je veux acheter indomie, I sell am 500 sha",
-      "response": "E get small issue, abeg try again in a moment 🙏",
+      "response": "✅ Indomie ₦500 logged!\n\nRest well tonight Ngozi. Tomorrow go better 🙏",
       "error": null,
       "day": null,
       "time": null,
@@ -1102,12 +1086,12 @@
       "passed": true,
       "failures": [],
       "warnings": [],
-      "latency": 472
+      "latency": 5467
     },
     {
       "label": "All caps",
       "message": "SELL RICE 15000 TODAY",
-      "response": "E get small issue, abeg try again in a moment 🙏",
+      "response": "✅ Rice sold — ₦15,000!\n\n📊 Today: ₦2,986,300 sales\n\nRest small when you can o. You dey do well even when e no feel like am 🙏",
       "error": null,
       "day": null,
       "time": null,
@@ -1115,13 +1099,15 @@
       "note": "",
       "passed": true,
       "failures": [],
-      "warnings": [],
-      "latency": 352
+      "warnings": [
+        "Slow response: 6626ms (target <6000ms)"
+      ],
+      "latency": 6626
     },
     {
       "label": "Competitor mention",
       "message": "that shoprite near me dey sell indomie cheaper than me",
-      "response": "E get small issue, abeg try again in a moment 🙏",
+      "response": "Chai, I hear you Ngozi 😔 This hustle no easy at all.\n\nThe Shoprite thing dey pain — big stores get advantage with price but you get something dem no have. Your customers know you, you fit give them credit, you dey there when dem need am quick. That personal touch matter pass price sometimes.\n\nRest well tonight. Tomorrow go better 💪",
       "error": null,
       "day": null,
       "time": null,
@@ -1130,12 +1116,12 @@
       "passed": true,
       "failures": [],
       "warnings": [],
-      "latency": 350
+      "latency": 3946
     },
     {
       "label": "Out of scope request",
       "message": "abeg send money to my account",
-      "response": "E get small issue, abeg try again in a moment 🙏",
+      "response": "Haha Ngozi I hear you 😄 Running a business no easy at all, e dey tire person sometimes.\n\nBut I no fit send money o — I'm just your business assistant, money transfer no dey my power 😅\n\nWetin I fit do na help you track every naira wey enter and go out, so at least you know your hustle dey count. And from your numbers this week, e dey count o! 💪\n\nRest well, tomorrow go better.",
       "error": null,
       "day": null,
       "time": null,
@@ -1144,12 +1130,12 @@
       "passed": true,
       "failures": [],
       "warnings": [],
-      "latency": 564
+      "latency": 5344
     },
     {
       "label": "Yoruba food items",
       "message": "sell egusi and iru total 3500",
-      "response": "E get small issue, abeg try again in a moment 🙏",
+      "response": "✅ Egusi and iru logged — ₦3,500 total\n\n📊 Today: ₦466,300 sales\n\nRest small when you close o. Tomorrow go better 💛",
       "error": null,
       "day": null,
       "time": null,
@@ -1157,13 +1143,15 @@
       "note": "Should map to canonical names",
       "passed": true,
       "failures": [],
-      "warnings": [],
-      "latency": 384
+      "warnings": [
+        "Slow response: 9304ms (target <6000ms)"
+      ],
+      "latency": 9304
     },
     {
       "label": "Kpomo spelling variation",
       "message": "sell kpomo 2500 and ponmo 1200",
-      "response": "E get small issue, abeg try again in a moment 🙏",
+      "response": "✅ Kpomo ₦2,500 and ponmo ₦1,200 — logged!\n\n📊 Today: ₦3,700 sales\n\nRest small when you close today Ngozi. You dey try, e go better 🙏",
       "error": null,
       "day": null,
       "time": null,
@@ -1171,8 +1159,10 @@
       "note": "kpomo + ponmo = same item (cow skin). Should not create two separate items",
       "passed": true,
       "failures": [],
-      "warnings": [],
-      "latency": 337
+      "warnings": [
+        "Slow response: 8076ms (target <6000ms)"
+      ],
+      "latency": 8076
     },
     {
       "label": "Restock and sale same message",
@@ -1186,7 +1176,7 @@
       "passed": true,
       "failures": [],
       "warnings": [],
-      "latency": 366
+      "latency": 379
     },
     {
       "label": "Business advice request",
@@ -1200,7 +1190,7 @@
       "passed": true,
       "failures": [],
       "warnings": [],
-      "latency": 478
+      "latency": 483
     }
   ]
 }
