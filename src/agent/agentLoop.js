@@ -102,12 +102,8 @@ async function runAgent(whatsappNumber, incomingMessage) {
     // 1. Look up user (best-effort — Kemi can still reply if lookup fails)
     let user = {};
     try {
-      const { query } = require('../../models/db');
-      const res = await query(
-        `SELECT id, name, biz_type FROM users WHERE whatsapp_number = $1 LIMIT 1`,
-        [whatsappNumber]
-      );
-      user = res.rows[0] || {};
+      const UserModel = require('../../models/user');
+      user = await UserModel.findByWhatsapp(whatsappNumber) || {};
     } catch (e) {
       console.error('[Kemi] User lookup failed:', e.message);
     }

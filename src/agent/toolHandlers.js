@@ -10,14 +10,13 @@ function fmt(n) {
   return '₦' + Number(n || 0).toLocaleString('en-NG');
 }
 
-/** Fetch the user row from whatsapp_number. Throws if not found. */
+/** Fetch the user row from whatsapp_number. Uses the same format-normalising
+ *  CASE logic as UserModel.findByWhatsapp so +234 / 0 / 234 variants all match. */
 async function getUser(whatsappNumber) {
-  const res = await query(
-    `SELECT id, name, biz_type FROM users WHERE whatsapp_number = $1 LIMIT 1`,
-    [whatsappNumber]
-  );
-  if (!res.rows.length) throw new Error(`User not found for ${whatsappNumber}`);
-  return res.rows[0];
+  const UserModel = require('../../models/user');
+  const user = await UserModel.findByWhatsapp(whatsappNumber);
+  if (!user) throw new Error(`User not found for ${whatsappNumber}`);
+  return user;
 }
 
 /**
