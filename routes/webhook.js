@@ -91,12 +91,11 @@ router.post('/', async (req, res) => {
       text = msg.text.body.trim();
       console.log(`[Webhook] Text message from ${from}: "${text}"`);
     } else if (msg.type === 'audio') {
-      // ── Audio / voice note ──
+      // ── Audio / voice note — transcribe then pass to Kemi ──
       entryMethod = 'voice';
       const mediaId = msg.audio?.id;
       console.log(`[Webhook] Voice note from ${from}, media_id: ${mediaId}`);
 
-      // Look up user early so we can send a holding message
       const voiceUser = await UserModel.findByWhatsapp(from);
       if (!voiceUser) {
         const voiceSession = await OnboardingModel.getSession(from);
@@ -113,13 +112,12 @@ router.post('/', async (req, res) => {
         return;
       }
 
-      // Acknowledge receipt immediately so the user knows we're working
       await WhatsAppService.sendMessage(from,
         `🎤 Got your voice note, ${voiceUser.name.split(' ')[0]}! Give me a moment...`
       ).catch(() => {});
 
       try {
-        const { buffer, mimeType } = await downloadWhatsAppAudio(mediaId);
+        const { buffer, mimeType } = await downloadWhatsAppMedia(mediaId);
         const { transcript, confidence } = await GeminiService.transcribeAudio(buffer, mimeType, voiceUser);
         console.log(`[Webhook] Voice transcribed (confidence: ${confidence.toFixed(2)}): "${transcript}"`);
 
@@ -130,27 +128,7 @@ router.post('/', async (req, res) => {
           return;
         }
 
-        // Parse the transcript so we can decide how to handle it
-        const parsedAudio = await GeminiService.parseWithAI(transcript, voiceUser);
-
-        if (parsedAudio.type === 'daily_entry') {
-          if (confidence < 0.7) {
-            // Low confidence: show what was heard and ask for confirmation
-            await ConfirmationService.savePending(voiceUser.id, 'daily_entry', parsedAudio, transcript);
-            await WhatsAppService.sendMessage(from,
-              `🎤 I heard your voice note but I'm not 100% sure of the amounts.\n\n` +
-              `Here's what I think I heard:\n_${transcript}_\n\n` +
-              `Reply *YES* if correct or send the right numbers directly.`
-            );
-            return;
-          }
-          // High confidence: save directly to DB — no YES step needed
-          await handleDailyEntry(voiceUser, from, parsedAudio, transcript, 'voice');
-          return;
-        }
-
-        // For non-daily_entry types (stock check, summary, help, etc):
-        // set text so the normal routing below handles it
+        // Hand transcript to Kemi — she handles all intent detection and logging
         text = transcript;
 
       } catch (err) {
@@ -163,9 +141,10 @@ router.post('/', async (req, res) => {
     }
 
     if (msg.type === 'image') {
-      // ── Photo / image ──
+      // ── Photo / image — routed through Kemi (Claude Vision) ──
       entryMethod = 'photo';
       const mediaId = msg.image?.id;
+      const caption = (msg.image?.caption || '').trim();
       console.log(`[Webhook] Image from ${from}, media_id: ${mediaId}`);
 
       const photoUser = await UserModel.findByWhatsapp(from);
@@ -185,90 +164,28 @@ router.post('/', async (req, res) => {
       }
 
       await WhatsAppService.sendMessage(from,
-        `📸 Got your photo, ${photoUser.name.split(' ')[0]}! Analyzing it...`
+        `📸 Got your photo, ${photoUser.name.split(' ')[0]}! Reading it now...`
       ).catch(() => {});
 
       try {
-        const { buffer, mimeType } = await downloadWhatsAppAudio(mediaId);
-        const parsed = await GeminiService.analyzeReceipt(buffer, mimeType, photoUser);
+        const { buffer, mimeType } = await downloadWhatsAppMedia(mediaId);
+        const imageBase64   = buffer.toString('base64');
+        const imageMimeType = (mimeType || 'image/jpeg').split(';')[0];
+        const promptText    = caption ||
+          'I sent you a photo of my stock notebook or receipt. Please read every item and quantity you can see and log them for me.';
 
-        if (parsed.confidence === 'low') {
-          await WhatsAppService.sendMessage(from,
-            `📸 I got your photo but couldn't read it clearly.\n\n` +
-            `What I could make out:\n${parsed.raw_text || 'Not much visible'}\n\n` +
-            `Could you send a clearer photo or type the numbers directly?`
-          );
-          return;
-        }
+        const { runAgent } = require('../src/agent/agentLoop');
+        const kemisResponse = await runAgent(from, promptText, { imageBase64, imageMimeType });
+        await WhatsAppService.sendMessage(from, kemisResponse);
 
-        // Nothing financial found in the image
-        if (!parsed.revenue && !parsed.expenses?.length && !parsed.products?.length) {
-          await WhatsAppService.sendMessage(from,
-            `📸 I couldn't find any financial data in that photo, ${photoUser.name.split(' ')[0]}.\n\n` +
-            `Try a photo of:\n• A receipt or invoice\n• A handwritten sales record\n• Your stock list\n\n` +
-            `Or type your numbers: _"Made 45k today, spent 10k on stock"_`
-          );
-          return;
-        }
-
-        // Build confirmation message
-        let confirmation = `📸 I read your photo!\n\n`;
-        if (parsed.revenue) {
-          confirmation += `Revenue: ₦${Number(parsed.revenue).toLocaleString('en-NG')}\n`;
-        }
-        if (parsed.expenses?.length) {
-          parsed.expenses.forEach(e => {
-            confirmation += `${e.category}: ₦${Number(e.amount).toLocaleString('en-NG')}\n`;
-          });
-        }
-        if (parsed.products?.length) {
-          confirmation += `\nProducts found:\n`;
-          parsed.products.forEach(p => {
-            confirmation += `• ${p.name}`;
-            if (p.quantity) confirmation += ` — ${p.quantity} ${p.unit || 'units'}`;
-            if (p.price)    confirmation += ` @ ₦${Number(p.price).toLocaleString('en-NG')}`;
-            confirmation += `\n`;
-          });
-        }
-        confirmation += `\nReply *YES* to log this ✅\nReply *EDIT* if something is wrong ❌`;
-
-        // Map to daily_entry format so the existing YES confirmation handler saves it
-        const totalExpenses = (parsed.expenses || []).reduce((s, e) => s + (e.amount || 0), 0);
-        const expenseBreakdown = {};
-        (parsed.expenses || []).forEach(e => {
-          expenseBreakdown[e.category] = (expenseBreakdown[e.category] || 0) + (e.amount || 0);
-        });
-        const revenue = parsed.revenue || 0;
-        const profit  = revenue - totalExpenses;
-        const margin  = revenue > 0 ? parseFloat(((profit / revenue) * 100).toFixed(2)) : 0;
-
-        const pendingData = {
-          revenue,
-          totalExpenses,
-          expenseBreakdown,
-          profit,
-          margin,
-          customers: 0,
-          notes: `Photo entry: ${parsed.notes || parsed.raw_text || ''}`,
-          expenseItems: (parsed.expenses || []).map(e => ({ name: e.category, amount: e.amount })),
-          products: (parsed.products || []).map(p => ({
-            product_name:     p.name,
-            quantity:         p.quantity  || null,
-            unit:             p.unit      || 'units',
-            unit_price:       p.price     || null,
-            total_amount:     p.quantity && p.price ? p.quantity * p.price : null,
-            transaction_type: 'sale',
-            channel:          'retail',
-          })),
-        };
-
-        await ConfirmationService.savePending(photoUser.id, 'daily_entry', pendingData, '[photo]');
-        await WhatsAppService.sendMessage(from, confirmation);
+        await MessageModel.logInbound(from, photoUser.id, promptText, wasMsgId).then(r =>
+          MessageModel.updateLog(r?.id, { intent: 'kemi_image', status: 'processed' })
+        ).catch(() => {});
       } catch (err) {
         console.error('[Webhook] Image processing failed:', err.message);
         await WhatsAppService.sendMessage(from,
-          `📸 Sorry, I had trouble reading that photo, ${photoUser.name.split(' ')[0]}.\n\n` +
-          `You can type your numbers instead:\n_"Made 45k today, spent 10k on stock"_`);
+          `📸 Had trouble reading that photo, ${photoUser.name.split(' ')[0]}.\n\n` +
+          `You can type your stock instead:\n_"I have 20 bags rice, 10 cartons indomie"_`);
       }
       return;
     }
@@ -902,9 +819,9 @@ async function handleSummaryRequest(user, from) {
 }
 
 // ─────────────────────────────────────────────
-// Internal: download audio from Meta Media API
+// Internal: download media (audio or image) from Meta Media API
 // ─────────────────────────────────────────────
-async function downloadWhatsAppAudio(mediaId) {
+async function downloadWhatsAppMedia(mediaId) {
   const token = process.env.WHATSAPP_TOKEN;
 
   // Step 1 — get the temporary download URL from Meta

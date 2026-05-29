@@ -95,7 +95,7 @@ async function callClaude(client, params) {
  * @param {string} incomingMessage Raw message text
  * @returns {Promise<string>}      Kemi's reply to send back via WhatsApp
  */
-async function runAgent(whatsappNumber, incomingMessage) {
+async function runAgent(whatsappNumber, incomingMessage, opts = {}) {
   try {
     const client = getClient();
 
@@ -114,19 +114,35 @@ async function runAgent(whatsappNumber, incomingMessage) {
     // 3. Load rolling context (language pref, summary, top products)
     const context = await getRollingContext(whatsappNumber);
 
-    // 4. Persist the incoming message
+    // 4. Persist the incoming message (text only — images are not stored in history)
     await appendMessage(whatsappNumber, 'user', incomingMessage);
 
-    // 5. Build messages array: history + this message
+    // 5. Build the user content block — attach image if provided
+    let userContent = incomingMessage;
+    if (opts.imageBase64) {
+      userContent = [
+        {
+          type: 'image',
+          source: {
+            type: 'base64',
+            media_type: opts.imageMimeType || 'image/jpeg',
+            data: opts.imageBase64,
+          },
+        },
+        { type: 'text', text: incomingMessage },
+      ];
+    }
+
+    // 6. Build messages array: history + this message
     const messages = [
       ...history,
-      { role: 'user', content: incomingMessage },
+      { role: 'user', content: userContent },
     ];
 
-    // 6. Build system prompt with cache_control on the static persona block
+    // 7. Build system prompt with cache_control on the static persona block
     const system = buildSystemPrompt(user, context);
 
-    // 7. Agentic loop — max MAX_ITER iterations
+    // 8. Agentic loop — max MAX_ITER iterations
     let iterations = 0;
 
     while (iterations < MAX_ITER) {

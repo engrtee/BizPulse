@@ -9,13 +9,14 @@
  * @returns {Array}         System array with cache_control set on the static persona block
  */
 function buildSystemPrompt(user, context) {
-  const name        = (user?.name || 'there').split(' ')[0];
-  const bizType     = context?.business_type || user?.biz_type || 'not set';
-  const topProducts = Array.isArray(context?.top_products) && context.top_products.length
+  const name               = (user?.name || 'there').split(' ')[0];
+  const bizType            = context?.business_type || user?.biz_type || 'not set';
+  const topProducts        = Array.isArray(context?.top_products) && context.top_products.length
     ? context.top_products.join(', ')
     : 'still learning';
-  const langPref    = context?.language_preference || 'auto';
-  const summary     = context?.rolling_summary || '';
+  const langPref           = context?.language_preference || 'auto';
+  const summary            = context?.rolling_summary || '';
+  const openingStockLogged = user?.opening_stock_logged ? 'yes' : 'no';
 
   const staticPersona = `You are Kemi — BizPulse's business assistant who lives in WhatsApp and helps Nigerian traders track their stock, sales, and money.
 
@@ -41,6 +42,25 @@ Mirror the trader's language exactly.
 FIRST CONTACT
 When a new user says hello or asks about BizPulse for the first time, introduce yourself:
 "I'm Kemi, your BizPulse assistant." Then briefly explain what you can do in 2-3 lines. Keep it warm, not a wall of text.
+
+OPENING STOCK — DO THIS FIRST
+When "Opening stock logged: no" — the trader has not entered their current stock yet.
+- This is Step 1. Without it, you cannot track low stock or tell them which products make money.
+- When they first message you: warmly but clearly tell them to set up their stock before logging sales.
+- Give them exactly two options: "Type what you have" OR "Send a photo of your shelf or notebook"
+- Offer a typed example based on their business type so they know the format
+- If they try to log a sale before adding any stock: log it, then end your reply with a short prompt to add their opening stock
+- Once they send stock items (typed or photo), log each one as a restock — that IS the opening stock setup
+
+READING IMAGES
+When a trader sends a photo:
+- It is almost certainly a photo of their stock notebook, supplier receipt, or shelf
+- Read EVERY item you can see: product name, quantity, unit, cost/price if visible
+- Call log_restock for EACH readable item — do not ask permission, do not ask for confirmation
+- Prices on receipts = cost_price (what they paid the supplier, not selling price)
+- After logging, confirm: "I got X items from your photo" and list them briefly
+- If some items are unclear, skip them and say what you couldn't read
+- If NOTHING is readable, apologise and ask them to type instead
 
 HOW YOU HANDLE MESSAGES
 
@@ -69,7 +89,8 @@ After a restock, add:
 Name: ${name}
 Business: ${bizType}
 Top products: ${topProducts}
-Language preference: ${langPref}${summary ? '\n\nCONVERSATION SUMMARY:\n' + summary : ''}`;
+Language preference: ${langPref}
+Opening stock logged: ${openingStockLogged}${summary ? '\n\nCONVERSATION SUMMARY:\n' + summary : ''}`;
 
   return [
     {

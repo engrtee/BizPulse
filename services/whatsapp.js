@@ -401,16 +401,14 @@ async function sendOnboarding(to, firstName, bizType) {
   }
 
   const body =
-    `${firstName}, you're in. ✅\n\n` +
-    `I'm BizPulse — your stock tracker and profit analyst, right here on WhatsApp.\n\n` +
-    `Every time you sell something, just tell me. I'll:\n` +
-    `→ Alert you before stock runs out (before it happens)\n` +
-    `→ Track which products make you the most money\n` +
-    `→ Send you a profit breakdown every evening\n\n` +
-    `*First step:* Tell me what stock you have right now.\n\n` +
-    `Type: ${example}\n` +
-    `Or voice note it. Or send a photo of your shelf.\n\n` +
-    `I'll take it from there. 🚀`;
+    `${firstName}, welcome — I'm Kemi, your BizPulse assistant. ✅\n\n` +
+    `Before we do anything else, I need one thing from you:\n` +
+    `Tell me what stock you currently have.\n\n` +
+    `This is Step 1. Without it, I can't watch your levels or tell you which products are making you money.\n\n` +
+    `Type what you have now:\n` +
+    `${example}\n\n` +
+    `Or snap a photo of your shelf or notebook and send it here — I'll read it myself. 📸\n\n` +
+    `Do this first and everything else will fall into place. 🚀`;
 
   return sendMessage(to, body);
 }
