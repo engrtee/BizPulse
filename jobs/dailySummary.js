@@ -26,6 +26,7 @@ const UserModel            = require('../models/user');
 const TransactionModel     = require('../models/transaction');
 const InventoryService     = require('../services/inventory');
 const ClaudeService        = require('../services/claude');
+const GeminiService        = require('../services/gemini');
 const EmailService         = require('../services/email');
 const WhatsAppService      = require('../services/whatsapp');
 const { getPersona }       = require('../services/personaEngine');
@@ -132,8 +133,8 @@ async function processUser(user) {
       date,
     };
 
-    // Generate personalised AI recommendation with Claude (better Nigerian market context)
-    const aiRec = await ClaudeService.generateRecommendation(summaryData, user);
+    // Generate personalised AI recommendation via Gemini 2.5 Flash (cost-efficient for batch)
+    const aiRec = await GeminiService.generateRecommendation(summaryData, user);
 
     const firstName = user.name.split(' ')[0];
 

@@ -3,11 +3,11 @@
  * Claude AI wrapper for BizPulse.
  *
  * Responsibilities:
- *   1. parseWithAI(message, user) → structured JSON from WhatsApp text
- *   2. generateRecommendation(summaryData, user) → AI coaching based on data
- *   3. answerBusinessQuestion(question, user, userData) → personalized business advice
+ *   1. generateRecommendation(summaryData, user) → AI coaching JSON for 7pm email
+ *   2. generateNudgeInsight(user, avgData)       → short coaching tip for inactive users
  *
- * Uses full access to user's financial data for context-aware insights.
+ * generateRecommendation uses claude-sonnet-4-6 with COACHING_CONTEXT cached as system prompt.
+ * generateNudgeInsight uses claude-haiku-4-5-20251001 (cheaper — 2-3 sentence output only).
  */
 
 'use strict';
@@ -16,7 +16,8 @@ require('dotenv').config();
 const Anthropic = require('@anthropic-ai/sdk');
 const MarketDataService = require('./marketData');
 
-const MODEL = 'claude-sonnet-4-6';
+const MODEL       = 'claude-sonnet-4-6';
+const HAIKU_MODEL = 'claude-haiku-4-5-20251001';
 
 let claudeClient = null;
 
@@ -24,7 +25,7 @@ function getClient() {
   if (!claudeClient) {
     if (!process.env.ANTHROPIC_API_KEY) {
       console.warn('[Claude] ⚠️ ANTHROPIC_API_KEY not set — Claude features will use fallback messages');
-      return null; // Return null instead of throwing — will trigger fallback
+      return null;
     }
     claudeClient = new Anthropic({
       apiKey: process.env.ANTHROPIC_API_KEY,
@@ -33,11 +34,10 @@ function getClient() {
   return claudeClient;
 }
 
-// ────────────────────────────────────────
-// Business Coaching Context
-// ────────────────────────────────────────
-const COACHING_CONTEXT = `
-You are a warm, knowledgeable business coach for small business owners around the world.
+// ── Coaching system prompt — cached as system block on every call ─────────
+// cache_control is applied at the call site so the Anthropic SDK sends it
+// as an ephemeral cache point, cutting input token cost for the daily batch.
+const COACHING_CONTEXT = `You are a warm, knowledgeable business coach for small business owners around the world.
 
 YOUR ROLE:
 Give specific, practical insights based on the owner's actual numbers. You are like a trusted advisor who knows their business — not a generic consultant.
@@ -64,105 +64,25 @@ YOUR COACHING STYLE:
 4. Give ONE concrete action they can take this week — specific, doable, tied to their numbers
 5. Be warm and direct — like a smart friend who happens to know business
 6. Celebrate genuine wins. Name real problems clearly but without panic.
-7. Keep it conversational — this is a WhatsApp chat, not a business report
 
 WHAT GOOD LOOKS LIKE:
-
 Good — specific and actionable:
-"Your margin is 38%, which is solid for a fashion retailer. Most similar businesses land between 35–45%.
-The thing worth watching: your stock costs are 44% of revenue. If supplier prices rise even 10%, that eats directly into your profit.
-One move this week — ask your top supplier for a bulk discount on your next order. Even 5% off saves real money over a month."
-
-Good — practical with local context:
-"You served 14 customers on a day you made [X revenue]. That's [X per customer] average spend.
-If you could get each customer to add one more item — even a small one — that average goes up without needing new customers.
-Worth trying: suggest a matching product at checkout this week and see if it changes your numbers."
+"Your margin is 38%, which is solid for a fashion retailer. Most similar businesses land between 35–45%. The thing worth watching: your stock costs are 44% of revenue. If supplier prices rise even 10%, that eats directly into your profit. One move this week — ask your top supplier for a bulk discount on your next order. Even 5% off saves real money over a month."
 
 Bad — never do this:
-"Monitor your expenses closely." — too generic, no action
-"Your margin looks healthy." — says nothing
-"You need to track inventory." — not advice, it's a task
-
-END EVERY RESPONSE with one follow-up question the user can ask to go deeper.
-Keep responses under 350 words. Warm, clear, and useful every time.
-`;
-
-
-/**
- * Parse a WhatsApp message using Claude.
- * Returns: { type, data } where type is one of:
- *   - daily_entry, inventory_in, inventory_out, customers, stock_check, question, unknown
- *   - data contains type-specific fields
- */
-async function parseWithAI(message, user) {
-  const client = getClient();
-  if (!client) {
-    return { type: 'unknown', data: {}, confidence: 0 };
-  }
-
-  const prompt = `${COACHING_CONTEXT}
-
-User: ${user.name}
-Business type: ${user.biz_type || 'unknown'}
-Message: "${message}"
-
-Parse this message and return JSON with:
-{
-  "type": "daily_entry|inventory_in|inventory_out|customers|stock_check|question|unknown",
-  "data": {
-    // Type-specific fields:
-    // For daily_entry: { revenue, totalExpenses, expenseBreakdown: {category: amount}, customers }
-    // For inventory_in: { item, quantity, unitPrice }
-    // For inventory_out: { item, quantity }
-    // For customers: { count }
-    // For question: { question_text }
-    // For stock_check: {}
-  },
-  "confidence": 0.0-1.0
-}
-
-STRICT RULES:
-- Parse "k" as thousands: "30k" = 30000
-- Extract ALL expense amounts and categorize them
-- Return ONLY valid JSON, no other text`;
-
-  try {
-    const message_obj = await client.messages.create({
-      model: MODEL,
-      max_tokens: 500,
-      messages: [
-        {
-          role: 'user',
-          content: prompt,
-        },
-      ],
-    });
-
-    const responseText = message_obj.content[0].type === 'text' ? message_obj.content[0].text : '';
-    const parsed = JSON.parse(responseText);
-
-    return {
-      type: parsed.type || 'unknown',
-      data: parsed.data || {},
-      confidence: parsed.confidence || 0,
-    };
-  } catch (err) {
-    console.error('[Claude] parseWithAI failed:', err.constructor?.name, err.status || '', err.message);
-    return { type: 'unknown', data: {}, confidence: 0 };
-  }
-}
+"Monitor your expenses closely." — too generic, no action`;
 
 /**
  * Generate a personalized AI recommendation for the daily 7pm summary.
- * Uses full access to user's financial data + market insights.
- * THIS IS WHAT MAKES IT ADDICTIVE.
+ * Uses COACHING_CONTEXT as a cached system prompt to save input tokens
+ * across the nightly batch (all users processed sequentially, cache window = 5 min).
  */
 async function generateRecommendation(summaryData, user) {
   const client = getClient();
-  
+
   // Graceful fallback if API key not set
   if (!client) {
-    const profit = summaryData.profit || 0;
+    const profit  = summaryData.profit  || 0;
     const revenue = summaryData.revenue || 0;
     return {
       risk: profit > 0
@@ -183,14 +103,13 @@ async function generateRecommendation(summaryData, user) {
     totalExpenses,
     profit,
     margin,
-    healthScore,
     topExpense,
     customers,
     date,
-    daysTrend, // { revenue: [...], margin: [...], profit: [...] }
+    daysTrend,
   } = summaryData;
 
-  // Get market insights for context
+  // Get market insights for context (local computation, not an LLM call)
   let marketInsight = '';
   try {
     const insight = await MarketDataService.getMarketInsight(user.biz_type || 'Business', {
@@ -200,17 +119,15 @@ async function generateRecommendation(summaryData, user) {
     });
     marketInsight = `\n\nMARKET CONTEXT: ${insight.insight}`;
   } catch (e) {
-    // Optional
+    // optional
   }
 
   const fmt = (n) => Number(n).toLocaleString();
 
-  // Analyze if they're underperforming vs their own average
   let performanceAlert = '';
   if (daysTrend && daysTrend.revenue && daysTrend.revenue.length >= 7) {
     const last7 = daysTrend.revenue.slice(-7).map(r => parseFloat(r) || 0);
-    const avg7 = last7.reduce((a, b) => a + b, 0) / 7;
-
+    const avg7  = last7.reduce((a, b) => a + b, 0) / 7;
     if (revenue < avg7 * 0.8) {
       performanceAlert = `\nNote: Today's revenue is 20% below the 7-day average (${fmt(avg7)}).`;
     } else if (revenue > avg7 * 1.2) {
@@ -223,9 +140,7 @@ async function generateRecommendation(summaryData, user) {
       ? `\nLast 7 days revenue trend: ${daysTrend.revenue.slice(-7).join(' → ')}`
       : '';
 
-  const prompt = `${COACHING_CONTEXT}
-
-USER:
+  const userPrompt = `USER:
 - Name: ${user.name.split(' ')[0]}
 - Business type: ${user.biz_type || 'Small business'}
 - Location: ${user.state || 'unknown'} (use the appropriate local currency for this location)
@@ -259,9 +174,16 @@ Rules:
 
   try {
     const message_obj = await client.messages.create({
-      model: MODEL,
+      model:      MODEL,
       max_tokens: 400,
-      messages: [{ role: 'user', content: prompt }],
+      system: [
+        {
+          type:          'text',
+          text:          COACHING_CONTEXT,
+          cache_control: { type: 'ephemeral' },
+        },
+      ],
+      messages: [{ role: 'user', content: userPrompt }],
     });
 
     const text  = message_obj.content[0].type === 'text' ? message_obj.content[0].text : '';
@@ -281,139 +203,10 @@ Rules:
 }
 
 /**
- * Answer a business question using Claude.
- * Claude has full context of user's financial history + market data.
- * This is where ADDICTIVE INSIGHTS happen.
- */
-async function answerBusinessQuestion(question, user, userData) {
-  const client = getClient();
-  if (!client) {
-    return (
-      `I need my AI brain to answer this properly, ${user.name.split(' ')[0]}! 🧠\n\n` +
-      `It looks like the AI service isn't configured yet. Once it's set up, I can give you specific insights based on your actual numbers.\n\n` +
-      `In the meantime, send "summary" to see your latest numbers, or "stock?" to check your inventory.`
-    );
-  }
-
-  // userData should contain: { history: [...], inventory: [...], avgMetrics: {...} }
-  const { history = [], inventory = [], avgMetrics = {} } = userData;
-
-  const recentHistory = history.slice(0, 30).map((d) => ({
-    date: d.date,
-    revenue: d.revenue,
-    expenses: d.total_expenses,
-    profit: d.profit,
-    margin: d.margin,
-  }));
-
-  // GET MARKET INSIGHTS - Real-time context
-  let marketInsight = '';
-  try {
-    const insight = await MarketDataService.getMarketInsight(user.biz_type, {
-      revenue: avgMetrics.avgRevenue || 0,
-      totalExpenses: avgMetrics.avgExpenses || 0,
-      margin: avgMetrics.avgMargin || 0,
-    });
-    marketInsight = `\nMARKET BENCHMARK FOR ${user.biz_type.toUpperCase()}:\n${insight.insight}`;
-  } catch (e) {
-    // Market data optional
-  }
-
-  // CALCULATE PRODUCT PERFORMANCE METRICS
-  let productPerformance = '';
-  if (inventory && inventory.length > 0) {
-    const totalStockValue = inventory.reduce((sum, i) => sum + (parseFloat(i.current_balance) * (parseFloat(i.unit_price) || 0)), 0);
-    const totalEverReceived = inventory.reduce((sum, i) => sum + parseFloat(i.total_received || 0), 0);
-    const avgTurnover = totalEverReceived > 0 ? (avgMetrics.avgRevenue / (totalStockValue || 1)) : 0;
-    
-    productPerformance = `
-PRODUCT PERFORMANCE ANALYSIS:
-- Total inventory value: ₦${Number(totalStockValue).toLocaleString('en-NG')}
-- Avg items per day: ${Math.round(totalEverReceived / 30)}
-- Inventory turnover ratio: ${avgTurnover.toFixed(2)}x per day
-- Top 5 items: ${inventory.slice(0, 5).map(i => i.item_name).join(', ')}
-${inventory.some(i => parseFloat(i.current_balance) === 0) ? '⚠️ WARNING: You have OUT-OF-STOCK items' : ''}
-${inventory.some(i => parseFloat(i.current_balance) < (parseFloat(i.total_received) * 0.2)) ? '⚠️ WARNING: Multiple items below 20% threshold' : ''}`;
-  }
-
-  // TREND ANALYSIS
-  let trendAnalysis = '';
-  if (recentHistory.length >= 7) {
-    const last7 = recentHistory.slice(-7);
-    const prev7 = recentHistory.slice(-14, -7);
-    
-    const last7Avg = last7.reduce((sum, d) => sum + parseFloat(d.revenue), 0) / 7;
-    const prev7Avg = prev7.length > 0 ? prev7.reduce((sum, d) => sum + parseFloat(d.revenue), 0) / 7 : last7Avg;
-    
-    const trend = ((last7Avg - prev7Avg) / prev7Avg) * 100;
-    const trendDirection = trend > 5 ? '📈 UP' : trend < -5 ? '📉 DOWN' : '➡️ FLAT';
-    
-    trendAnalysis = `\nTREND ANALYSIS (last 14 days):
-${trendDirection} Revenue trend: ${Math.abs(trend).toFixed(1)}%
-- Last 7 days avg: ₦${Number(last7Avg).toLocaleString('en-NG')}
-- Previous 7 days avg: ₦${Number(prev7Avg).toLocaleString('en-NG')}`;
-  }
-
-  const fmtN = (n) => Number(n || 0).toLocaleString();
-
-  const prompt = `${COACHING_CONTEXT}
-
-USER:
-- Name: ${user.name.split(' ')[0]}
-- Business: ${user.biz_type || 'Small business'}
-- Location: ${user.state || 'unknown'} — use the correct local currency for this location
-
-FINANCIAL DATA (last 30 days):
-${JSON.stringify(recentHistory, null, 2)}
-
-KEY AVERAGES:
-- Daily revenue: ${fmtN(avgMetrics.avgRevenue)}
-- Daily expenses: ${fmtN(avgMetrics.avgExpenses)}
-- Average margin: ${(avgMetrics.avgMargin || 0).toFixed(1)}%
-- Best day: ${fmtN(Math.max(0, ...recentHistory.map(d => parseFloat(d.revenue) || 0)))}
-- Lowest day: ${fmtN(Math.min(0, ...recentHistory.map(d => parseFloat(d.revenue) || 0)))}
-
-${productPerformance}
-${trendAnalysis}
-${marketInsight}
-
-THEIR QUESTION: "${question}"
-
-HOW TO ANSWER:
-1. Lead with one specific insight from their actual numbers — not generic
-2. Explain what the number means in plain language
-3. If relevant, compare to what similar businesses typically see
-4. Give ONE concrete action for this week — tied to their actual figures
-5. Use the correct currency symbol for their location throughout
-6. Be warm, direct, and conversational — this is a WhatsApp chat
-7. Do not overwhelm with multiple problems at once
-
-Keep under 350 words. End with one follow-up question they can ask to go deeper.`;
-
-  try {
-    const message_obj = await client.messages.create({
-      model: MODEL,
-      max_tokens: 1024,
-      messages: [{ role: 'user', content: prompt }],
-    });
-
-    return message_obj.content[0].type === 'text'
-      ? message_obj.content[0].text
-      : "Keep logging your data — insights get better with more numbers!";
-  } catch (err) {
-    console.error('[Claude] answerBusinessQuestion failed:', err.constructor?.name, err.status || '', err.message);
-    return (
-      `Sorry, I hit a snag analyzing your data, ${user.name.split(' ')[0]}. 🔄\n\n` +
-      `Try asking again in a moment — or rephrase your question.\n\n` +
-      `You can also send "summary" to see your latest numbers right now.`
-    );
-  }
-}
-
-/**
  * Generate a short coaching nudge for users who haven't logged today.
  * Used by the 7pm cron for users with no entries.
- * Returns a 2-3 sentence insight based on their historical averages, or null on failure.
+ * Uses Haiku (cheaper model) — output is 2-3 sentences only.
+ * Returns a string insight, or null on failure.
  */
 async function generateNudgeInsight(user, avgData) {
   const client = getClient();
@@ -421,9 +214,7 @@ async function generateNudgeInsight(user, avgData) {
 
   const { avgRevenue, avgMargin, dayCount } = avgData;
 
-  const prompt = `${COACHING_CONTEXT}
-
-USER: ${user.name.split(' ')[0]}
+  const userPrompt = `USER: ${user.name.split(' ')[0]}
 Business: ${user.biz_type || 'Small business'}
 Location: ${user.state || 'unknown'} — use the correct local currency
 
@@ -441,9 +232,16 @@ Rules:
 
   try {
     const msg = await client.messages.create({
-      model: MODEL,
+      model:      HAIKU_MODEL,
       max_tokens: 150,
-      messages: [{ role: 'user', content: prompt }],
+      system: [
+        {
+          type:          'text',
+          text:          COACHING_CONTEXT,
+          cache_control: { type: 'ephemeral' },
+        },
+      ],
+      messages: [{ role: 'user', content: userPrompt }],
     });
     return msg.content[0]?.type === 'text' ? msg.content[0].text.trim() : null;
   } catch (err) {
@@ -453,8 +251,6 @@ Rules:
 }
 
 module.exports = {
-  parseWithAI,
   generateRecommendation,
-  answerBusinessQuestion,
   generateNudgeInsight,
 };

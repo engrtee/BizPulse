@@ -26,7 +26,6 @@ const { normalizePhone } = require('../utils/phone');
 
 const ParserService      = require('../services/parser');
 const GeminiService      = require('../services/gemini');
-const ClaudeService      = require('../services/claude');
 const WhatsAppService    = require('../services/whatsapp');
 const InventoryService   = require('../services/inventory');
 const CustomerService    = require('../services/customers');
@@ -770,55 +769,6 @@ async function handleDailyEntry(user, from, data, rawMessage, entryMethod = 'tex
 }
 
 // ─────────────────────────────────────────────
-// Internal: handle on-demand "summary" request
-// ─────────────────────────────────────────────
-async function handleSummaryRequest(user, from) {
-  const { calcHealthScore, healthLabel, topExpenseCategory } = require('../utils/formatter');
-  const EmailService = require('../services/email');
-
-  const date = todayWAT();
-
-  // Get today's totals, expense breakdowns, stock alerts, and full inventory
-  const [totals, breakdowns, lowStock, allInventory] = await Promise.all([
-    TransactionModel.getDailyTotals(user.id, date),
-    TransactionModel.getExpenseBreakdowns(user.id, date),
-    InventoryService.getLowStockAlerts(user.id),
-    InventoryService.getStock(user.id),
-  ]);
-
-  const revenue       = parseFloat(totals.revenue)       || 0;
-  const totalExpenses = parseFloat(totals.total_expenses) || 0;
-  const profit        = parseFloat(totals.profit)         || 0;
-  const customers     = parseInt(totals.customers, 10)    || 0;
-  const margin        = calcMargin(profit, revenue);
-  const score         = calcHealthScore(margin);
-  const hl            = healthLabel(score);
-  const topExpense    = topExpenseCategory(breakdowns);
-
-  const summaryData = {
-    revenue, totalExpenses, profit, margin,
-    healthScore: score, healthKey: hl.key,
-    topExpense, customers, date,
-    inventory: allInventory,  // full stock counts for the summary
-  };
-
-  if (revenue === 0) {
-    await WhatsAppService.sendMessage(from,
-      `📊 No entries logged today yet, ${user.name.split(' ')[0]}.\n\nSend your sales and expenses first, then request your summary.`);
-    return;
-  }
-
-  const aiRec = await ClaudeService.generateRecommendation(summaryData, user);
-
-  // Send numbers directly in WhatsApp — user asked, they should see it here
-  await WhatsAppService.sendEveningSummaryWhatsApp(from, user.name.split(' ')[0], summaryData, aiRec, lowStock);
-
-  // Also send email with full report (non-blocking)
-  EmailService.sendSummaryEmail(user, summaryData, aiRec, lowStock)
-    .catch((err) => console.error('[Email] sendSummaryEmail error:', err.message));
-}
-
-// ─────────────────────────────────────────────
 // Internal: download media (audio or image) from Meta Media API
 // ─────────────────────────────────────────────
 async function downloadWhatsAppMedia(mediaId) {
@@ -899,83 +849,6 @@ async function handleOnDemandSummary(user, from, text) {
     `Get insights → Send "summary" for today's full breakdown 📈`;
 
   await WhatsAppService.sendMessage(from, summary);
-}
-
-// ─────────────────────────────────────────────
-// Business coaching question handler
-// ─────────────────────────────────────────────
-async function handleBusinessQuestion(user, from, question) {
-  const firstName = user.name.split(' ')[0];
-
-  // Send thinking message
-  await WhatsAppService.sendMessage(from,
-    `🤔 Let me analyze your numbers and get you advice, ${firstName}... (moment please)`).catch(() => {});
-
-  try {
-    // Gather user's financial data
-    const userData = await gatherUserFinancialData(user.id);
-
-    // If too little data, ask them to log more
-    if(!userData.history || userData.history.length < 3) {
-      await WhatsAppService.sendMessage(from,
-        `I need a bit more data to give you solid advice, ${firstName}! 📊\n\n` +
-        `You've logged ${userData.history?.length || 0} entries. Once you hit 3-5, I can spot real patterns.\n\n` +
-        `Keep sending your daily numbers — I'll get smarter every day!`);
-      return;
-    }
-
-    // Use Claude for personalized coaching
-    const coaching = await ClaudeService.answerBusinessQuestion(question, user, userData);
-
-    await WhatsAppService.sendMessage(from, coaching);
-
-    // Offer next step
-    await WhatsAppService.sendMessage(from,
-      `💡 Want another insight? Just ask me anything about your business!\n\n` +
-      `Examples:\n• "Is my margin good?"\n• "Should I raise prices?"\n• "Why are expenses so high?"`
-    ).catch(() => {});
-  } catch (err) {
-    console.error('[Webhook] Business question failed:', err.message);
-    await WhatsAppService.sendMessage(from,
-      `Sorry, I had trouble analyzing your data right now, ${firstName}.\n\nTry again in a moment! 🔄`);
-  }
-}
-
-// ─────────────────────────────────────────────
-// Helper: Gather all financial data for a user
-// ─────────────────────────────────────────────
-async function gatherUserFinancialData(userId) {
-  const { query } = require('../models/db');
-
-  // Get last 30 days of transactions
-  const historyRes = await query(
-    `SELECT date, revenue, total_expenses, profit, margin, customers
-     FROM transactions 
-     WHERE user_id = $1 
-     ORDER BY date DESC 
-     LIMIT 30`,
-    [userId]
-  );
-
-  // Calculate averages
-  const history = historyRes.rows;
-  const avgRevenue = history.length > 0 ? history.reduce((s, r) => s + parseFloat(r.revenue), 0) / history.length : 0;
-  const avgExpenses = history.length > 0 ? history.reduce((s, r) => s + parseFloat(r.total_expenses), 0) / history.length : 0;
-  const avgMargin = history.length > 0 ? history.reduce((s, r) => s + parseFloat(r.margin), 0) / history.length : 0;
-
-  // Get inventory
-  const inventoryRes = await query(
-    `SELECT item_name, current_balance, unit_price, total_received
-     FROM inventory
-     WHERE user_id = $1`,
-    [userId]
-  );
-
-  return {
-    history,
-    avgMetrics: { avgRevenue, avgExpenses, avgMargin },
-    inventory: inventoryRes.rows || [],
-  };
 }
 
 // ─────────────────────────────────────────────

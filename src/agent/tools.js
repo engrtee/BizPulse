@@ -292,6 +292,7 @@ const TOOLS = [
       },
       required: ['period1', 'period2'],
     },
+    cache_control: { type: 'ephemeral' },
   },
 
 ];

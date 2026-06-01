@@ -3,7 +3,8 @@
 const { query } = require('../../models/db');
 const Anthropic  = require('@anthropic-ai/sdk');
 
-const MODEL = 'claude-sonnet-4-6';
+const MODEL       = 'claude-sonnet-4-6';
+const HAIKU_MODEL = 'claude-haiku-4-5-20251001';
 
 function getClient() {
   if (!process.env.ANTHROPIC_API_KEY) return null;
@@ -20,7 +21,7 @@ async function getConversationHistory(whatsappNumber) {
      FROM conversation_history
      WHERE whatsapp_number = $1
      ORDER BY created_at ASC
-     LIMIT 20`,
+     LIMIT 15`,
     [whatsappNumber]
   );
   return res.rows.map(r => ({ role: r.role, content: r.content }));
@@ -144,7 +145,7 @@ async function generateRollingSummary(whatsappNumber, messages) {
     }
 
     const response = await client.messages.create({
-      model:      MODEL,
+      model:      HAIKU_MODEL,
       max_tokens: 300,
       system: [
         {
