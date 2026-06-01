@@ -17,6 +17,7 @@ const router             = express.Router();
 const UserModel          = require('../models/user');
 const TransactionModel   = require('../models/transaction');
 const InventoryService   = require('../services/inventory');
+const ProductModel       = require('../models/product');
 const SheetsService      = require('../services/sheets');
 
 const GeminiService      = require('../services/gemini');
@@ -264,14 +265,37 @@ router.get('/summary/latest', async (req, res) => {
     const user = await UserModel.findById(userId);
     if (!user) return res.status(404).json({ error: 'User not found.' });
 
-    const [latest, history, lowStock, stock, completeness, monthly] = await Promise.all([
+    const [latest, history, allProducts, completeness, monthly] = await Promise.all([
       TransactionModel.getLatest(user.id),
       TransactionModel.getHistory(user.id, 10),
-      InventoryService.getLowStockAlerts(user.id),
-      InventoryService.getStock(user.id),
+      ProductModel.getWithHealth(user.id),
       TransactionModel.getCompleteness(user.id, 10),
       TransactionModel.getMonthlyTotals(user.id),
     ]);
+
+    // Compute low-stock alerts from products table (same source as WhatsApp/Kemi).
+    // Map to the legacy field names (item_name / current_balance) so the existing
+    // frontend HTML works without changes.
+    const lowStock = allProducts
+      .filter(p => {
+        const bal = parseFloat(p.current_stock)       || 0;
+        const tot = parseFloat(p.total_ever_received) || 0;
+        const vel = parseFloat(p.velocity_per_day)    || 0;
+        return bal === 0
+          || (tot > 0 && bal < tot * 0.20)
+          || (vel > 0 && bal / vel <= 2);
+      })
+      .map(p => ({
+        item_name:       p.product_name,
+        current_balance: p.current_stock,
+        unit:            p.unit || 'units',
+      }));
+
+    const stock = allProducts.map(p => ({
+      item_name:       p.product_name,
+      current_balance: p.current_stock,
+      unit:            p.unit || 'units',
+    }));
 
     if (!latest) {
       return res.json({ hasData: false, history: [], lowStock, stock: stock || [], completeness, monthly });
@@ -360,7 +384,18 @@ router.get('/inventory', async (req, res) => {
     const { userId } = req.query;
     if (!userId) return res.status(400).json({ error: 'userId is required.' });
 
-    const items = await InventoryService.getStock(userId);
+    // Read from products table (Kemi's source of truth) and map to the legacy
+    // field names so any existing frontend code continues to work unchanged.
+    const products = await ProductModel.getWithHealth(userId);
+    const items = products.map(p => ({
+      id:              p.id,
+      user_id:         p.user_id,
+      item_name:       p.product_name,
+      current_balance: p.current_stock,
+      total_received:  p.total_ever_received,
+      unit_price:      p.last_purchase_price,
+      unit:            p.unit || 'units',
+    }));
     res.json({ items });
   } catch (err) {
     console.error('[API] /inventory error:', err.message);

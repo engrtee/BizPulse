@@ -1,13 +1,29 @@
 /**
  * scripts/migrate-old-inventory.js
  *
- * One-time migration: transfers stock from the old `inventory` table into the
- * new `products` + `product_transactions` tables for all users.
+ * Reconciles the old `inventory` table with the new `products` table.
+ * Called at server startup (non-blocking) and safe to run multiple times.
  *
- * Safe to run multiple times — skips products that already have stock or
- * existing transactions in the new system.
+ * RECONCILIATION RULES
+ * ─────────────────────────────────────────────────────────────────────
+ * The `products` table is the source of truth going forward because Kemi
+ * (the WhatsApp agent) writes exclusively to it.
  *
- * Run: node scripts/migrate-old-inventory.js
+ * For each item in the old `inventory` table:
+ *
+ * Case A — No matching product in `products` yet (Kemi has never seen it):
+ *   → Create the product and set its opening stock from `inventory`.
+ *
+ * Case B — Product exists in `products` with total_ever_received = 0
+ *           (Kemi created the product via a sale but never set opening stock):
+ *   → Set opening stock from `inventory.current_balance` and recompute
+ *     `current_stock` as opening + all stock_in movements - all sales.
+ *
+ * Case C — Product exists in `products` with total_ever_received > 0
+ *           (Kemi has been actively tracking this item):
+ *   → `products` is correct. Sync `inventory.current_balance` to match
+ *     `products.current_stock` so the two tables stop drifting apart.
+ *     This is the case that was causing the display discrepancy.
  */
 
 'use strict';
@@ -18,128 +34,97 @@ const ProductModel      = require('../models/product');
 const ProductService    = require('../services/productService');
 
 async function run() {
-  // initDb() is intentionally NOT called here — when invoked from server.js,
-  // the DB is already initialised. For direct execution, see the block below.
+  console.log('[Migration] Reconciling inventory ↔ products tables...');
 
-  console.log('=== Old Inventory → Products Migration ===\n');
-
+  // All old inventory rows with a non-zero balance or that have received stock
   const inv = await query(`
     SELECT i.*, u.name AS user_name
     FROM inventory i
     JOIN users u ON u.id = i.user_id
-    WHERE i.current_balance > 0
+    WHERE i.current_balance > 0 OR i.total_received > 0
     ORDER BY i.user_id, i.item_name
   `);
 
   if (inv.rows.length === 0) {
-    console.log('No old inventory rows with non-zero balance. Nothing to migrate.');
+    console.log('[Migration] Old inventory is empty — nothing to reconcile.');
     return;
   }
 
-  console.log(`Found ${inv.rows.length} old inventory items to check:\n`);
-
   const date = new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Lagos' });
-  let migrated = 0, skipped = 0;
+  let caseA = 0, caseB = 0, caseC = 0;
 
   for (const item of inv.rows) {
     const userId  = item.user_id;
     const rawName = item.item_name;
-    const balance = parseFloat(item.current_balance);
+    const balance = parseFloat(item.current_balance) || 0;
     const price   = parseFloat(item.unit_price) || null;
 
-    // Check if a matching product already exists in the new system
-    const existing = await ProductService.findProductFuzzy(userId, rawName);
+    try {
+      const existing = await ProductService.findProductFuzzy(userId, rawName);
 
-    if (existing) {
-      const existingStock = parseFloat(existing.current_stock) || 0;
-      const existingRecv  = parseFloat(existing.total_ever_received) || 0;
-
-      if (existingRecv > 0) {
-        // Product already has stock history in new system — check for balance mismatch
-        if (Math.abs(existingStock - balance) > 0.01) {
-          console.log(`⚠️  MISMATCH user=${userId} (${item.user_name}) [${rawName}]`);
-          console.log(`     Old inventory: ${balance} units`);
-          console.log(`     New products:  ${existingStock} units (from ${existingRecv} ever received)`);
-          console.log(`     → Will correct new product stock to match old inventory balance\n`);
-
-          // Add an adjustment transaction to reconcile
-          const adjustment = balance - existingStock;
-          await ProductModel.applyStockChange(existing.id, { delta: adjustment });
-          if (adjustment > 0) {
-            await ProductModel.recordTransaction({
-              userId,
-              productId:    existing.id,
-              type:         'stock_in',
-              quantity:     adjustment,
-              unitPrice:    price,
-              totalAmount:  price ? adjustment * price : 0,
-              dailyEntryId: null,
-              date,
-              channel:      'retail',
-            });
-          }
-          migrated++;
-        } else {
-          console.log(`✅  OK user=${userId} (${item.user_name}) [${rawName}] → ${existingStock} units (already correct)`);
-          skipped++;
-        }
+      // ── Case A: product doesn't exist in new system yet ──────────────────
+      if (!existing) {
+        if (balance <= 0) continue; // nothing to migrate
+        const displayName   = ProductService.normalizeProductName(rawName);
+        const normalizedKey = ProductService.normalizeForStorage(rawName);
+        const product = await ProductModel.create(userId, displayName, normalizedKey, 'units');
+        await ProductModel.setOpeningBalance(product.id, balance, price);
+        await ProductModel.recordTransaction({
+          userId, productId: product.id, type: 'stock_in',
+          quantity: balance, unitPrice: price,
+          totalAmount: price ? balance * price : 0,
+          dailyEntryId: null, date, channel: 'retail',
+        });
+        console.log(`[Migration] A — Created "${rawName}" for user ${userId} (${item.user_name}): ${balance} units`);
+        caseA++;
         continue;
       }
 
-      // Product exists but has 0 total_ever_received — likely created by a sale with no opening stock
-      // Set the opening balance now
-      console.log(`📦  FIXING user=${userId} (${item.user_name}) [${rawName}]`);
-      console.log(`     Old inventory has ${balance} units. New product had ${existingStock} (no opening stock set)`);
+      const existingStock = parseFloat(existing.current_stock)       || 0;
+      const existingRecv  = parseFloat(existing.total_ever_received) || 0;
 
-      await ProductModel.setOpeningBalance(existing.id, balance, price);
-      // Also update current_stock to reflect: opening - whatever was already sold
-      const alreadySold = parseFloat(existing.total_ever_received) || 0; // was 0 before
-      // Re-apply: current = balance (opening stock just set, transactions already recorded)
-      // The new current_stock should be balance + existing delta from transactions
-      const txRes = await query(
-        `SELECT
-           COALESCE(SUM(CASE WHEN transaction_type='stock_in' THEN quantity ELSE 0 END),0) AS total_in,
-           COALESCE(SUM(CASE WHEN transaction_type='sale' THEN quantity ELSE 0 END),0) AS total_out
-         FROM product_transactions WHERE product_id = $1 AND quantity IS NOT NULL`,
-        [existing.id]
-      );
-      const totalIn  = parseFloat(txRes.rows[0].total_in)  || 0;
-      const totalOut = parseFloat(txRes.rows[0].total_out) || 0;
-      const correctStock = Math.max(0, balance + totalIn - totalOut);
+      // ── Case B: product exists but Kemi never set opening stock ──────────
+      if (existingRecv === 0 && balance > 0) {
+        // Calculate correct current_stock from opening + movements
+        const txRes = await query(
+          `SELECT
+             COALESCE(SUM(CASE WHEN transaction_type='stock_in' THEN quantity ELSE 0 END), 0) AS total_in,
+             COALESCE(SUM(CASE WHEN transaction_type='sale'     THEN quantity ELSE 0 END), 0) AS total_out
+           FROM product_transactions
+           WHERE product_id = $1 AND quantity IS NOT NULL`,
+          [existing.id]
+        );
+        const totalIn   = parseFloat(txRes.rows[0].total_in)  || 0;
+        const totalOut  = parseFloat(txRes.rows[0].total_out) || 0;
+        const newStock  = Math.max(0, balance + totalIn - totalOut);
+        const newRecv   = balance + totalIn;
 
-      await query(
-        'UPDATE products SET current_stock = $1, total_ever_received = $2 WHERE id = $3',
-        [correctStock, balance + totalIn, existing.id]
-      );
-      console.log(`     → Set current_stock=${correctStock}, total_ever_received=${balance + totalIn}\n`);
-      migrated++;
-      continue;
+        await query(
+          'UPDATE products SET current_stock = $1, total_ever_received = $2, last_purchase_price = COALESCE($3, last_purchase_price) WHERE id = $4',
+          [newStock, newRecv, price, existing.id]
+        );
+        console.log(`[Migration] B — Fixed "${rawName}" for user ${userId} (${item.user_name}): stock ${existingStock}→${newStock}, ever_rcvd 0→${newRecv}`);
+        caseB++;
+        continue;
+      }
+
+      // ── Case C: Kemi is actively tracking — products is truth ────────────
+      // Sync inventory to match products so the tables stay in agreement.
+      if (Math.abs(existingStock - balance) > 0.01) {
+        await query(
+          'UPDATE inventory SET current_balance = $1 WHERE user_id = $2 AND LOWER(item_name) = LOWER($3)',
+          [existingStock, userId, rawName]
+        );
+        console.log(`[Migration] C — Synced inventory "${rawName}" for user ${userId} (${item.user_name}): ${balance}→${existingStock} (products is truth)`);
+        caseC++;
+      }
+
+    } catch (err) {
+      console.error(`[Migration] Error on "${rawName}" user=${userId}:`, err.message);
     }
-
-    // Product doesn't exist at all in new system — create it with the old inventory balance
-    console.log(`📦  CREATING user=${userId} (${item.user_name}) [${rawName}] with ${balance} units`);
-    const displayName   = ProductService.normalizeProductName(rawName);
-    const normalizedKey = ProductService.normalizeForStorage(rawName);
-    const product = await ProductModel.create(userId, displayName, normalizedKey, 'units');
-    await ProductModel.setOpeningBalance(product.id, balance, price);
-    await ProductModel.recordTransaction({
-      userId,
-      productId:    product.id,
-      type:         'stock_in',
-      quantity:     balance,
-      unitPrice:    price,
-      totalAmount:  price ? balance * price : 0,
-      dailyEntryId: null,
-      date,
-      channel:      'retail',
-    });
-    console.log(`     → Created with ${balance} units opening stock\n`);
-    migrated++;
   }
 
-  console.log(`\n=== Done ===`);
-  console.log(`Migrated/fixed: ${migrated} items`);
-  console.log(`Already correct: ${skipped} items`);
+  console.log(`[Migration] Done — A(created):${caseA}  B(fixed):${caseB}  C(synced):${caseC}`);
 }
 
 // Allow direct execution: node scripts/migrate-old-inventory.js
