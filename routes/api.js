@@ -88,29 +88,15 @@ router.post('/register', async (req, res) => {
     if (normalizedPhone) {
       const firstName = user.name.split(' ')[0];
       WhatsAppService.sendMessage(normalizedPhone,
-        `${firstName}, you just joined something that 39 million Nigerian business owners don't have yet. 💡\n\n` +
-        `A business that knows its own numbers.\n\n` +
-        `*What this means for you:*\n\n` +
-        `No more guessing your profit at the end of the day. No spreadsheet. No accountant. No app to open.\n\n` +
-        `You send your numbers on WhatsApp — the same way you text a friend — and BizPulse tracks everything automatically. Profit. Expenses. Stock. All of it.\n\n` +
-        `Every evening, you also get AI-powered business insight specific to *your* business type. Not generic advice. Real analysis, based on your actual numbers.\n\n` +
-        `*Your daily habit — 30 seconds:*\n\n` +
-        `At the end of every business day, just send:\n\n` +
-        `_"Made 45k today, spent 8k on stock and 3k transport, served 12 customers"_\n\n` +
-        `Prefer to talk? *Send a voice note* and say exactly that. BizPulse listens, transcribes, and tracks it — same result.\n\n` +
-        `That is it. BizPulse handles the rest.\n\n` +
-        `*Commands to know:*\n\n` +
-        `📊 Daily numbers\n   _"made 45k today spent 8k on stock"_\n\n` +
-        `📋 Your full summary\n   _"summary"_ or _"report"_\n\n` +
-        `📦 Check your stock\n   _"stock?"_ or _"inventory?"_\n\n` +
-        `📥 Receive stock\n   _"received 50 bags rice at 900 each"_\n\n` +
-        `📤 Sell stock\n   _"sold 12 bags rice today"_\n\n` +
-        `❓ See all commands\n   _"help"_\n\n` +
-        `*Every evening at 7pm:*\n\n` +
-        `Your daily business report arrives automatically. Revenue, profit, expenses broken down — and an AI recommendation for your specific business. Like a sharp business advisor who checks in every evening. Without the bill.\n\n` +
-        `*Start today.*\n\n` +
-        `Send your numbers right now — even just one line from today. See what comes back.\n\n` +
-        `Your dashboard: https://mybizpulse.app 🚀`
+        `${firstName}, you're registered on BizPulse! 🎉\n\n` +
+        `I'm Kemi — I'll be tracking your business right here on WhatsApp.\n\n` +
+        `Before we start, I need one thing from you:\n` +
+        `Tell me what stock you currently have.\n\n` +
+        `This is Step 1. Without it, I can't alert you before things run out or tell you which products are making you money.\n\n` +
+        `Reply to this message with what you have:\n` +
+        `_"I have 50 bags rice, 20 cartons indomie, 10 peak milk"_\n\n` +
+        `Or snap a photo of your shelf or notebook and send it — I'll read it myself. 📸\n\n` +
+        `Once you do this, I'll handle everything. Sales, stock, profit — all tracked automatically. 🚀`
       ).catch((err) => console.error('[API] Registration WhatsApp welcome failed:', err.message));
     }
 
