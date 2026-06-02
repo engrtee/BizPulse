@@ -22,6 +22,7 @@ const adminRouter              = require('./routes/admin');
 require('./jobs/dailySummary');
 require('./jobs/morningCoaching');
 require('./jobs/retentionNudge');
+require('./src/agent/digest');   // 8pm Kemi digest + 15-min stock_intelligence_mv refresh + 3am history cleanup
 
 const app  = express();
 const PORT = process.env.PORT || 3000;

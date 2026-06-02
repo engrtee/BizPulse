@@ -102,14 +102,9 @@ async function processUser(user) {
     const profit        = parseFloat(totals.profit)         || 0;
     const customers     = parseInt(totals.customers, 10)    || 0;
 
-    // No entries today — send a nudge with a coaching tip instead of silently skipping
+    // No entries today — skip (6pm reminder job already nudged this user)
     if (revenue === 0 && totalExpenses === 0) {
-      console.log(`[Cron] 💬 No entries for ${user.name} on ${date} — sending nudge`);
-      if (user.whatsapp_number) {
-        await sendEveningNudge(user).catch(e =>
-          console.error(`[Cron] Nudge failed for ${user.name}:`, e.message)
-        );
-      }
+      console.log(`[Cron] ⏭ No entries for ${user.name} on ${date} — skipping (6pm nudge already sent)`);
       return;
     }
 

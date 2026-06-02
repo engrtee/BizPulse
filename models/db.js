@@ -491,6 +491,105 @@ async function initDb() {
   )`, 'CREATE goals');
   await run(`CREATE INDEX IF NOT EXISTS idx_goals_number ON goals(whatsapp_number)`, 'INDEX goals');
 
+  // ── fuzzystrmatch extension (required for LEVENSHTEIN in search_products tool) ─
+  await run(`CREATE EXTENSION IF NOT EXISTS fuzzystrmatch`, 'CREATE EXTENSION fuzzystrmatch');
+
+  // ── Goals unique constraint — deduplicate existing rows then enforce uniqueness ─
+  await run(`
+    DELETE FROM goals g1
+    USING goals g2
+    WHERE g1.whatsapp_number = g2.whatsapp_number
+      AND g1.type = g2.type
+      AND g1.period = g2.period
+      AND g1.created_at < g2.created_at
+  `, 'DEDUP goals');
+  await run(`CREATE UNIQUE INDEX IF NOT EXISTS idx_goals_unique ON goals(whatsapp_number, type, period)`, 'UNIQUE INDEX goals');
+
+  // ── Stock intelligence materialized view (Kemi agent) ──────────────────────────
+  // Only created if it doesn't exist. Refreshed every 15 min by digest.js cron.
+  await run(`CREATE MATERIALIZED VIEW IF NOT EXISTS stock_intelligence_mv AS
+  WITH
+    sales_7d AS (
+      SELECT
+        pt.user_id,
+        pt.product_id,
+        COALESCE(SUM(pt.quantity), 0)::NUMERIC / 7.0 AS velocity_7d
+      FROM product_transactions pt
+      WHERE pt.transaction_type = 'sale'
+        AND pt.created_at > NOW() - INTERVAL '7 days'
+      GROUP BY pt.user_id, pt.product_id
+    ),
+    sales_28d AS (
+      SELECT
+        pt.user_id,
+        pt.product_id,
+        COALESCE(SUM(pt.quantity), 0)::NUMERIC / 28.0 AS velocity_28d
+      FROM product_transactions pt
+      WHERE pt.transaction_type = 'sale'
+        AND pt.created_at > NOW() - INTERVAL '28 days'
+      GROUP BY pt.user_id, pt.product_id
+    ),
+    last_sold AS (
+      SELECT DISTINCT ON (product_id)
+        product_id,
+        created_at AS last_sold_at
+      FROM product_transactions
+      WHERE transaction_type = 'sale'
+      ORDER BY product_id, created_at DESC
+    )
+  SELECT
+    u.whatsapp_number,
+    p.id            AS product_id,
+    p.product_name,
+    p.unit,
+    p.current_stock,
+    COALESCE(s7.velocity_7d,   0)::NUMERIC AS velocity_7d,
+    COALESCE(s28.velocity_28d, 0)::NUMERIC AS velocity_28d,
+    COALESCE(tf.typical_lead_time_days, 2) AS lead_time_days,
+    CASE
+      WHEN COALESCE(s7.velocity_7d, 0) <= 0 THEN NULL
+      ELSE ROUND((p.current_stock / s7.velocity_7d)::NUMERIC, 1)
+    END AS days_of_cover,
+    CASE
+      WHEN COALESCE(s28.velocity_28d, 0) <= 0 THEN NULL
+      ELSE ROUND((COALESCE(s7.velocity_7d, 0) / s28.velocity_28d)::NUMERIC, 2)
+    END AS trend,
+    CASE
+      WHEN COALESCE(s7.velocity_7d, 0) <= 0 THEN FALSE
+      WHEN (p.current_stock / NULLIF(s7.velocity_7d, 0))
+           < COALESCE(tf.typical_lead_time_days, 2) * 1.5 THEN TRUE
+      ELSE FALSE
+    END AS reorder_suggested,
+    CASE
+      WHEN p.current_stock <= 0                                    THEN 100
+      WHEN COALESCE(s7.velocity_7d, 0) <= 0                       THEN 0
+      WHEN p.current_stock / s7.velocity_7d < 1                   THEN 90
+      WHEN p.current_stock / s7.velocity_7d < 2                   THEN 70
+      WHEN p.current_stock / s7.velocity_7d
+           < COALESCE(tf.typical_lead_time_days, 2) * 1.5         THEN 50
+      ELSE GREATEST(0, LEAST(30,
+             30 - ROUND((p.current_stock / s7.velocity_7d) * 3)::INTEGER))
+    END AS stockout_risk_score,
+    CASE
+      WHEN COALESCE(s28.velocity_28d, 0) < 0.5
+        AND (
+          COALESCE(s7.velocity_7d, 0) <= 0
+          OR p.current_stock / NULLIF(s7.velocity_7d, 0) > 14
+        ) THEN TRUE
+      ELSE FALSE
+    END AS is_slow_mover,
+    ls.last_sold_at
+  FROM products p
+  JOIN  users        u  ON u.id = p.user_id
+  LEFT JOIN sales_7d  s7  ON s7.user_id  = p.user_id AND s7.product_id  = p.id
+  LEFT JOIN sales_28d s28 ON s28.user_id = p.user_id AND s28.product_id = p.id
+  LEFT JOIN last_sold ls  ON ls.product_id = p.id
+  LEFT JOIN trader_facts tf ON tf.whatsapp_number = u.whatsapp_number
+  WHERE p.is_active = TRUE`, 'CREATE stock_intelligence_mv');
+
+  await run(`CREATE UNIQUE INDEX IF NOT EXISTS idx_stock_intel_mv_unique
+    ON stock_intelligence_mv(whatsapp_number, product_id)`, 'UNIQUE INDEX stock_intelligence_mv');
+
   console.log('✅ Database tables ready.');
 }
 

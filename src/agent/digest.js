@@ -21,7 +21,7 @@ function getClient() {
 }
 
 function getWhatsAppService() {
-  return require('../services/whatsapp');
+  return require('../../services/whatsapp');
 }
 
 /**
