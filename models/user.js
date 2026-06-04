@@ -195,6 +195,15 @@ const UserModel = {
     return res.rows[0];
   },
 
+  /** Update only the biz_type field — used when clarifying "Other" business type */
+  async updateBizType(userId, bizType) {
+    const res = await query(
+      'UPDATE users SET biz_type = $1 WHERE id = $2 RETURNING *',
+      [bizType, userId]
+    );
+    return res.rows[0];
+  },
+
   /** Soft-delete a user (keeps their data intact) */
   async deactivate(userId) {
     await query('UPDATE users SET active = FALSE WHERE id = $1', [userId]);

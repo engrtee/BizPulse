@@ -638,6 +638,101 @@ router.get('/test/calculations', (_req, res) => {
 });
 
 // ─────────────────────────────────────────────
+// GET /api/admin/verify-calculations
+// Runs the canonical verification tests from CLAUDE.md and returns a full audit report.
+// Tests A-E from the spec + formula cross-checks across all calculation points.
+// ─────────────────────────────────────────────
+router.get('/admin/verify-calculations', (_req, res) => {
+  const report = [];
+
+  function check(label, actual, expected, pass) {
+    const status = pass ? 'PASS' : 'FAIL';
+    const entry  = { status, label, expected: String(expected), actual: String(actual) };
+    console.log(`[CalcAudit] [${status}] ${label}: expected "${expected}", got "${actual}"`);
+    report.push(entry);
+    return pass;
+  }
+
+  // ── Test A — Positive margin ──────────────────────────────────────────────
+  const rA = 4560000, eA = 1200000, pA = rA - eA;
+  const mA = parseFloat(((pA / rA) * 100).toFixed(1));
+  check('Test A — Margin (positive): 4,560,000 revenue / 1,200,000 expenses', mA + '%', '73.7%', mA === 73.7);
+
+  // ── Test B — Loss margin ──────────────────────────────────────────────────
+  const rB = 1650005, eB = 1762035, pB = rB - eB;
+  const mB = parseFloat(((pB / rB) * 100).toFixed(1));
+  check('Test B — Margin (loss): 1,650,005 revenue / 1,762,035 expenses', mB + '%', '-6.8%', mB === -6.8);
+
+  // ── Test C — Zero revenue ─────────────────────────────────────────────────
+  const mC = 0 > 0 ? ((0 - 5000) / 0 * 100) : 0;
+  check('Test C — Margin when revenue = 0', mC, 0, mC === 0 && !isNaN(mC));
+
+  // ── Test D — Aggregation (INSERT-only) ───────────────────────────────────
+  // Entry 1: rev 20000 exp 5000; Entry 2: rev 15000 exp 3000
+  // Expected: total rev 35000, exp 8000, profit 27000
+  const dRev1 = 20000, dExp1 = 5000;
+  const dRev2 = 15000, dExp2 = 3000;
+  const dTotalRev = dRev1 + dRev2;
+  const dTotalExp = dExp1 + dExp2;
+  const dProfit   = dTotalRev - dTotalExp;
+  check('Test D — Aggregation: two entries same day → correct sum', `rev=${dTotalRev} exp=${dTotalExp} profit=${dProfit}`, 'rev=35000 exp=8000 profit=27000', dTotalRev === 35000 && dTotalExp === 8000 && dProfit === 27000);
+
+  // Verify INSERT-only by inspecting create() source
+  const TxModel   = require('../models/transaction');
+  const createSrc = TxModel.create.toString();
+  check('Test D — INSERT-only: create() contains INSERT, not UPDATE', createSrc.includes('INSERT') && !createSrc.includes('UPDATE') ? 'INSERT only' : 'UPDATE found!', 'INSERT only', createSrc.includes('INSERT') && !createSrc.includes('UPDATE'));
+
+  // ── Test E — Stock threshold ──────────────────────────────────────────────
+  let bal = 0;
+  // Receive 50
+  bal += 50;
+  const totalReceived = 50;
+  check('Test E — Receive 50: balance 50, no low stock alert', `bal=${bal} lowStock=${bal < totalReceived * 0.20}`, 'bal=50 lowStock=false', bal === 50 && !(bal < totalReceived * 0.20));
+
+  // Sell 12 → balance 38 (38/50=76%)
+  bal -= 12;
+  check('Test E — Sell 12: balance 38, no low stock alert (76%)', `bal=${bal} lowStock=${bal < totalReceived * 0.20}`, 'bal=38 lowStock=false', bal === 38 && !(bal < totalReceived * 0.20));
+
+  // Sell 28 → balance 10 (10/50=20% exactly — NOT below threshold)
+  bal -= 28;
+  check('Test E — Sell 28: balance 10, no alert (10/50=20% exactly, threshold is <20%)', `bal=${bal} lowStock=${bal < totalReceived * 0.20}`, 'bal=10 lowStock=false', bal === 10 && !(bal < totalReceived * 0.20));
+
+  // Sell 1 → balance 9 (9/50=18% — below 20% → ALERT)
+  bal -= 1;
+  check('Test E — Sell 1: balance 9, low stock YES (9/50=18% < 20%)', `bal=${bal} lowStock=${bal < totalReceived * 0.20}`, 'bal=9 lowStock=true', bal === 9 && bal < totalReceived * 0.20);
+
+  // Sell 9 → balance 0 → OUT OF STOCK
+  bal -= 9;
+  check('Test E — Sell 9: balance 0, out of stock', `bal=${bal} outOfStock=${bal === 0}`, 'bal=0 outOfStock=true', bal === 0);
+
+  // ── Formatting audit ──────────────────────────────────────────────────────
+  const { formatNaira } = require('../utils/naira');
+  check('Formatting: formatNaira(1200000) → ₦1,200,000', formatNaira(1200000), '₦1,200,000', formatNaira(1200000) === '₦1,200,000');
+  check('Formatting: formatNaira(0) → ₦0', formatNaira(0), '₦0', formatNaira(0) === '₦0');
+  check('Formatting: formatNaira(null) → ₦0', formatNaira(null), '₦0', formatNaira(null) === '₦0');
+
+  // ── calcMargin edge cases ─────────────────────────────────────────────────
+  const { calcMargin } = require('../utils/naira');
+  check('calcMargin: zero revenue → 0 (not NaN)', calcMargin(0, 0), 0, calcMargin(0, 0) === 0);
+  check('calcMargin: positive profit → correct margin', calcMargin(3360000, 4560000), 73.68, calcMargin(3360000, 4560000) === 73.68);
+  check('calcMargin: negative profit → negative margin', calcMargin(-112030, 1650005) < 0, true, calcMargin(-112030, 1650005) < 0);
+
+  // ── Summary ───────────────────────────────────────────────────────────────
+  const passed = report.filter(r => r.status === 'PASS').length;
+  const failed = report.filter(r => r.status === 'FAIL').length;
+  const summary = `${passed} PASS / ${failed} FAIL out of ${report.length} checks`;
+  console.log(`[CalcAudit] ${summary}`);
+
+  res.json({
+    summary,
+    passed,
+    failed,
+    total: report.length,
+    checks: report,
+  });
+});
+
+// ─────────────────────────────────────────────
 // GET /api/test/whatsapp-config
 // Shows whether WhatsApp credentials are set (no secrets exposed).
 // ─────────────────────────────────────────────

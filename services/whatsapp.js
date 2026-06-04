@@ -13,6 +13,7 @@ require('dotenv').config();
 const axios = require('axios');
 const { normalizePhone } = require('../utils/phone');
 const { MessageModel } = require('../models/db');
+const { getStockExamples } = require('./stockExamples');
 
 const BASE_URL = 'https://graph.facebook.com/v19.0';
 
@@ -385,28 +386,15 @@ async function sendEveningReminder(to, firstName, streak) {
  * @param {string} bizType   User's business type (for personalised example)
  */
 async function sendOnboarding(to, firstName, bizType) {
-  const b = (bizType || '').toLowerCase();
-  let example = '"I have 50 bags rice, 20 cartons indomie, 10 peak milk"';
-
-  if (/fragrance|perfume|oil|scent/i.test(b)) {
-    example = '"I have 20 oud oil, 15 rose oil, 5 musk"';
-  } else if (/fashion|cloth|tailor|fabric|ankara/i.test(b)) {
-    example = '"I have 40 yards ankara, 20 yards lace, 15 george"';
-  } else if (/food|restaurant|bakery|cook/i.test(b)) {
-    example = '"I have 10 bags rice, 5 cartons eggs, 20 litres palm oil"';
-  } else if (/beauty|hair|salon|nail|makeup/i.test(b)) {
-    example = '"I have 15 wigs, 10 relaxer packs, 20 body cream"';
-  } else if (/tech|phone|electr|gadget|computer/i.test(b)) {
-    example = '"I have 10 iPhone 15, 5 Samsung A54, 20 power banks"';
-  }
+  const examples = await getStockExamples(bizType);
 
   const body =
     `${firstName}, welcome — I'm Kemi, your BizPulse assistant. ✅\n\n` +
     `Before we do anything else, I need one thing from you:\n` +
     `Tell me what stock you currently have.\n\n` +
     `This is Step 1. Without it, I can't watch your levels or tell you which products are making you money.\n\n` +
-    `Type what you have now:\n` +
-    `${example}\n\n` +
+    `Type what you have now. For example:\n\n` +
+    `Opening stock:\n${examples}\n\n` +
     `Or snap a photo of your shelf or notebook and send it here — I'll read it myself. 📸\n\n` +
     `Do this first and everything else will fall into place. 🚀`;
 
@@ -416,33 +404,15 @@ async function sendOnboarding(to, firstName, bizType) {
 /**
  * Send the opening stock request message.
  * Called after onboarding if opening_stock_logged is still false.
- * Personalised by biz_type if available.
+ * Personalised by biz_type with business-specific examples.
  */
 async function sendOpeningStockRequest(to, firstName, bizType) {
-  const b = (bizType || '').toLowerCase();
-  let example = '"I have [product] [quantity], [product] [quantity]"';
-  let emoji = '📦';
-
-  if (/fragrance|perfume|oil|scent/i.test(b)) {
-    example = '"I have 20 oud oil, 15 rose, 5 musk oil"';
-    emoji = '🧴';
-  } else if (/retail|provision|fmcg|store|shop/i.test(b)) {
-    example = '"I have 50 indomie, 30 peak milk, 20 cabin, 40 eva water"';
-    emoji = '🏪';
-  } else if (/fashion|cloth|tailor|fabric|ankara/i.test(b)) {
-    example = '"I have 40 yards ankara, 20 yards lace, 30 yards george"';
-    emoji = '👗';
-  } else if (/food|restaurant|bakery|cook/i.test(b)) {
-    example = '"I have 10 bags rice, 5 litres palm oil, 20 cartons eggs"';
-    emoji = '🍲';
-  } else if (/beauty|hair|salon|nail|makeup/i.test(b)) {
-    example = '"I have 15 wigs, 10 relaxer packs, 20 hair cream"';
-    emoji = '💅';
-  }
+  const examples = await getStockExamples(bizType);
 
   const body =
-    `I need your current stock before I can watch anything for you. ${emoji}\n\n` +
-    `Voice note, photo of your shelf, or type:\n${example}\n\n` +
+    `I need your current stock before I can watch anything for you. 📦\n\n` +
+    `Voice note, photo of your shelf, or type your quantities. For example:\n\n` +
+    `Opening stock:\n${examples}\n\n` +
     `One message. That's all it takes to switch on your stock alerts.`;
 
   return sendMessage(to, body);

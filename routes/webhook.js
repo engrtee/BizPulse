@@ -332,6 +332,63 @@ router.post('/', async (req, res) => {
     }
     // ────────────────────────────────────────────────────────────────────────
 
+    // ── "Others" biz_type clarification ──────────────────────────────────────
+    // If this user's biz_type is still "Other" or "Others", ask them to specify
+    // before routing to Kemi. Uses pending_entries to track the waiting state.
+    if (/^others?$/i.test((user.biz_type || '').trim())) {
+      const pending = await ConfirmationService.getPendingEntry(user.id);
+
+      if (pending && pending.entry_type === 'biz_type_clarification') {
+        // User is responding to the clarification question
+        const rawResponse = text.trim();
+        const isMetaReply = /^(yes|y|no|n|cancel|help|\?)$/i.test(rawResponse);
+        if (rawResponse.length < 3 || isMetaReply) {
+          await WhatsAppService.sendMessage(from,
+            `Please describe your business briefly.\n\n` +
+            `Just reply with what you sell — e.g.:\n` +
+            `"I sell perfume oils"\n` +
+            `"I sell phone accessories"\n` +
+            `"I sell provisions"`
+          );
+          await MessageModel.updateLog(msgLogId, { intent: 'biz_type_prompt', status: 'processed' }).catch(() => {});
+          return;
+        }
+        // Clean up common prefixes
+        const cleaned = rawResponse
+          .replace(/^(i sell |i run |i do |we sell |we run )/i, '')
+          .trim();
+        const newBizType = cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
+        await UserModel.updateBizType(user.id, newBizType);
+        await ConfirmationService.confirmEntry(pending.id);
+        await WhatsAppService.sendMessage(from,
+          `✅ Got it — *${newBizType}*!\n\n` +
+          `Now I can give you proper insights and examples for your business. 📊\n\n` +
+          `Ready to track today? Send your numbers:\n` +
+          `_"Made 50k today, spent 15k on stock"_`
+        );
+        await MessageModel.updateLog(msgLogId, { intent: 'biz_type_update', status: 'processed' }).catch(() => {});
+        return;
+      }
+
+      if (!pending) {
+        // First time encountering this user with "Other" biz_type — ask for clarification
+        await ConfirmationService.savePending(user.id, 'biz_type_clarification', {}, text);
+        await WhatsAppService.sendMessage(from,
+          `I need to know more about your business to help you properly.\n\n` +
+          `What exactly do you sell?\n\n` +
+          `Just tell me — for example:\n` +
+          `"I sell perfume oils"\n` +
+          `"I sell phone accessories"\n` +
+          `"I sell provisions"\n\n` +
+          `One reply and I can start tracking your stock properly. 📦`
+        );
+        await MessageModel.updateLog(msgLogId, { intent: 'biz_type_prompt', status: 'processed' }).catch(() => {});
+        return;
+      }
+      // If pending exists but is a different type → fall through to Kemi
+    }
+    // ─────────────────────────────────────────────────────────────────────────
+
     // ── Kemi Agent ──
     const { runAgent } = require('../src/agent/agentLoop');
     const kemisResponse = await runAgent(from, text);

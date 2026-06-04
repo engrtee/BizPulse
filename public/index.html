@@ -773,7 +773,7 @@
                 </div>
                 <div style="margin-bottom:20px">
                   <label class="reg-label" for="reg-biz-type">Business Type</label>
-                  <select id="reg-biz-type" class="reg-input">
+                  <select id="reg-biz-type" class="reg-input" onchange="toggleOtherBizType(this.value)">
                     <option value="">Select your business type</option>
                     <option>Food &amp; Beverages</option><option>Retail / Trading</option>
                     <option>Fashion &amp; Clothing</option><option>Beauty &amp; Personal Care</option>
@@ -787,6 +787,12 @@
                     <option>Advertising / Marketing</option><option>WhatsApp Business</option>
                     <option>FMCG</option><option>Online Business / E-commerce</option><option>Other</option>
                   </select>
+                  <div id="reg-biz-type-other-wrap" style="display:none;margin-top:10px">
+                    <label class="reg-label" for="reg-biz-type-other" style="font-size:12px;color:#718096">Please tell us what type of business you run</label>
+                    <input id="reg-biz-type-other" class="reg-input" type="text"
+                      placeholder='e.g. "Perfume oils", "Phone accessories", "Fabric"'
+                      style="margin-top:4px" />
+                  </div>
                 </div>
                 <div style="margin-bottom:20px">
                   <label class="reg-label" for="reg-state">State / Location</label>
@@ -1807,14 +1813,31 @@ function goToStep2() {
   document.getElementById('reg-step-2').style.display = 'block';
 }
 
+function toggleOtherBizType(val) {
+  const wrap = document.getElementById('reg-biz-type-other-wrap');
+  if (wrap) wrap.style.display = val === 'Other' ? 'block' : 'none';
+}
+
 async function registerAndEnter() {
-  const bizName = document.getElementById('reg-biz-name').value.trim();
-  const bizType = document.getElementById('reg-biz-type').value;
-  const state   = document.getElementById('reg-state').value.trim();
-  const msg     = document.getElementById('reg-step2-msg');
-  const btn     = document.getElementById('connect-btn');
+  const bizName       = document.getElementById('reg-biz-name').value.trim();
+  const bizTypeSelect = document.getElementById('reg-biz-type').value;
+  const state         = document.getElementById('reg-state').value.trim();
+  const msg           = document.getElementById('reg-step2-msg');
+  const btn           = document.getElementById('connect-btn');
+
+  // If "Other" is selected, require the free-text description
+  let bizType = bizTypeSelect;
+  if (bizTypeSelect === 'Other') {
+    const customType = (document.getElementById('reg-biz-type-other')?.value || '').trim();
+    if (!customType) {
+      showMsg(msg, 'error', 'Please describe your business type (e.g. "Perfume oils", "Phone accessories").');
+      return;
+    }
+    bizType = customType;
+  }
+
   if (!bizName) { showMsg(msg, 'error', 'Please enter your business name.'); return; }
-  if (!bizType) { showMsg(msg, 'error', 'Please select your business type.'); return; }
+  if (!bizTypeSelect) { showMsg(msg, 'error', 'Please select your business type.'); return; }
   hideMsg(msg);
   btn.disabled  = true;
   btn.innerHTML = '<span class="spinner"></span>Setting up your account\u2026';

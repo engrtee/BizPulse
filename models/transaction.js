@@ -37,11 +37,12 @@ const TransactionModel = {
     return res.rows[0];
   },
 
-  /** Get today's entry for a user (to show in WhatsApp reply) */
+  /** Get today's entry for a user (WAT date, not server UTC) */
   async getTodayEntry(userId) {
     const res = await query(
       `SELECT * FROM transactions
-       WHERE user_id = $1 AND date = CURRENT_DATE
+       WHERE user_id = $1
+         AND date = (CURRENT_TIMESTAMP AT TIME ZONE 'Africa/Lagos')::DATE
        ORDER BY created_at DESC LIMIT 1`,
       [userId]
     );
