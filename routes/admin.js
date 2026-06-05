@@ -936,6 +936,12 @@ async function openUserDetail(userId) {
       '<button onclick="savePhone(' + u.id + ')" style="padding:5px 14px;background:#1A56A4;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:0.82rem;font-weight:600">Save</button>' +
     '</div>' +
 
+    '<div style="background:#FFF5F5;border:1px solid #FC8181;border-radius:8px;padding:10px 14px;margin-bottom:1.25rem;display:flex;gap:8px;align-items:center;flex-wrap:wrap">' +
+      '<span style="font-size:0.82rem;font-weight:600;color:#C53030">⚠️ Danger Zone — Delete User:</span>' +
+      '<input id="deleteConfirmInput" placeholder="Type their name to confirm" style="padding:5px 10px;border:1px solid #FC8181;border-radius:6px;font-size:0.85rem;flex:1;min-width:160px">' +
+      '<button onclick="deleteUser(' + u.id + ',\'' + escHtml(u.name) + '\')" style="padding:5px 14px;background:#C53030;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:0.82rem;font-weight:600">🗑️ Delete</button>' +
+    '</div>' +
+
     '<h4 style="font-size:0.85rem;font-weight:600;margin:0 0 0.6rem">WhatsApp Messages — 📥 user &nbsp;|&nbsp; 📤 BizPulse reply (last 40)</h4>' +
     '<div style="overflow-x:auto;margin-bottom:1.5rem;border-radius:8px;border:1px solid #E2E8F0">' +
       '<table style="width:100%;border-collapse:collapse">' +
@@ -1122,6 +1128,29 @@ function escHtmlJs(str) {
   if (!str) return '';
   return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
+
+async function deleteUser(userId, userName) {
+  const input = document.getElementById('deleteConfirmInput')?.value?.trim();
+  if (!input) { toast('Type the user\'s name in the box first', false); return; }
+  if (input.toLowerCase() !== userName.toLowerCase()) {
+    toast('Name does not match — deletion cancelled', false); return;
+  }
+  if (!confirm('DELETE ' + userName + ' and ALL their data permanently? This cannot be undone.')) return;
+
+  const res  = await fetch('/admin/user/' + userId + '/delete?password=${encodeURIComponent(pw)}', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ confirmName: input }),
+  });
+  const data = await res.json();
+  if (data.success) {
+    document.getElementById('userModal').style.display = 'none';
+    toast('✅ ' + data.name + ' deleted — all data removed.');
+    setTimeout(() => location.reload(), 1500);
+  } else {
+    toast('❌ ' + (data.error || 'Delete failed'), false);
+  }
+}
 </script>
 </body>
 </html>`;
@@ -1209,6 +1238,53 @@ router.post('/user/:id/phone', adminAuth, async (req, res) => {
     res.json({ success: true, canonical });
   } catch (err) {
     console.error('[Admin] /user/:id/phone error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─────────────────────────────────────────────
+// POST /admin/user/:id/delete — permanently delete a user and all their data
+// Requires { confirmName: "Exact User Name" } in body as a safety gate.
+// ─────────────────────────────────────────────
+router.post('/user/:id/delete', adminAuth, async (req, res) => {
+  try {
+    const userId = parseInt(req.params.id, 10);
+    const { confirmName } = req.body;
+
+    const user = await UserModel.findById(userId);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    if (!confirmName || confirmName.trim().toLowerCase() !== user.name.trim().toLowerCase()) {
+      return res.status(400).json({ error: `Confirmation name does not match. Expected "${user.name}".` });
+    }
+
+    // Delete in order: non-cascade tables first, then user (cascade handles the rest)
+    const deleted = {};
+    const del = async (table, col) => {
+      const r = await query(`DELETE FROM ${table} WHERE ${col} = $1`, [userId]);
+      deleted[table] = r.rowCount;
+    };
+
+    await del('message_log',           'user_id');  // no CASCADE — must go first
+    await del('stock_alerts_sent',     'user_id');
+    await del('product_transactions',  'user_id');
+    await del('products',              'user_id');
+    await del('pending_entries',       'user_id');
+    await del('debtors',               'user_id');
+    await del('transactions',          'user_id');
+
+    // onboarding_sessions keyed by phone — clear if exists
+    if (user.whatsapp_number) {
+      await query(`DELETE FROM onboarding_sessions WHERE phone_number = $1`, [user.whatsapp_number]).catch(() => {});
+    }
+
+    await query('DELETE FROM users WHERE id = $1', [userId]);
+    deleted.users = 1;
+
+    console.log(`[Admin] 🗑️  User ${user.name} (id=${userId}) fully deleted. Rows removed:`, deleted);
+    res.json({ success: true, name: user.name, deleted });
+  } catch (err) {
+    console.error('[Admin] /user/:id/delete error:', err.message);
     res.status(500).json({ error: err.message });
   }
 });
