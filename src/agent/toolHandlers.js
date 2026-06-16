@@ -125,14 +125,28 @@ async function logSaleHandler({ product, quantity, unit, unit_price, customer_na
      today, is_credit ? 'credit' : 'cash', note || customer_name || null]
   );
 
-  // Write to transactions table so the existing 7pm summary job sees the revenue
+  // Write to transactions table so the existing 7pm summary job sees the revenue.
+  // Use last_purchase_price as COGS when available — otherwise margin stays NULL
+  // rather than the misleading 100% that was here before.
   if (total > 0 && !is_credit) {
+    const costRes = await query(
+      `SELECT last_purchase_price FROM products WHERE id = $1`,
+      [productRow.id]
+    );
+    const costPerUnit = parseFloat(costRes.rows[0]?.last_purchase_price) || null;
+    const cogs        = costPerUnit !== null ? costPerUnit * qty : null;
+    const txProfit    = cogs !== null ? total - cogs : null;
+    const txMargin    = txProfit !== null && total > 0
+      ? parseFloat(((txProfit / total) * 100).toFixed(2))
+      : null;
+
     await query(
       `INSERT INTO transactions
          (user_id, date, revenue, total_expenses, expense_breakdown,
           profit, margin, customers, notes, entry_method)
-       VALUES ($1, $2::DATE, $3, 0, '{}', $3, 100, 0, $4, 'kemi')`,
-      [user.id, today, total, `Kemi: sold ${qty} ${unit || 'units'} ${canonicalName}`]
+       VALUES ($1, $2::DATE, $3, COALESCE($4,0), '{}', $5, $6, 0, $7, 'kemi')`,
+      [user.id, today, total, cogs, txProfit, txMargin,
+       `Kemi: sold ${qty} ${unit || 'units'} ${canonicalName}`]
     );
   }
 
@@ -315,7 +329,9 @@ async function getSalesSummaryHandler({ period, start_date, end_date, whatsappNu
     [user.id, dates.start, dates.end]
   );
 
-  // Also pull from transactions table for expense data
+  // Revenue comes from product_transactions (Kemi's source of truth for what was sold).
+  // Expenses and profit come from transactions (where logExpenseHandler writes).
+  // Both queries use the same WAT-based date range — intentional dual-source design.
   const txRes = await query(
     `SELECT
        COALESCE(SUM(total_expenses), 0)::NUMERIC AS total_expenses,
@@ -396,7 +412,7 @@ async function correctLastEntryHandler({ action, new_amount, new_item, new_quant
   const entry = recent.rows[0];
 
   if (action === 'delete') {
-    // Soft-delete: add the quantity back to stock
+    // Soft-delete: mark the product_transaction as voided and restore stock
     await query(
       `UPDATE product_transactions SET notes = CONCAT(notes, ' [VOIDED]'), total_amount = 0
        WHERE id = $1`,
@@ -407,6 +423,20 @@ async function correctLastEntryHandler({ action, new_amount, new_item, new_quant
        WHERE id = $2`,
       [parseFloat(entry.quantity) || 0, entry.product_id]
     );
+    // Insert a correction row in transactions so the 7pm summary reflects the void.
+    // INSERT-only rule preserved — we never UPDATE the original row.
+    const voidedAmount = parseFloat(entry.total_amount) || 0;
+    if (voidedAmount > 0) {
+      const today = todayWAT();
+      await query(
+        `INSERT INTO transactions
+           (user_id, date, revenue, total_expenses, expense_breakdown,
+            profit, margin, customers, notes, entry_method)
+         VALUES ($1, $2::DATE, $3, 0, '{}', $3, NULL, 0, $4, 'kemi')`,
+        [user.id, today, -voidedAmount,
+         `Kemi: voided sale of ${entry.product_name} [correction]`]
+      );
+    }
     return { corrected: true, what_changed: `Deleted sale of ${entry.product_name}. Stock restored.` };
   }
 
@@ -487,14 +517,15 @@ async function settleDebtHandler({ debtor_name, amount, whatsappNumber }) {
     [isFullPay ? 'settled' : 'outstanding', isFullPay, debt.id]
   );
 
-  // Record as revenue in transactions table
+  // Record as revenue in transactions table.
+  // Debt repayments are pure cash — no COGS applies, so margin is NULL.
   const today = todayWAT();
   const user  = await getUser(whatsappNumber);
   await query(
     `INSERT INTO transactions
        (user_id, date, revenue, total_expenses, expense_breakdown,
         profit, margin, customers, notes, entry_method)
-     VALUES ($1, $2::DATE, $3, 0, '{}', $3, 100, 0, $4, 'kemi')`,
+     VALUES ($1, $2::DATE, $3, 0, '{}', $3, NULL, 0, $4, 'kemi')`,
     [user.id, today, paidAmount, `Debt payment from ${debtor_name}`]
   );
 
@@ -542,19 +573,13 @@ async function getDebtsHandler({ status, whatsappNumber }) {
 }
 
 async function setGoalHandler({ type, amount, period, whatsappNumber }) {
-  // Upsert: one active goal per whatsapp_number + type + period
+  const rounded = Math.round(parseFloat(amount) || 0);
   await query(
     `INSERT INTO goals (whatsapp_number, type, amount, period)
      VALUES ($1, $2, $3, $4)
-     ON CONFLICT DO NOTHING`,
-    [whatsappNumber, type, Math.round(parseFloat(amount) || 0), period]
-  );
-  // If a goal with same type+period already exists, update it
-  await query(
-    `UPDATE goals
-     SET amount = $1, updated_at = NOW()
-     WHERE whatsapp_number = $2 AND type = $3 AND period = $4`,
-    [Math.round(parseFloat(amount) || 0), whatsappNumber, type, period]
+     ON CONFLICT (whatsapp_number, type, period)
+     DO UPDATE SET amount = EXCLUDED.amount, updated_at = NOW()`,
+    [whatsappNumber, type, rounded, period]
   );
 
   // Return current progress for today/this week/this month

@@ -29,7 +29,7 @@ const {
 } = require('./toolHandlers');
 
 const MODEL         = 'claude-sonnet-4-6';
-const MAX_TOKENS    = 512;
+const MAX_TOKENS    = 1024;
 const MAX_ITER      = 8;
 const RETRY_DELAY   = 2000; // ms
 

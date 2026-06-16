@@ -4,7 +4,7 @@ const { query } = require('../../models/db');
 const Anthropic  = require('@anthropic-ai/sdk');
 
 const MODEL       = 'claude-sonnet-4-6';
-const HAIKU_MODEL = 'claude-haiku-4-5-20251001';
+const HAIKU_MODEL = 'claude-haiku-4-5';
 
 function getClient() {
   if (!process.env.ANTHROPIC_API_KEY) return null;

@@ -177,7 +177,11 @@ const TransactionModel = {
     return res.rows;
   },
 
-  /** Correct a single entry (admin manual override) */
+  /**
+   * Correct a single entry — ADMIN MANUAL OVERRIDE ONLY.
+   * This is the ONLY permitted UPDATE on the transactions table.
+   * All other writes must use INSERT (INSERT-only rule — see CLAUDE.md FIX 1).
+   */
   async correct(entryId, { revenue, totalExpenses, notes }) {
     const rev    = parseFloat(revenue)      || 0;
     const exp    = parseFloat(totalExpenses) || 0;

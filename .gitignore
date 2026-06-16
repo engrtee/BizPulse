@@ -20,3 +20,7 @@ Thumbs.db
 # Build artifacts
 dist/
 build/
+
+# Local test/simulation scripts (contain hardcoded test phone numbers)
+simulate-user.js
+test-messages.js

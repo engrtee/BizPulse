@@ -18,6 +18,7 @@ const UserModel          = require('../models/user');
 const TransactionModel   = require('../models/transaction');
 const InventoryService   = require('../services/inventory');
 const ProductModel       = require('../models/product');
+// SheetsService is legacy — only runs when user.sheet_id is set (never for new users since Google Drive was removed).
 const SheetsService      = require('../services/sheets');
 
 const GeminiService      = require('../services/gemini');

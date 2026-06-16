@@ -79,10 +79,11 @@ const InventoryModel = {
     const existing = await InventoryModel.getItemFuzzy(userId, itemName);
 
     if (existing) {
+      const currentBal = parseFloat(existing.current_balance) || 0;
       const newBalance =
         direction === 'received'
-          ? existing.current_balance + qty
-          : Math.max(0, existing.current_balance - qty);
+          ? currentBal + qty
+          : Math.max(0, currentBal - qty);
 
       const res = await query(
         `UPDATE inventory

@@ -55,7 +55,7 @@ function healthLabel(score) {
   if (score >= 80) return { label: 'Excellent',       emoji: '🟢', key: 'excellent' };
   if (score >= 60) return { label: 'Good',            emoji: '🟡', key: 'good' };
   if (score >= 40) return { label: 'Needs Attention', emoji: '🟠', key: 'fair' };
-  return              { label: 'Incomplete',        emoji: '🔴', key: 'needs-attention' };
+  return              { label: 'Needs Attention',  emoji: '🔴', key: 'needs-attention' };
 }
 
 /**

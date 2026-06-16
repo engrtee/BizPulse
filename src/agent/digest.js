@@ -150,13 +150,22 @@ cron.schedule('0 20 * * *', async () => {
   }
 }, { timezone: 'Africa/Lagos' });
 
-// 3:00 AM WAT — purge conversation_history older than 7 days
+// 3:00 AM WAT — purge conversation_history older than 7 days + expired onboarding sessions
 cron.schedule('0 3 * * *', async () => {
   try {
     const deleted = await clearOldHistory();
     if (deleted > 0) console.log(`[Digest] 🗑 Cleared ${deleted} old history rows`);
   } catch (err) {
     console.error('[Digest] History cleanup failed:', err.message);
+  }
+  try {
+    const res = await query(`DELETE FROM onboarding_sessions WHERE expires_at < NOW()`);
+    if (res.rowCount > 0) console.log(`[Digest] 🗑 Cleared ${res.rowCount} expired onboarding sessions`);
+  } catch (err) {
+    // Table may not exist on older deploys — not fatal
+    if (!err.message.includes('does not exist')) {
+      console.error('[Digest] Onboarding session cleanup failed:', err.message);
+    }
   }
 }, { timezone: 'Africa/Lagos' });
 

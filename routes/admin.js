@@ -12,17 +12,26 @@
 
 const express        = require('express');
 const router         = express.Router();
+const crypto         = require('crypto');
 const UserModel      = require('../models/user');
 const TransactionModel = require('../models/transaction');
 const { MessageModel, query } = require('../models/db');
 const LearningService  = require('../services/learningService');
 
 function adminAuth(req, res, next) {
-  const provided = req.query.password || req.headers['x-admin-password'];
+  // Accept password via header (preferred) or query param (form fallback only)
+  const provided = req.headers['x-admin-password'] || req.query.password;
   if (!process.env.ADMIN_PASSWORD) {
     return res.status(503).send('Admin dashboard not configured. Set ADMIN_PASSWORD env var.');
   }
-  if (provided !== process.env.ADMIN_PASSWORD) {
+  const expected = process.env.ADMIN_PASSWORD;
+  let match = false;
+  try {
+    match = provided &&
+      provided.length === expected.length &&
+      crypto.timingSafeEqual(Buffer.from(provided), Buffer.from(expected));
+  } catch { match = false; }
+  if (!match) {
     return res.status(401).send(`<!DOCTYPE html>
 <html lang="en">
 <head>

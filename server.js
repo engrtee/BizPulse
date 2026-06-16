@@ -9,9 +9,10 @@
 'use strict';
 
 require('dotenv').config();
-const express = require('express');
-const cors    = require('cors');
-const path    = require('path');
+const express   = require('express');
+const cors      = require('cors');
+const path      = require('path');
+const rateLimit = require('express-rate-limit');
 
 const { initDb }               = require('./models/db');
 const webhookRouter            = require('./routes/webhook');
@@ -30,10 +31,40 @@ const PORT = process.env.PORT || 3000;
 // ─────────────────────────────────────────────
 // Middleware
 // ─────────────────────────────────────────────
-app.use(cors());
+app.use(cors({
+  origin: process.env.FRONTEND_URL || true,
+}));
 
-// Raw body needed for WhatsApp webhook signature verification (if you add it in Phase 2)
-app.use('/webhook', express.json());
+// Rate limiting
+const apiLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many requests. Please slow down.' },
+});
+const webhookLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 200,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+const adminLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: 'Too many requests.',
+});
+
+app.use('/api',    apiLimiter);
+app.use('/admin',  adminLimiter);
+app.use('/webhook', webhookLimiter);
+
+// Raw body captured for WhatsApp webhook signature verification
+app.use('/webhook', express.json({
+  verify: (req, _res, buf) => { req.rawBody = buf; },
+}));
 
 // JSON body for all other routes
 app.use(express.json());
@@ -83,6 +114,11 @@ app.use((err, _req, res, _next) => {
 // ─────────────────────────────────────────────
 async function start() {
   try {
+    // Fail fast on missing critical keys
+    if (!process.env.ANTHROPIC_API_KEY) {
+      throw new Error('ANTHROPIC_API_KEY is not set — Kemi agent will not work. Add it to Render env vars.');
+    }
+
     // Create tables if they don't exist
     await initDb();
 

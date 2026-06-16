@@ -133,13 +133,9 @@ async function processUser(user) {
 
     const firstName = user.name.split(' ')[0];
 
-    // Send WhatsApp summary — non-blocking so a token error never blocks the email
-    if (user.whatsapp_number) {
-      WhatsAppService.sendEveningSummaryWhatsApp(
-        user.whatsapp_number, firstName, summaryData, aiRec, lowStock
-      ).then(() => console.log(`[Cron] 📱 WhatsApp summary sent to ${user.name}`))
-       .catch((err) => console.error(`[Cron] ⚠️  WhatsApp failed for ${user.name}:`, err?.response?.data?.error?.message || err.message));
-    }
+    // 8pm Kemi digest (src/agent/digest.js) already sends the WhatsApp evening
+    // summary — sending here too would give active users 2 WhatsApp messages
+    // in under an hour, causing mutes. Email only at 7pm.
 
     // Send email summary — always runs regardless of WhatsApp status
     await EmailService.sendSummaryEmail(user, summaryData, aiRec, lowStock);

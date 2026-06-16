@@ -18,6 +18,7 @@
 const express         = require('express');
 const router          = express.Router();
 const axios           = require('axios');
+const crypto          = require('crypto');
 
 const UserModel       = require('../models/user');
 const TransactionModel= require('../models/transaction');
@@ -63,6 +64,28 @@ router.get('/', (req, res) => {
 // POST /webhook — Inbound message handler
 // ─────────────────────────────────────────────
 router.post('/', async (req, res) => {
+  // Verify Meta signature before processing anything
+  const appSecret = process.env.WHATSAPP_APP_SECRET;
+  if (appSecret) {
+    const sig = req.headers['x-hub-signature-256'];
+    if (!sig) {
+      console.warn('[Webhook] ⚠️  Missing X-Hub-Signature-256 header — rejected');
+      return res.sendStatus(403);
+    }
+    const expected = 'sha256=' + crypto
+      .createHmac('sha256', appSecret)
+      .update(req.rawBody || '')
+      .digest('hex');
+    try {
+      if (!crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected))) {
+        console.warn('[Webhook] ❌ Signature mismatch — rejected');
+        return res.sendStatus(403);
+      }
+    } catch {
+      return res.sendStatus(403);
+    }
+  }
+
   // Always acknowledge immediately — Meta will retry if you don't respond 200 within 20s
   res.sendStatus(200);
 
@@ -314,8 +337,9 @@ router.post('/', async (req, res) => {
     }
     // ────────────────────────────────────────────────────────────────────────
 
-    // ── Margin recalculation intercept (user replied with just a % number) ──
-    const reCalcMatch = text.trim().match(/^(\d+)\s*%?$/);
+    // ── Margin recalculation intercept (user replied with a % number e.g. "35%") ──
+    // Pattern requires the % suffix to avoid intercepting bare numbers the user typed for other reasons.
+    const reCalcMatch = text.trim().match(/^(\d+)\s*%$/);
     if (reCalcMatch) {
       const pending = await ConfirmationService.getPendingEntry(user.id);
       if (pending && pending.entry_type === 'calc_context') {
@@ -678,6 +702,33 @@ async function handleOversellNo(user, from, pending) {
   const summary = await ProductService.processProductTransactions(
     user.id, user, original_entry.products, null, date, WhatsAppService
   ).catch(() => []);
+
+  // Insert into transactions so the 7pm summary captures this revenue.
+  // processProductTransactions only writes to product_transactions, not transactions.
+  const saleProducts = (original_entry.products || []).filter(p =>
+    p.transaction_type !== 'stock_in'
+  );
+  const totalRevenue = saleProducts.reduce((sum, p) => {
+    const qty   = parseFloat(p.quantity)    || 0;
+    const price = parseFloat(p.unit_price)  || 0;
+    const total = parseFloat(p.total_amount)|| (qty * price);
+    return sum + total;
+  }, 0);
+  if (totalRevenue > 0) {
+    await TransactionModel.create({
+      userId:          user.id,
+      revenue:         totalRevenue,
+      totalExpenses:   0,
+      expenseBreakdown:{},
+      profit:          null,
+      margin:          null,
+      customers:       0,
+      notes:           'Oversell confirmed (sold from unlogged stock)',
+      rawMessage:      pending.original_message || '',
+      entryMethod:     'text',
+      entryDate:       date,
+    }).catch(err => console.error('[Webhook] handleOversellNo tx insert failed:', err.message));
+  }
 
   const lines = summary.length > 0
     ? summary.map(s => `📦 ${s.name}: ${s.stock} ${s.unit} remaining`)

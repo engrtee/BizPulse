@@ -170,7 +170,9 @@ const UserModel = {
          AND first_message_date IS NOT NULL
          AND (
            last_message_date IS NULL
-           OR last_message_date = CURRENT_DATE - $1::INTEGER * INTERVAL '1 day'
+           OR last_message_date BETWEEN
+                CURRENT_DATE - $1::INTEGER * INTERVAL '1 day'
+                AND CURRENT_DATE - ($1::INTEGER - 1) * INTERVAL '1 day'
          )
        ORDER BY id`,
       [days]
