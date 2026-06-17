@@ -505,6 +505,14 @@ async function initDb() {
   `, 'DEDUP goals');
   await run(`CREATE UNIQUE INDEX IF NOT EXISTS idx_goals_unique ON goals(whatsapp_number, type, period)`, 'UNIQUE INDEX goals');
 
+  await run(`CREATE TABLE IF NOT EXISTS user_sessions (
+    token       TEXT         PRIMARY KEY,
+    user_id     INTEGER      NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created_at  TIMESTAMPTZ  DEFAULT NOW(),
+    expires_at  TIMESTAMPTZ  DEFAULT NOW() + INTERVAL '30 days'
+  )`, 'CREATE user_sessions');
+  await run(`CREATE INDEX IF NOT EXISTS idx_user_sessions_user ON user_sessions(user_id)`, 'INDEX user_sessions');
+
   // ── Stock intelligence materialized view (Kemi agent) ──────────────────────────
   // Only created if it doesn't exist. Refreshed every 15 min by digest.js cron.
   await run(`CREATE MATERIALIZED VIEW IF NOT EXISTS stock_intelligence_mv AS

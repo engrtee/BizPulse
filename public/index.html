@@ -1315,6 +1315,25 @@
 <script>
 'use strict';
 
+// ── Global 401 handler — intercept expired sessions ────────────────────────
+(function() {
+  const _orig = window.fetch;
+  window.fetch = async function(...args) {
+    const res = await _orig.apply(this, args);
+    if (res.status === 401) {
+      try {
+        const data = await res.clone().json();
+        if (data.requireLogin) {
+          localStorage.removeItem('bizpulse_user_id');
+          localStorage.removeItem('bizpulse_user_name');
+          if (typeof showRegisterScreen === 'function') showRegisterScreen();
+        }
+      } catch (_) {}
+    }
+    return res;
+  };
+})();
+
 // ── State ──────────────────────────────────────────
 let currentUser  = null;
 let currentTab   = 'home';
@@ -1536,7 +1555,7 @@ function switchSummaryTab(name) {
 // ── User ─────────────────────────────────────────────
 async function loadUser(userId) {
   try {
-    const res  = await fetch('/api/user?userId=' + userId);
+    const res  = await fetch('/api/user' + (userId ? '?userId=' + userId : ''));
     if (!res.ok) return;
     currentUser = await res.json();
     localStorage.setItem('bizpulse_user_id',   currentUser.id);
@@ -2443,13 +2462,6 @@ async function saveSummaryFrequency() {
     if (res.ok) { currentUser = data.user; showMsg(msg, 'success', '✅ Frequency updated.'); }
     else showMsg(msg, 'error', data.error || 'Failed to save.');
   } catch(e) { showMsg(msg, 'error', 'Something went wrong.'); }
-}
-function connectGoogleDrive() {
-  const userId = localStorage.getItem('bizpulse_user_id');
-  if (!userId) return;
-  const msg = document.getElementById('set-google-msg');
-  showMsg(msg, 'success', 'Redirecting to Google\u2026');
-  setTimeout(() => { window.location.href = '/api/auth/google?userId=' + userId; }, 500);
 }
 function signOut() {
   if (!confirm('Sign out and clear saved data from this device?')) return;

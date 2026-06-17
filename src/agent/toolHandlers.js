@@ -480,42 +480,33 @@ async function correctLastEntryHandler({ action, new_amount, new_item, new_quant
 }
 
 async function logDebtHandler({ debtor_name, amount, product, note, whatsappNumber }) {
-  await query(
-    `INSERT INTO debts (whatsapp_number, debtor_name, amount, item, note)
-     VALUES ($1, $2, $3, $4, $5)`,
-    [whatsappNumber, debtor_name, Math.round(parseFloat(amount) || 0),
-     product || null, note || null]
-  );
+  const user = await getUser(whatsappNumber);
+  const DebtorModel = require('../../models/debtor');
+  await DebtorModel.create({
+    userId:      user.id,
+    debtorName:  debtor_name,
+    amount:      Math.round(parseFloat(amount) || 0),
+    productName: product || null,
+    notes:       note || null,
+  });
   return { logged: true, debtor_name, amount: parseFloat(amount) || 0 };
 }
 
 async function settleDebtHandler({ debtor_name, amount, whatsappNumber }) {
-  // Find the oldest outstanding debt for this name
-  const res = await query(
-    `SELECT id, amount FROM debts
-     WHERE whatsapp_number = $1
-       AND LOWER(debtor_name) = LOWER($2)
-       AND status = 'outstanding'
-     ORDER BY created_at ASC
-     LIMIT 1`,
-    [whatsappNumber, debtor_name]
-  );
+  const user        = await getUser(whatsappNumber);
+  const DebtorModel = require('../../models/debtor');
 
-  if (!res.rows.length) {
+  // Find oldest unpaid/partial debt for this name in debtors table
+  const debt = await DebtorModel.findPending(user.id, debtor_name);
+  if (!debt) {
     return { settled: false, reason: `No outstanding debt found for ${debtor_name}.` };
   }
 
-  const debt       = res.rows[0];
   const debtAmount = parseInt(debt.amount, 10);
   const paidAmount = amount ? Math.round(parseFloat(amount)) : debtAmount;
   const isFullPay  = paidAmount >= debtAmount;
 
-  await query(
-    `UPDATE debts
-     SET status = $1, settled_at = CASE WHEN $2 THEN NOW() ELSE NULL END
-     WHERE id = $3`,
-    [isFullPay ? 'settled' : 'outstanding', isFullPay, debt.id]
-  );
+  await DebtorModel.markPaid(debt.id, paidAmount);
 
   // Record as revenue in transactions table.
   // Debt repayments are pure cash — no COGS applies, so margin is NULL.
@@ -539,37 +530,58 @@ async function settleDebtHandler({ debtor_name, amount, whatsappNumber }) {
 }
 
 async function getDebtsHandler({ status, whatsappNumber }) {
+  const user = await getUser(whatsappNumber);
   const effectiveStatus = status || 'outstanding';
-  let whereClause = 'whatsapp_number = $1';
-  const params    = [whatsappNumber];
 
-  if (effectiveStatus !== 'all') {
-    whereClause += ' AND status = $2';
-    params.push(effectiveStatus);
-  }
+  // Query debtors table (canonical — new writes go here)
+  const debtorStatusFilter = effectiveStatus === 'outstanding'
+    ? `AND d.status IN ('pending', 'partial')`
+    : effectiveStatus === 'settled'
+    ? `AND d.status = 'paid'`
+    : '';                   // 'all' — no filter
 
-  const res = await query(
-    `SELECT debtor_name, amount, item, note, status, created_at
-     FROM debts
-     WHERE ${whereClause}
+  const debtorsRes = await query(
+    `SELECT debtor_name, amount, product_name AS item, notes AS note,
+            CASE WHEN status IN ('pending','partial') THEN 'outstanding' ELSE 'settled' END AS status,
+            created_at
+     FROM debtors d
+     WHERE user_id = $1 ${debtorStatusFilter}
      ORDER BY created_at DESC`,
-    params
+    [user.id]
   );
 
-  const totalOutstanding = res.rows
-    .filter(r => r.status === 'outstanding')
-    .reduce((s, r) => s + parseInt(r.amount, 10), 0);
+  // Also pull legacy rows from debts table (written before this consolidation)
+  const debtsStatusFilter = effectiveStatus === 'all' ? '' : `AND status = '${effectiveStatus === 'outstanding' ? 'outstanding' : 'settled'}'`;
+  const debtsRes = await query(
+    `SELECT debtor_name, amount, item, note, status, created_at
+     FROM debts
+     WHERE whatsapp_number = $1 ${debtsStatusFilter}
+     ORDER BY created_at DESC`,
+    [whatsappNumber]
+  );
 
-  return {
-    debts: res.rows.map(r => ({
+  const allRows = [
+    ...debtorsRes.rows.map(r => ({
       debtor_name: r.debtor_name,
       amount:      parseInt(r.amount, 10),
       item:        r.item,
       status:      r.status,
       days_ago:    Math.round((Date.now() - new Date(r.created_at).getTime()) / 86400000),
     })),
-    total_outstanding: totalOutstanding,
-  };
+    ...debtsRes.rows.map(r => ({
+      debtor_name: r.debtor_name,
+      amount:      parseInt(r.amount, 10),
+      item:        r.item,
+      status:      r.status,
+      days_ago:    Math.round((Date.now() - new Date(r.created_at).getTime()) / 86400000),
+    })),
+  ].sort((a, b) => b.days_ago - a.days_ago);
+
+  const totalOutstanding = allRows
+    .filter(r => r.status === 'outstanding')
+    .reduce((s, r) => s + r.amount, 0);
+
+  return { debts: allRows, total_outstanding: totalOutstanding };
 }
 
 async function setGoalHandler({ type, amount, period, whatsappNumber }) {

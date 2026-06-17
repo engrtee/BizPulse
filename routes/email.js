@@ -24,12 +24,11 @@ const EmailService       = require('../services/email');
 
 const { calcHealthScore, healthLabel, topExpenseCategory, todayWAT } = require('../utils/formatter');
 const { calcMargin } = require('../utils/naira');
+const { requireAuth } = require('../middleware/auth');
 
-router.post('/send', async (req, res) => {
+router.post('/send', requireAuth, async (req, res) => {
   try {
-    const { userId } = req.body;
-    if (!userId) return res.status(400).json({ error: 'userId is required.' });
-
+    const userId = req.authUserId;
     const user = await UserModel.findById(userId);
     if (!user) return res.status(404).json({ error: 'User not found.' });
 

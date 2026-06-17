@@ -9,10 +9,11 @@
 'use strict';
 
 require('dotenv').config();
-const express   = require('express');
-const cors      = require('cors');
-const path      = require('path');
-const rateLimit = require('express-rate-limit');
+const express      = require('express');
+const cors         = require('cors');
+const path         = require('path');
+const rateLimit    = require('express-rate-limit');
+const cookieParser = require('cookie-parser');
 
 const { initDb }               = require('./models/db');
 const webhookRouter            = require('./routes/webhook');
@@ -32,8 +33,11 @@ const PORT = process.env.PORT || 3000;
 // Middleware
 // ─────────────────────────────────────────────
 app.use(cors({
-  origin: process.env.FRONTEND_URL || true,
+  origin:      process.env.FRONTEND_URL || true,
+  credentials: true,
 }));
+
+app.use(cookieParser());
 
 // Rate limiting
 const apiLimiter = rateLimit({

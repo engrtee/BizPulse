@@ -28,6 +28,7 @@ const WhatsAppService    = require('../services/whatsapp');
 const { calcHealthScore, healthLabel, topExpenseCategory, todayWAT } = require('../utils/formatter');
 const { calcMargin } = require('../utils/naira');
 const { normalizePhone } = require('../utils/phone');
+const { createSession, requireAuth } = require('../middleware/auth');
 
 // ─────────────────────────────────────────────
 // POST /api/auth/login
@@ -47,6 +48,7 @@ router.post('/auth/login', async (req, res) => {
     if (!user.active) {
       return res.status(403).json({ error: 'This account has been deactivated. Please contact support.' });
     }
+    await createSession(user.id, res);
     res.json({ success: true, userId: user.id, name: user.name });
   } catch (err) {
     console.error('[API] /auth/login error:', err.message);
@@ -85,6 +87,7 @@ router.post('/register', async (req, res) => {
     }
 
     const user = await UserModel.create({ name, email, bizName, bizType, state, whatsappNumber: normalizedPhone });
+    await createSession(user.id, res);
 
     // Send WhatsApp welcome message immediately on registration (non-blocking)
     if (normalizedPhone) {
@@ -114,11 +117,10 @@ router.post('/register', async (req, res) => {
 // Submit a daily entry from the web form.
 // Body: { userId, revenue, expenses: [{category, amount}], stockMovements, customers, notes }
 // ─────────────────────────────────────────────
-router.post('/entry', async (req, res) => {
+router.post('/entry', requireAuth, async (req, res) => {
   try {
-    const { userId, revenue, expenses, stockMovements, customers, notes, topProduct } = req.body;
-
-    if (!userId) return res.status(400).json({ error: 'userId is required.' });
+    const { revenue, expenses, stockMovements, customers, notes, topProduct } = req.body;
+    const userId = req.authUserId;
 
     const user = await UserModel.findById(userId);
     if (!user) return res.status(404).json({ error: 'User not found.' });
@@ -258,11 +260,9 @@ router.post('/entry', async (req, res) => {
 // GET /api/summary/latest?userId=<id>
 // Returns the most recent transaction + computed summary for the Summary screen.
 // ─────────────────────────────────────────────
-router.get('/summary/latest', async (req, res) => {
+router.get('/summary/latest', requireAuth, async (req, res) => {
   try {
-    const { userId } = req.query;
-    if (!userId) return res.status(400).json({ error: 'userId is required.' });
-
+    const userId = req.authUserId;
     const user = await UserModel.findById(userId);
     if (!user) return res.status(404).json({ error: 'User not found.' });
 
@@ -362,10 +362,10 @@ router.get('/summary/latest', async (req, res) => {
 // PUT /api/user/update
 // Update profile settings from the Settings screen.
 // ─────────────────────────────────────────────
-router.put('/user/update', async (req, res) => {
+router.put('/user/update', requireAuth, async (req, res) => {
   try {
-    const { userId, name, email, bizName, bizType, state, whatsappNumber } = req.body;
-    if (!userId) return res.status(400).json({ error: 'userId is required.' });
+    const { name, email, bizName, bizType, state, whatsappNumber } = req.body;
+    const userId = req.authUserId;
 
     const normalizedPhone = whatsappNumber ? normalizePhone(whatsappNumber) : undefined;
     const updated = await UserModel.update(userId, { name, email, bizName, bizType, state, whatsappNumber: normalizedPhone });
@@ -380,10 +380,9 @@ router.put('/user/update', async (req, res) => {
 // GET /api/inventory?userId=<id>
 // Returns current stock levels for the frontend.
 // ─────────────────────────────────────────────
-router.get('/inventory', async (req, res) => {
+router.get('/inventory', requireAuth, async (req, res) => {
   try {
-    const { userId } = req.query;
-    if (!userId) return res.status(400).json({ error: 'userId is required.' });
+    const userId = req.authUserId;
 
     // Read from products table (Kemi's source of truth) and map to the legacy
     // field names so any existing frontend code continues to work unchanged.
@@ -408,10 +407,9 @@ router.get('/inventory', async (req, res) => {
 // GET /api/user?userId=<id>
 // Return basic user data for the frontend on load.
 // ─────────────────────────────────────────────
-router.get('/user', async (req, res) => {
+router.get('/user', requireAuth, async (req, res) => {
   try {
-    const { userId } = req.query;
-    if (!userId) return res.status(400).json({ error: 'userId is required.' });
+    const userId = req.authUserId;
     const user = await UserModel.findById(userId);
     if (!user) return res.status(404).json({ error: 'User not found.' });
     // Never return tokens to the frontend
@@ -426,10 +424,9 @@ router.get('/user', async (req, res) => {
 // GET /api/export/csv?userId=<id>
 // Download all transaction history as CSV.
 // ─────────────────────────────────────────────
-router.get('/export/csv', async (req, res) => {
+router.get('/export/csv', requireAuth, async (req, res) => {
   try {
-    const { userId } = req.query;
-    if (!userId) return res.status(400).json({ error: 'userId is required.' });
+    const userId = req.authUserId;
     const user = await UserModel.findById(userId);
     if (!user) return res.status(404).json({ error: 'User not found.' });
 
@@ -789,9 +786,9 @@ router.get('/test/evening-reminder', async (req, res) => {
 // GET /api/products/:userId
 // All active products with health status + velocity.
 // ─────────────────────────────────────────────
-router.get('/products/:userId', async (req, res) => {
+router.get('/products/:userId', requireAuth, async (req, res) => {
   try {
-    const userId = parseInt(req.params.userId, 10);
+    const userId = req.authUserId;
     const ProductModel = require('../models/product');
     const products = await ProductModel.getWithHealth(userId);
     res.json({ success: true, products });
@@ -805,9 +802,9 @@ router.get('/products/:userId', async (req, res) => {
 // GET /api/products/:userId/performance
 // 7d and 30d revenue + units sold per product.
 // ─────────────────────────────────────────────
-router.get('/products/:userId/performance', async (req, res) => {
+router.get('/products/:userId/performance', requireAuth, async (req, res) => {
   try {
-    const userId = parseInt(req.params.userId, 10);
+    const userId = req.authUserId;
     const ProductModel = require('../models/product');
     const performance = await ProductModel.getPerformance(userId);
     res.json({ success: true, performance });
@@ -821,9 +818,9 @@ router.get('/products/:userId/performance', async (req, res) => {
 // GET /api/products/:userId/alerts
 // Products with low stock or out-of-stock status.
 // ─────────────────────────────────────────────
-router.get('/products/:userId/alerts', async (req, res) => {
+router.get('/products/:userId/alerts', requireAuth, async (req, res) => {
   try {
-    const userId = parseInt(req.params.userId, 10);
+    const userId = req.authUserId;
     const ProductModel = require('../models/product');
     const products = await ProductModel.getWithHealth(userId);
 
@@ -861,9 +858,9 @@ router.get('/products/:userId/alerts', async (req, res) => {
 // GET /api/stock-movements/:userId
 // Last 20 product transactions (stock movements log).
 // ─────────────────────────────────────────────
-router.get('/stock-movements/:userId', async (req, res) => {
+router.get('/stock-movements/:userId', requireAuth, async (req, res) => {
   try {
-    const userId = parseInt(req.params.userId, 10);
+    const userId = req.authUserId;
     const limit  = parseInt(req.query.limit, 10) || 20;
     const ProductModel = require('../models/product');
     const movements = await ProductModel.getRecentMovements(userId, limit);
