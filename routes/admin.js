@@ -18,21 +18,16 @@ const TransactionModel = require('../models/transaction');
 const { MessageModel, query } = require('../models/db');
 const LearningService  = require('../services/learningService');
 
-function adminAuth(req, res, next) {
-  // Accept password via header (preferred) or query param (form fallback only)
-  const provided = req.headers['x-admin-password'] || req.query.password;
-  if (!process.env.ADMIN_PASSWORD) {
-    return res.status(503).send('Admin dashboard not configured. Set ADMIN_PASSWORD env var.');
-  }
-  const expected = process.env.ADMIN_PASSWORD;
-  let match = false;
-  try {
-    match = provided &&
-      provided.length === expected.length &&
-      crypto.timingSafeEqual(Buffer.from(provided), Buffer.from(expected));
-  } catch { match = false; }
-  if (!match) {
-    return res.status(401).send(`<!DOCTYPE html>
+const ADMIN_COOKIE     = 'bizpulse_admin';
+const ADMIN_COOKIE_OPTS = {
+  httpOnly: true,
+  sameSite: 'strict',
+  path:     '/admin',
+  maxAge:   8 * 60 * 60 * 1000, // 8-hour admin session
+  secure:   process.env.NODE_ENV === 'production',
+};
+
+const LOGIN_FORM = `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -51,23 +46,72 @@ function adminAuth(req, res, next) {
   <div class="box">
     <div class="logo">📊</div>
     <h2>BizPulse Admin</h2>
-    <form method="GET" action="/admin">
+    <form method="POST" action="/admin/login">
       <input type="password" name="password" placeholder="Admin password" autofocus>
       <button type="submit">Access Dashboard</button>
     </form>
   </div>
 </body>
-</html>`);
-  }
-  next();
+</html>`;
+
+function checkAdminPassword(provided) {
+  if (!provided || !process.env.ADMIN_PASSWORD) return false;
+  const expected = process.env.ADMIN_PASSWORD;
+  try {
+    return provided.length === expected.length &&
+      crypto.timingSafeEqual(Buffer.from(provided), Buffer.from(expected));
+  } catch { return false; }
 }
+
+function adminAuth(req, res, next) {
+  if (!process.env.ADMIN_PASSWORD) {
+    return res.status(503).send('Admin dashboard not configured. Set ADMIN_PASSWORD env var.');
+  }
+
+  // 1. Cookie (set after login — covers all browser page loads + AJAX)
+  if (req.cookies?.[ADMIN_COOKIE] && checkAdminPassword(req.cookies[ADMIN_COOKIE])) {
+    return next();
+  }
+
+  // 2. X-Admin-Password header (for external API callers)
+  if (checkAdminPassword(req.headers['x-admin-password'])) {
+    res.cookie(ADMIN_COOKIE, req.headers['x-admin-password'], ADMIN_COOKIE_OPTS);
+    return next();
+  }
+
+  // No valid credential — show login form or 401 for AJAX
+  const wantsJson = req.headers.accept?.includes('application/json');
+  if (wantsJson) return res.status(401).json({ error: 'Admin authentication required.' });
+  return res.status(401).send(LOGIN_FORM);
+}
+
+// ─────────────────────────────────────────────
+// POST /admin/login — form submission
+// ─────────────────────────────────────────────
+router.post('/login', (req, res) => {
+  if (!process.env.ADMIN_PASSWORD) {
+    return res.status(503).send('Admin dashboard not configured.');
+  }
+  if (checkAdminPassword(req.body?.password)) {
+    res.cookie(ADMIN_COOKIE, req.body.password, ADMIN_COOKIE_OPTS);
+    return res.redirect('/admin');
+  }
+  return res.status(401).send(LOGIN_FORM);
+});
+
+// ─────────────────────────────────────────────
+// GET /admin/logout
+// ─────────────────────────────────────────────
+router.get('/logout', (_req, res) => {
+  res.clearCookie(ADMIN_COOKIE, { path: '/admin' });
+  res.redirect('/admin');
+});
 
 // ─────────────────────────────────────────────
 // GET /admin — Full HTML dashboard
 // ─────────────────────────────────────────────
 router.get('/', adminAuth, async (req, res) => {
   try {
-    const pw = req.query.password || '';
 
     const [stats, recentRegs, allUsers, recentMessages, atRisk, variantStats, retentionByBiz, confirmMetrics, productStats, openingStockStats, mediaStats, calcStats] = await Promise.all([
       UserModel.getAdminStats(),
@@ -544,7 +588,8 @@ router.get('/', adminAuth, async (req, res) => {
   <h1>📊 BizPulse Admin</h1>
   <div class="header-right">
     <span class="badge">Phase 1</span>
-    <a href="/admin?password=${encodeURIComponent(pw)}" class="btn" style="font-size:.8rem;padding:6px 14px">↻ Refresh</a>
+    <a href="/admin" class="btn" style="font-size:.8rem;padding:6px 14px">↻ Refresh</a>
+    <a href="/admin/logout" class="btn" style="font-size:.8rem;padding:6px 14px;background:#718096;margin-left:6px">Sign out</a>
   </div>
 </div>
 
@@ -748,11 +793,11 @@ router.get('/', adminAuth, async (req, res) => {
       <div class="stat-card"><div class="stat-value" id="ds-latency">–</div><div class="stat-label">Avg parse latency</div></div>
     </div>
     <div style="display:flex;gap:.75rem;flex-wrap:wrap">
-      <a id="ds-export-btn" href="/admin/api/dataset/export.jsonl?outcome=confirmed&password=${pw}" download
+      <a id="ds-export-btn" href="/admin/api/dataset/export.jsonl?outcome=confirmed" download
         style="padding:8px 18px;background:#0F2744;color:#fff;border-radius:8px;text-decoration:none;font-size:.88rem;font-weight:600">
         ⬇ Download confirmed.jsonl
       </a>
-      <a id="ds-export-all-btn" href="/admin/api/dataset/export.jsonl?outcome=all&password=${pw}" download
+      <a id="ds-export-all-btn" href="/admin/api/dataset/export.jsonl?outcome=all" download
         style="padding:8px 18px;background:#1A56A4;color:#fff;border-radius:8px;text-decoration:none;font-size:.88rem;font-weight:600">
         ⬇ Download all labeled.jsonl
       </a>
@@ -853,7 +898,7 @@ function toast(msg, ok=true) {
 
 async function sendNudge(userId, firstName) {
   if (!confirm('Send a WhatsApp nudge to ' + firstName + '?')) return;
-  const res = await fetch('/admin/nudge?password=${encodeURIComponent(pw)}', {
+  const res = await fetch('/admin/nudge', {
     method: 'POST',
     headers: {'Content-Type':'application/json'},
     body: JSON.stringify({ userId }),
@@ -867,7 +912,7 @@ async function sendCustomMsg() {
   const userId  = document.getElementById('msgUserId').value;
   const msgBody = document.getElementById('msgBody').value.trim();
   if (!userId || !msgBody) { toast('Select a user and enter a message', false); return; }
-  const res = await fetch('/admin/message?password=${encodeURIComponent(pw)}', {
+  const res = await fetch('/admin/message', {
     method: 'POST',
     headers: {'Content-Type':'application/json'},
     body: JSON.stringify({ userId, message: msgBody }),
@@ -890,7 +935,7 @@ async function openUserDetail(userId) {
   modal.style.display = 'block';
   content.innerHTML   = '<p style="color:#718096">Loading…</p>';
 
-  const res  = await fetch('/admin/user/' + userId + '?password=${encodeURIComponent(pw)}');
+  const res  = await fetch('/admin/user/' + userId);
   const data = await res.json();
   if (!data.user) { content.innerHTML = '<p style="color:#C53030">Error loading user.</p>'; return; }
 
@@ -996,7 +1041,7 @@ function showCorrectForm(id, curRev, curExp) {
 async function submitCorrection(id) {
   const rev = parseFloat(document.getElementById('cr-rev-'+id)?.value || 0);
   const exp = parseFloat(document.getElementById('cr-exp-'+id)?.value || 0);
-  const res  = await fetch('/admin/entry/' + id + '/correct?password=${encodeURIComponent(pw)}', {
+  const res  = await fetch('/admin/entry/' + id + '/correct', {
     method: 'POST',
     headers: {'Content-Type':'application/json'},
     body: JSON.stringify({ revenue: rev, totalExpenses: exp }),
@@ -1013,7 +1058,7 @@ async function submitCorrection(id) {
 async function savePhone(userId) {
   const phone = document.getElementById('newPhoneInput')?.value?.trim();
   if (!phone) { toast('Enter a phone number first', false); return; }
-  const res  = await fetch('/admin/user/' + userId + '/phone?password=${encodeURIComponent(pw)}', {
+  const res  = await fetch('/admin/user/' + userId + '/phone', {
     method: 'POST',
     headers: {'Content-Type':'application/json'},
     body: JSON.stringify({ phone }),
@@ -1032,8 +1077,7 @@ async function savePhone(userId) {
 // ── Dataset stats ─────────────────────────────────────────────────────────────
 (async function loadDatasetStats() {
   try {
-    const pw = new URLSearchParams(location.search).get('password') || '';
-    const res = await fetch('/admin/api/dataset/stats?password=' + encodeURIComponent(pw));
+    const res = await fetch('/admin/api/dataset/stats');
     const data = await res.json();
     if (!data.success) return;
 
@@ -1060,8 +1104,7 @@ let learningLoaded = false;
 async function loadLearning() {
   if (learningLoaded) return;
   learningLoaded = true;
-  const pw = new URLSearchParams(location.search).get('password') || '';
-  const res = await fetch('/admin/api/learning?password=' + encodeURIComponent(pw));
+  const res = await fetch('/admin/api/learning');
   const data = await res.json();
   if (!data.success) { toast('❌ Could not load learning data', false); return; }
 
@@ -1121,8 +1164,7 @@ async function loadLearning() {
 }
 
 async function learningAction(id, action) {
-  const pw = new URLSearchParams(location.search).get('password') || '';
-  const res = await fetch('/admin/api/learning/' + id + '/' + action + '?password=' + encodeURIComponent(pw), { method: 'POST' });
+  const res = await fetch('/admin/api/learning/' + id + '/' + action, { method: 'POST' });
   const data = await res.json();
   if (data.success) {
     toast(action === 'approve' ? '✅ Phrase approved — now active' : '✅ Phrase rejected');
@@ -1146,7 +1188,7 @@ async function deleteUser(userId, userName) {
   }
   if (!confirm('DELETE ' + userName + ' and ALL their data permanently? This cannot be undone.')) return;
 
-  const res  = await fetch('/admin/user/' + userId + '/delete?password=${encodeURIComponent(pw)}', {
+  const res  = await fetch('/admin/user/' + userId + '/delete', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ confirmName: input }),
@@ -1284,7 +1326,7 @@ router.post('/user/:id/delete', adminAuth, async (req, res) => {
 
     // onboarding_sessions keyed by phone — clear if exists
     if (user.whatsapp_number) {
-      await query(`DELETE FROM onboarding_sessions WHERE phone_number = $1`, [user.whatsapp_number]).catch(() => {});
+      await query(`DELETE FROM onboarding_sessions WHERE phone = $1`, [user.whatsapp_number]).catch(() => {});
     }
 
     await query('DELETE FROM users WHERE id = $1', [userId]);

@@ -129,7 +129,20 @@ async function processUser(user) {
     };
 
     // Generate personalised AI recommendation via Gemini 2.5 Flash (cost-efficient for batch)
-    const aiRec = await GeminiService.generateRecommendation(summaryData, user);
+    let aiRec = null;
+    try {
+      aiRec = await GeminiService.generateRecommendation(summaryData, user);
+    } catch (aiErr) {
+      console.warn(`[Cron] AI recommendation failed for ${user.name} — using fallback:`, aiErr.message);
+    }
+    // Null-safe fallback so email sends even when Gemini is down
+    const safeAiRec = aiRec || {
+      risk: 'Review your expenses relative to revenue to protect your profit margin.',
+      actions: [
+        'Compare today\'s numbers against your weekly average.',
+        'Identify your highest expense category and look for ways to reduce it.',
+      ],
+    };
 
     const firstName = user.name.split(' ')[0];
 
@@ -138,7 +151,7 @@ async function processUser(user) {
     // in under an hour, causing mutes. Email only at 7pm.
 
     // Send email summary — always runs regardless of WhatsApp status
-    await EmailService.sendSummaryEmail(user, summaryData, aiRec, lowStock);
+    await EmailService.sendSummaryEmail(user, summaryData, safeAiRec, lowStock);
 
     console.log(`[Cron] ✅ Email summary sent to ${user.name} <${user.email}>`);
   } catch (err) {

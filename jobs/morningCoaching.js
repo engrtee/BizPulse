@@ -30,8 +30,15 @@ async function runMorningCoaching() {
       return;
     }
 
-    // Only send stock briefing to users who have declared opening stock
-    const eligible = users.filter(u => u.whatsapp_number && u.opening_stock_logged);
+    // Only send to users active in last 14 days who have declared opening stock
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - 14);
+    const cutoffDate = cutoff.toISOString().slice(0, 10);
+    const eligible = users.filter(u =>
+      u.whatsapp_number &&
+      u.opening_stock_logged &&
+      u.last_message_date >= cutoffDate
+    );
     const skipped  = users.filter(u => u.whatsapp_number && !u.opening_stock_logged).length;
 
     console.log(`[Morning Coaching] ${eligible.length} eligible (stock logged), ${skipped} skipped (no opening stock yet)`);

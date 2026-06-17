@@ -80,6 +80,7 @@ async function initDb() {
   )`, 'CREATE transactions');
 
   await run(`ALTER TABLE transactions ADD COLUMN IF NOT EXISTS entry_method VARCHAR(20) DEFAULT 'text'`, 'ADD entry_method');
+  await run(`CREATE INDEX IF NOT EXISTS idx_transactions_user_date ON transactions(user_id, date DESC)`, 'INDEX transactions user_date');
 
   await run(`CREATE TABLE IF NOT EXISTS inventory (
     id                  SERIAL PRIMARY KEY,
@@ -420,8 +421,9 @@ async function initDb() {
     step        TEXT NOT NULL DEFAULT 'name',
     collected   JSONB NOT NULL DEFAULT '{}',
     created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    expires_at  TIMESTAMPTZ NOT NULL DEFAULT NOW() + INTERVAL '30 minutes'
+    expires_at  TIMESTAMPTZ NOT NULL DEFAULT NOW() + INTERVAL '6 hours'
   )`, 'CREATE onboarding_sessions');
+  await run(`ALTER TABLE onboarding_sessions ALTER COLUMN expires_at SET DEFAULT NOW() + INTERVAL '6 hours'`, 'EXTEND onboarding session TTL');
 
   // ── AI inference log (training dataset capture) ───────────────────────
   // Every Gemini parse call is logged here. outcome is filled in when the

@@ -33,7 +33,14 @@ const HEALTH_STYLES = {
  * @param {object} aiRec        { risk, actions: string[] }
  * @param {Array}  lowStock     Array of inventory rows with low stock
  */
-function buildEmailHtml(user, summary, aiRec, lowStock = []) {
+function buildEmailHtml(user, summary, aiRecRaw, lowStock = []) {
+  const aiRec = aiRecRaw || {
+    risk: 'Review your expenses relative to revenue to protect your profit margin.',
+    actions: [
+      'Compare today\'s numbers against your weekly average.',
+      'Identify your highest expense category and look for ways to reduce it.',
+    ],
+  };
   const waNumber   = (process.env.BIZPULSE_NUMBER || '').replace(/^\+/, '');
   const firstName  = user.name.split(' ')[0];
   const dateStr    = formatDate(summary.date || new Date());
@@ -166,7 +173,7 @@ function buildEmailHtml(user, summary, aiRec, lowStock = []) {
         Keep going ${firstName}! Every naira tracked brings you closer to your goals. 🚀
       </p>
       <p style="font-size:11px;color:#A0AEC0;margin:0">
-        BizPulse · Your WhatsApp Financial OS · Unsubscribe
+        BizPulse · Your WhatsApp Financial OS · To stop emails, reply STOP to your WhatsApp summary
       </p>
     </td>
   </tr>

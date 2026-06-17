@@ -122,6 +122,12 @@ async function start() {
     if (!process.env.ANTHROPIC_API_KEY) {
       throw new Error('ANTHROPIC_API_KEY is not set — Kemi agent will not work. Add it to Render env vars.');
     }
+    if (!process.env.GEMINI_API_KEY) {
+      throw new Error('GEMINI_API_KEY is not set — AI parsing and 7pm summaries will not work. Add it to Render env vars.');
+    }
+    if (!process.env.WHATSAPP_APP_SECRET && process.env.NODE_ENV === 'production') {
+      console.warn('[Startup] ⚠️  WHATSAPP_APP_SECRET is not set — webhook signature verification is disabled. Set it in Render env vars before launch.');
+    }
 
     // Create tables if they don't exist
     await initDb();
