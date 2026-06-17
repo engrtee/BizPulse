@@ -20,7 +20,23 @@
       "Bash(grep -o \"postgres://[^[:space:]'\\\\\"\\\\\\\\\\\\\\\\]*supabase[^[:space:]'\\\\\"\\\\\\\\\\\\\\\\]*\\\\|postgresql://[^[:space:]'\\\\\"\\\\\\\\\\\\\\\\]*supabase[^[:space:]'\\\\\"\\\\\\\\\\\\\\\\]*\" \"C:\\\\Users\\\\USER\\\\.claude\\\\projects\\\\C--Users-USER-Desktop-Development-Project-BizPulse\\\\64b1251c-cd5d-442b-a7b9-6b4bd59b459a.jsonl\")",
       "PowerShell(cd \"C:\\\\Users\\\\USER\\\\Desktop\\\\Development Project\\\\BizPulse\"; node -e \"require\\('dotenv'\\).config\\(\\); const {Pool}=require\\('pg'\\); const p=new Pool\\({connectionString:process.env.DATABASE_URL}\\); p.query\\('SELECT table_name FROM information_schema.tables WHERE table_schema=$1 ORDER BY table_name',['public']\\).then\\(r=>{console.log\\('Tables:',r.rows.map\\(x=>x.table_name\\).join\\(', '\\)\\); p.end\\(\\);}\\).catch\\(e=>{console.error\\('DB error:',e.message\\); p.end\\(\\);}\\)\")",
       "PowerShell(cd \"C:\\\\Users\\\\USER\\\\Desktop\\\\Development Project\\\\BizPulse\"; node scripts/reset-test-user.js; node kemi-test-script.js > kemi-test-run.log 2>&1; echo \"Exit code: $LASTEXITCODE\")",
-      "PowerShell(Out-File *)"
+      "PowerShell(Out-File *)",
+      "Bash(node simulate-user.js)",
+      "Bash(git commit -m 'Add diagnose-stock-split.js to identify inventory vs products table discrepancies *)",
+      "Bash(render --version)",
+      "Bash(node --check services/stockExamples.js)",
+      "Bash(node --check models/user.js)",
+      "Bash(node --check models/transaction.js)",
+      "Bash(node --check routes/api.js)",
+      "Bash(node --check routes/admin.js)",
+      "Bash(del *)",
+      "Bash(node --check server.js)",
+      "Bash(node --check src/agent/toolHandlers.js)",
+      "Bash(node --check src/agent/memory.js)",
+      "Bash(node --check src/agent/agentLoop.js)",
+      "Bash(node --check models/inventory.js)",
+      "Bash(git rm *)",
+      "Bash(git commit -m 'Update Claude Code local settings *)"
     ]
   }
 }
