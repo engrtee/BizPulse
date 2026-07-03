@@ -50,6 +50,56 @@ const WRITE_TOOLS = new Set([
   'log_debt', 'settle_debt', 'set_goal',
 ]);
 
+// Tools that represent the trader actually reporting a day's activity —
+// these advance the streak (A1-1). correct_last_entry and set_goal don't
+// count as new activity, so they're excluded.
+const STREAK_TOOLS = new Set([
+  'log_sale', 'log_restock', 'log_expense', 'log_debt', 'settle_debt',
+]);
+
+/** Per-tool success check — each handler signals success differently. */
+function toolSucceeded(name, result) {
+  if (!result || result.error) return false;
+  switch (name) {
+    case 'log_sale':
+    case 'log_restock':
+      return result.success === true;
+    case 'log_expense':
+    case 'log_debt':
+      return result.logged === true;
+    case 'settle_debt':
+      return result.settled === true;
+    default:
+      return false;
+  }
+}
+
+/**
+ * Record today's activity for streak purposes and detect a milestone worth
+ * celebrating. Safe to call more than once per turn (touchLastEntry is
+ * idempotent within the same WAT day).
+ */
+async function recordActivityMilestone(userId) {
+  try {
+    const UserModel     = require('../../models/user');
+    const newStreak     = await UserModel.touchLastEntry(userId);
+    const totalMessages = await UserModel.getTotalMessages(userId);
+    const s = parseInt(newStreak, 10) || 1;
+
+    let milestone = null;
+    if (totalMessages === 1)      milestone = 'first_entry';
+    else if (s === 7)              milestone = 'streak_7';
+    else if (s === 30)             milestone = 'streak_30';
+    else if (s === 100)            milestone = 'streak_100';
+    else if (totalMessages === 10) milestone = 'entry_10';
+
+    return { streak: s, totalMessages, milestone };
+  } catch (e) {
+    console.error('[Kemi] recordActivityMilestone failed:', e.message);
+    return null;
+  }
+}
+
 /**
  * Route a tool call to the correct handler.
  */
@@ -177,6 +227,14 @@ async function runAgent(whatsappNumber, incomingMessage, opts = {}) {
       for (const tb of writeBlocks) {
         try {
           const result = await dispatch(tb.name, tb.input, whatsappNumber);
+
+          // A1-1: advance the streak on real activity, and let Claude know so
+          // she can mention it naturally rather than a bolted-on template.
+          if (STREAK_TOOLS.has(tb.name) && user.id && toolSucceeded(tb.name, result)) {
+            const activity = await recordActivityMilestone(user.id);
+            if (activity) result.streak_info = activity;
+          }
+
           toolResults.push({
             type:        'tool_result',
             tool_use_id: tb.id,

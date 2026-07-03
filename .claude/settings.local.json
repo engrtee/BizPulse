@@ -36,7 +36,23 @@
       "Bash(node --check src/agent/agentLoop.js)",
       "Bash(node --check models/inventory.js)",
       "Bash(git rm *)",
-      "Bash(git commit -m 'Update Claude Code local settings *)"
+      "Bash(git commit -m 'Update Claude Code local settings *)",
+      "Bash(git checkout *)",
+      "Bash(grep *)",
+      "Bash(node --check \"./src/agent/toolHandlers.js\")",
+      "Bash(echo \"exit code: $?\")",
+      "Bash(git commit *)",
+      "Bash(git cherry-pick *)",
+      "Bash(node --check \"./services/whatsapp.js\")",
+      "Bash(node --check \"./routes/webhook.js\")",
+      "Bash(node --check \"./models/db.js\")",
+      "Bash(git restore *)",
+      "Bash(grep -rl \"A1-1\\\\b\" --include=*.md .)",
+      "Bash(grep -rl \"A1-1\\\\b\" . --include=*.js)",
+      "Bash(find . -iname \"*audit*\" -not -path \"*/node_modules/*\")",
+      "Bash(find . -iname \"*backlog*\" -not -path \"*/node_modules/*\")",
+      "Bash(find . -iname \"*batch*\" -not -path \"*/node_modules/*\")",
+      "Bash(node --check src/agent/systemPrompt.js)"
     ]
   }
 }
