@@ -262,7 +262,7 @@ agent. Build and reason about new features against Kemi's tools, not the older r
 **Kemi's tools (`src/agent/tools.js` schemas, `toolHandlers.js` implementations):**
 `log_sale`, `log_restock`, `log_expense`, `get_stock_level`, `get_stock_intelligence`,
 `get_sales_summary`, `search_products`, `correct_last_entry`, `log_debt`, `settle_debt`, `get_debts`,
-`set_goal`, `compare_periods`.
+`send_debt_reminder`, `set_goal`, `compare_periods`.
 
 **Important behavioral gap (open, tracked for Batch 4):** Kemi's write tools commit immediately —
 there is no confirm-before-commit step in her tool-call path today. A separate, older confirmation
@@ -334,19 +334,50 @@ reading from here over recomputing velocity ad hoc in a new feature.
 
 ---
 
-## DEBT TRACKING — CURRENT STATE (consolidation in progress)
+## DEBT TRACKING — CURRENT STATE (consolidated, Batch 1 / A1-3, 2026-07)
 
-Two debt tables currently coexist:
-- **`debtors`** (user_id-keyed, NUMERIC amounts, supports partial payments via `amount_paid`/
-  `status IN ('pending','partial','paid')`) — this is the **canonical, actively-written** table. Kemi's
-  `log_debt`/`settle_debt`/`get_debts` tools and the legacy credit-sale path both write here.
-- **`debts`** (whatsapp_number-keyed, BIGINT kobo amounts, `status IN ('outstanding','settled')`, no
-  partial-payment support) — legacy. Nothing writes to it anymore; `getDebtsHandler` still UNION-reads it
-  for historical rows. Migration/consolidation into `debtors` is tracked work, not yet done.
-**Known invariant violation to fix, not to copy elsewhere:** `DebtorModel.markPaid()` mutates
-`amount_paid` in place via UPDATE rather than appending an INSERT-only payment row with a derived
-balance — this is the one place in the debt system that doesn't yet follow Fix 1's spirit. New debt/
-payment features should use an append-only ledger, not this pattern.
+**`debtors`** (user_id-keyed, NUMERIC amounts) is now the **sole** debt table. It supports partial
+payments via `amount_paid`/`status IN ('pending','partial','paid')`, plus `customer_id` (link to
+`customers`, once a phone is on file), `disputed`/`disputed_at`, and `last_reminder_sent_at`. Kemi's
+`log_debt`/`settle_debt`/`get_debts`/`send_debt_reminder` tools are the only writers.
+
+**`debts`** (whatsapp_number-keyed, legacy) has been migrated into `debtors` via
+`scripts/migrate-legacy-debts.js` (manual run, idempotent — safe to re-run) and is no longer read
+anywhere in the app (`getDebtsHandler`'s old UNION was removed). The table itself is **not dropped** —
+it stays as historical record until Tosin has spot-checked the migrated rows in production, at which
+point physical removal is a manual follow-up.
+**Historical data-quality note:** despite this doc previously describing `debts.amount` as "BIGINT
+kobo", the original (deleted) writer never multiplied by 100 — it stored the raw naira figure straight
+into the BIGINT column. The migration copies `debts.amount` through as-is (naira, no `/100`) to match
+what was actually written; confirmed by reading the original writer in git history before migrating.
+
+**Ledger fix (A1-3):** `DebtorModel.markPaid()` (`models/debtor.js`) no longer mutates `amount_paid` in
+place. It INSERTs into the new append-only `debt_payments` table, then recomputes (never increments)
+`debtors.amount_paid`/`status`/`paid_at` from `SUM(debt_payments.amount)` — `debt_payments` is the
+source of truth and audit trail; the columns on `debtors` are just a cache always rebuilt from it. This
+also fixed a latent bug in `settleDebtHandler`: a "fully paid" reply (amount omitted) after a prior
+partial payment now settles the true remaining balance, not the original total.
+
+**Customer contacts + compliance (`models/customer.js`, `customers` table, A2-3/A2-9):** phone numbers
+are captured **on-demand only** — Kemi never asks for one when a debt is first logged, only when the
+trader actually asks for a reminder to be sent and no number is on file yet (`send_debt_reminder`
+returns `needs_phone` in that case). The trader supplying the number is the request-to-contact event.
+`STOP`/`DISPUTE` replies from a known customer number are intercepted in `routes/webhook.js` before the
+onboarding branch (so they're never swallowed into "what's your name?"): `STOP` sets
+`customers.opted_out = true` **globally** (across all traders that number is linked to — the safer
+compliance default), `DISPUTE` flags the most recently-reminded outstanding `debtors` row as
+`disputed = true` and notifies the trader. `send_debt_reminder` skips opted-out and disputed debtors and
+narrates the skip honestly rather than claiming a blanket "reminders sent!". A Meta template send failure
+(unapproved template, rate limit, etc.) is caught and surfaced as `send_failed` rather than crashing the
+tool call — this matters even with live Meta credentials configured, since credentials being present
+doesn't mean a given template is approved.
+
+**Weekly Monday debt digest** (`jobs/debtDigest.js`, 8:00 AM WAT) sends each trader with outstanding
+debt a `weekly_debt_digest` template summary; skips traders with zero outstanding debt.
+
+**Full-payment → receipt hook:** `settleDebtHandler` calls `services/receipts.js`'s
+`onDebtFullyPaid()` when a debt is fully settled — currently a stub that only logs intent; real receipt
+generation is Batch 2 work.
 
 ---
 
@@ -458,7 +489,8 @@ Must always show:
   every-15-min `stock_intelligence_mv` refresh
 - `jobs/retentionNudge.js` — 10:00 AM WAT, checks inactive users, sends WhatsApp nudges at day 3/5/7/14
   of inactivity
-**Known gap:** these four jobs currently share no send-volume budget — an active user could receive a
+- `jobs/debtDigest.js` — Monday 8:00 AM WAT weekly debt digest (Batch 1, A1-3) — see Debt Tracking section
+**Known gap:** these five jobs currently share no send-volume budget — an active user could receive a
 6pm reminder, an 8pm digest, and (on the right day) a 10am nudge and a 7:30am briefing, all in one day,
 with nothing coordinating total volume. Any new proactive-push feature must be built against a shared
 per-user weekly send cap, not just its own logic.
@@ -483,11 +515,20 @@ last_sale_price, current_stock, total_ever_received, is_active, created_at, upda
 unit_price, total_amount, transaction_date, daily_entry_id, notes, channel('retail'|'wholesale'),
 sale_type('cash'|'credit'), created_at`.
 
-**debtors** (canonical debt table, see Debt Tracking section) — `id, user_id, debtor_name, amount,
-amount_paid, product_name, status, notes, created_at, paid_at`.
+**debtors** (sole debt table, see Debt Tracking section) — `id, user_id, debtor_name, amount,
+amount_paid, product_name, status, notes, created_at, paid_at, customer_id, disputed, disputed_at,
+last_reminder_sent_at`.
 
-**debts** (legacy, read-only for new code) — `id(UUID), whatsapp_number, debtor_name, amount(BIGINT
-kobo), item, note, status, created_at, settled_at`.
+**debt_payments** — append-only ledger backing `DebtorModel.markPaid()` — `id, debtor_id, amount,
+created_at`. Source of truth for `debtors.amount_paid`, never the other way around.
+
+**customers** — a trader's named contacts, captured on-demand when a reminder is requested — `id,
+user_id, name, phone, opted_out, opted_out_at, created_at, updated_at`.
+
+**debts** (legacy, fully migrated into `debtors` via `scripts/migrate-legacy-debts.js`, no longer read
+anywhere — see Debt Tracking section) — `id(UUID), whatsapp_number, debtor_name, amount, item, note,
+status, created_at, settled_at`. Despite the historical "BIGINT kobo" naming, `amount` was actually
+always written in naira — see the Debt Tracking section's data-quality note.
 
 **inventory** (legacy, being phased out — see Fix 4) — `id, user_id, item_name, current_balance,
 total_received, unit_price, low_stock_threshold, last_updated`.
@@ -548,14 +589,15 @@ bizpulse/
 │   ├── stockIntelligence.js (reads stock_intelligence_mv)
 │   └── digest.js          (8pm digest, 3am cleanup, 15-min MV refresh crons)
 ├── services/
-│   ├── whatsapp.js         (outbound send — text only today, no media/template support yet)
+│   ├── whatsapp.js         (outbound send — text, templates, and debt/digest senders)
 │   ├── gemini.js           (email recommendation + voice transcription; parseWithAI is legacy/dead)
 │   ├── claude.js           (Claude client used for the 6pm nudge coaching tip)
 │   ├── email.js            (build + send emails via Brevo HTTP API)
 │   ├── confirmationService.js (pending_entries YES/EDIT/CANCEL — legacy path only, see Kemi section)
 │   ├── productService.js   (legacy-path product fuzzy-matching, stock alerts)
 │   ├── inventory.js        (legacy inventory table operations)
-│   ├── customers.js        (standalone customer-count logging)
+│   ├── customers.js        (standalone customer-COUNT logging — NOT the debt-contact model, see models/customer.js)
+│   ├── receipts.js         (full-payment → receipt hook, stub until Batch 2)
 │   ├── personaEngine.js    (business-persona-aware messaging)
 │   ├── nudgeBuilder.js     (retention nudge copy)
 │   ├── messageVariants.js  (A/B message variant tracking)
@@ -569,7 +611,8 @@ bizpulse/
 │   ├── user.js
 │   ├── transaction.js
 │   ├── product.js
-│   ├── debtor.js          (canonical debt table)
+│   ├── debtor.js          (sole debt table + append-only debt_payments ledger)
+│   ├── customer.js        (trader's debt-contact phone numbers + STOP consent, see Debt Tracking section)
 │   ├── inventory.js       (legacy)
 │   └── onboarding.js      (WhatsApp-native conversational registration sessions)
 ├── middleware/
@@ -577,7 +620,8 @@ bizpulse/
 ├── jobs/
 │   ├── dailySummary.js     (6pm reminder + 7pm email summary + confirmation sweeps)
 │   ├── morningCoaching.js  (7:30am stock briefing)
-│   └── retentionNudge.js   (10am day 3/5/7/14 inactivity nudges)
+│   ├── retentionNudge.js   (10am day 3/5/7/14 inactivity nudges)
+│   └── debtDigest.js       (Monday 8am weekly debt digest)
 ├── utils/
 │   ├── formatter.js        (₦ formatting, dates, health score)
 │   ├── naira.js             (currency parsing helpers)

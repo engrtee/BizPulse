@@ -45,10 +45,37 @@ that file first before assuming it's a BizPulse code issue.
 
 ## Batch 1 — Debt book consolidation + reminders (revised: consolidation, not greenfield)
 
-Not started. Items: consolidate `debts` → `debtors` (A1-3), replace `DebtorModel.markPaid()`
-mutate-in-place with append-only `debt_payments` (A1-3), `customers` table with consent/STOP (A2-3,
-A2-9), reminder engine on the `debt_payment_reminder` template with honesty rules + DISPUTE handling,
-weekly Monday debt digest, full-payment → receipt hook (stub until Batch 2).
+| # | Item | Status | Commit |
+|---|---|---|---|
+| 1 (A1-3) | Schema: `customers`, `debt_payments` tables + `debtors` columns (`customer_id`, `disputed`, `disputed_at`, `last_reminder_sent_at`) | ✅ Done | `b4e12ad` |
+| 2 (A1-3) | `DebtorModel.markPaid()` rewritten onto append-only `debt_payments` ledger; `settleDebtHandler` "fully paid after partial" overpay bug fixed | ✅ Done | `b4e12ad` |
+| 3 (A1-3) | `scripts/migrate-legacy-debts.js` — migrates `debts` → `debtors`, drops `debts` UNION from `getDebtsHandler`. **Caught during verification:** `debts.amount` was actually always naira despite the "BIGINT kobo" name (original writer never *100'd) — script copies as-is, not /100. See CLAUDE.md Debt Tracking note. | ✅ Done | `b4e12ad` |
+| 4 (A2-3/A2-9) | `models/customer.js` — on-demand phone capture, global opt-out by phone | ✅ Done | `2f4f5ed` |
+| 5 | `send_debt_reminder` Kemi tool (schema, handler, dispatch, systemPrompt guidance) | ✅ Done | `b4e12ad` |
+| 6 (A2-3/A2-9) | STOP/DISPUTE compliance intercept in `routes/webhook.js`, before the onboarding branch | ✅ Done | `2f4f5ed` |
+| 7 | Weekly Monday debt digest (`jobs/debtDigest.js`, 8am WAT) | ✅ Done | `bcd4683` |
+| 8 | Full-payment → receipt hook stub (`services/receipts.js`) | ✅ Done | `bcd4683` |
+| 9 | `tests/debt_consolidation_test.js` (`npm run test:debts`) — ledger, reminder needs_phone flow, STOP, DISPUTE | ✅ Done | `bcd4683` |
+| 10 | CLAUDE.md Debt Tracking section + tool list + folder structure updated | ✅ Done | this commit |
+
+**Batch 1 is CLOSED (2026-07-03).** `npm run test:debts` — 16/16 pass against live Postgres (dev-mode
+WhatsApp send, no real Meta calls). `node scripts/migrate-legacy-debts.js` was run against dev Postgres;
+migrated rows spot-checked amount-for-amount against the source `debts` rows.
+
+**Real bug caught during this verification, not just a passed checklist:** the first migration run (with
+the naive `/100` kobo conversion) actually executed and silently shrank real dev-DB debt amounts 100x
+(₦3500 → ₦35). Caught by spot-checking output against the source table rather than trusting the "Done"
+log line. Root cause: `debts.amount` was always written in naira by the original (now-deleted) writer —
+confirmed by reading it in git history — despite CLAUDE.md documenting the column as "BIGINT kobo" the
+whole time. Fixed the script (no `/100`), corrected the CLAUDE.md claim, deleted the wrongly-scaled rows,
+and re-ran the corrected migration before closing this batch.
+
+Also caught in the same pass: `sendDebtReminderHandler`'s call to `WhatsAppService.sendDebtReminderTemplate`
+had no error handling — this dev environment has live Meta credentials configured, so the "dev-mode
+safe" assumption in the original batch plan (no-ops to console logging when credentials are missing)
+didn't hold; an unapproved template with real credentials throws a real Axios error instead. Fixed by
+wrapping the send in try/catch with a `send_failed` outcome that Kemi narrates honestly, rather than
+letting it crash the tool call (or the weekly digest cron loop, which was already safe per-user).
 
 ## Batch 2 — Receipt generator
 
