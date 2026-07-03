@@ -67,6 +67,133 @@ async function sendMessage(to, body) {
 }
 
 /**
+ * Send an approved Meta message template — required for any business-initiated
+ * message outside the 24-hour customer service window (reminders to a trader's
+ * customer, scheduled pushes to the trader). Free-form sendMessage() will be
+ * REJECTED by Meta for these cases; templates are the only compliant path.
+ *
+ * @param {string} to            Recipient number, any format
+ * @param {string} templateName  Exact approved template name (see docs/meta-templates.md)
+ * @param {string} languageCode  Approved language code, e.g. "en"
+ * @param {string[]} bodyParams  Values for {{1}}, {{2}}, ... in the template body, IN ORDER
+ */
+async function sendTemplateMessage(to, templateName, languageCode, bodyParams = []) {
+  const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+  const token         = process.env.WHATSAPP_TOKEN;
+
+  const normalizedTo = normalizePhone(to);
+  if (!normalizedTo) {
+    console.error(`[WhatsApp] ❌ Invalid phone number: ${to}`);
+    throw new Error(`Invalid phone number: ${to}`);
+  }
+
+  const payload = {
+    messaging_product: 'whatsapp',
+    recipient_type:    'individual',
+    to:                normalizedTo,
+    type:              'template',
+    template: {
+      name:     templateName,
+      language: { code: languageCode },
+      components: bodyParams.length > 0 ? [{
+        type:       'body',
+        parameters: bodyParams.map(text => ({ type: 'text', text: String(text) })),
+      }] : [],
+    },
+  };
+
+  // For dev logging / admin audit trail — a readable rendering, not what's actually sent
+  const auditText = `[template:${templateName}] ${bodyParams.join(' | ')}`;
+
+  if (!phoneNumberId || !token) {
+    console.log(`[WhatsApp DEV] → ${normalizedTo}\n${auditText}\n`);
+    MessageModel.logOutbound(normalizedTo, auditText).catch(() => {});
+    return { status: 'dev_mode', to: normalizedTo, template: templateName, bodyParams };
+  }
+
+  try {
+    const res = await axios.post(
+      `${BASE_URL}/${phoneNumberId}/messages`,
+      payload,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      }
+    );
+    MessageModel.logOutbound(normalizedTo, auditText).catch(() => {});
+    return res.data;
+  } catch (err) {
+    console.error(`[WhatsApp] Template send error (${templateName}):`, err?.response?.data || err.message);
+    throw err;
+  }
+}
+
+/**
+ * debt_payment_reminder — sent to a TRADER'S CUSTOMER, not the trader.
+ * Body: "Hi {{1}}, this is {{2}} (sent via BizPulse). Our records show ₦{{3}}
+ * outstanding from {{4}}. If you've already paid, please ignore this message.
+ * Reply DISPUTE if this isn't correct, or STOP to opt out of reminders."
+ */
+async function sendDebtReminderTemplate(to, { customerFirstName, shopName, amountNaira, dateLabel }) {
+  const fmt = (n) => Number(n || 0).toLocaleString('en-NG');
+  return sendTemplateMessage(to, 'debt_payment_reminder', 'en', [
+    customerFirstName || 'there',
+    shopName,
+    fmt(amountNaira),
+    dateLabel,
+  ]);
+}
+
+/**
+ * weekly_profit_summary — sent to the TRADER, Sunday evening.
+ * Body: "Hi {{1}}, your week at {{2}}: revenue ₦{{3}}, profit ₦{{4}} ({{5}}% margin). {{6}}"
+ * {{6}} also carries the honest-degradation line when cost data is missing.
+ */
+async function sendWeeklyProfitTemplate(to, { firstName, shopName, revenue, profit, marginPct, extraLine }) {
+  const fmt = (n) => Number(n || 0).toLocaleString('en-NG');
+  return sendTemplateMessage(to, 'weekly_profit_summary', 'en', [
+    firstName,
+    shopName,
+    fmt(revenue),
+    fmt(profit),
+    String(marginPct ?? 0),
+    extraLine || '',
+  ]);
+}
+
+/**
+ * weekly_debt_digest — sent to the TRADER, Monday morning.
+ * Body: "Hi {{1}}, your debt book for {{2}}: {{3}} customers owe a total of ₦{{4}}.
+ * Reply REMIND ALL to send reminders, or ask me who owes what."
+ */
+async function sendWeeklyDebtDigestTemplate(to, { firstName, shopName, customerCount, totalOwed }) {
+  const fmt = (n) => Number(n || 0).toLocaleString('en-NG');
+  return sendTemplateMessage(to, 'weekly_debt_digest', 'en', [
+    firstName,
+    shopName,
+    String(customerCount || 0),
+    fmt(totalOwed),
+  ]);
+}
+
+/**
+ * low_stock_alert — sent to the TRADER, event-driven.
+ * Body: "Hi {{1}}, {{2}} is running low — about {{3}} {{4}} left, selling fast.
+ * Restock before {{5}} to avoid running out."
+ */
+async function sendLowStockAlertTemplate(to, { firstName, productName, qty, unit, restockByLabel }) {
+  return sendTemplateMessage(to, 'low_stock_alert', 'en', [
+    firstName,
+    productName,
+    String(qty),
+    unit || 'units',
+    restockByLabel,
+  ]);
+}
+
+/**
  * Send the instant acknowledgement reply after a daily entry.
  * @param {string} to          WhatsApp number
  * @param {string} firstName   User's first name
@@ -516,6 +643,11 @@ async function sendDebtorList(to, firstName, debtors) {
 
 module.exports = {
   sendMessage,
+  sendTemplateMessage,
+  sendDebtReminderTemplate,
+  sendWeeklyProfitTemplate,
+  sendWeeklyDebtDigestTemplate,
+  sendLowStockAlertTemplate,
   sendEntryAck,
   sendMilestone,
   sendStockReply,
