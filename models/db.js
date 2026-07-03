@@ -77,6 +77,15 @@ async function initDb() {
   )`, 'CREATE transactions');
 
   await run(`ALTER TABLE transactions ADD COLUMN IF NOT EXISTS entry_method VARCHAR(20) DEFAULT 'text'`, 'ADD entry_method');
+
+  // margin_basis distinguishes what transactions.margin actually means on a given row (Fix 2):
+  // 'net_of_expenses' — margin = (revenue - all expenses) / revenue, for daily-aggregate entries
+  // 'gross_cogs'       — margin = (sale price - cost of goods sold) / sale price, for a single Kemi sale
+  // 'not_applicable'   — margin is NULL/not meaningful on this row (debt repayments, voids/corrections)
+  await run(`ALTER TABLE transactions ADD COLUMN IF NOT EXISTS margin_basis VARCHAR(20) DEFAULT 'net_of_expenses'`, 'ADD margin_basis');
+  await run(`ALTER TABLE transactions DROP CONSTRAINT IF EXISTS transactions_margin_basis_check`, 'DROP old margin_basis check');
+  await run(`ALTER TABLE transactions ADD CONSTRAINT transactions_margin_basis_check
+    CHECK (margin_basis IN ('net_of_expenses', 'gross_cogs', 'not_applicable'))`, 'ADD margin_basis check');
   await run(`CREATE INDEX IF NOT EXISTS idx_transactions_user_date ON transactions(user_id, date DESC)`, 'INDEX transactions user_date');
 
   await run(`CREATE TABLE IF NOT EXISTS inventory (

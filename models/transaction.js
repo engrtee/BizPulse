@@ -8,8 +8,13 @@
 const { query } = require('./db');
 
 const TransactionModel = {
-  /** Insert a daily entry (revenue + expenses). Pass entryDate (YYYY-MM-DD) to backdate. */
-  async create({ userId, revenue, totalExpenses, expenseBreakdown, profit, margin, customers, notes, rawMessage, entryMethod, entryDate }) {
+  /**
+   * Insert a daily entry (revenue + expenses). Pass entryDate (YYYY-MM-DD) to backdate.
+   * marginBasis defaults to 'net_of_expenses' — correct for this function's normal
+   * callers (web dashboard entry form, full-day aggregate entries). Per-sale gross-COGS
+   * entries are inserted directly by src/agent/toolHandlers.js, not through here.
+   */
+  async create({ userId, revenue, totalExpenses, expenseBreakdown, profit, margin, customers, notes, rawMessage, entryMethod, entryDate, marginBasis }) {
     const params = [
       userId,
       revenue || 0,
@@ -21,6 +26,7 @@ const TransactionModel = {
       notes || null,
       rawMessage || null,
       entryMethod || 'text',
+      marginBasis || 'net_of_expenses',
     ];
     let dateClause = `(CURRENT_TIMESTAMP AT TIME ZONE 'Africa/Lagos')::DATE`;
     if (entryDate) {
@@ -29,8 +35,8 @@ const TransactionModel = {
     }
     const res = await query(
       `INSERT INTO transactions
-         (user_id, date, revenue, total_expenses, expense_breakdown, profit, margin, customers, notes, raw_message, entry_method)
-       VALUES ($1, ${dateClause}, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+         (user_id, date, revenue, total_expenses, expense_breakdown, profit, margin, customers, notes, raw_message, entry_method, margin_basis)
+       VALUES ($1, ${dateClause}, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
        RETURNING *`,
       params
     );

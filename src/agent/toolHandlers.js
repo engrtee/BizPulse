@@ -139,14 +139,17 @@ async function logSaleHandler({ product, quantity, unit, unit_price, customer_na
     const txMargin    = txProfit !== null && total > 0
       ? parseFloat(((txProfit / total) * 100).toFixed(2))
       : null;
+    // Fix 2 / A1-7: margin here is gross-COGS on this one sale, not net-of-expenses.
+    // 'not_applicable' when there's no cost price on file (txMargin is NULL too).
+    const marginBasis = txMargin !== null ? 'gross_cogs' : 'not_applicable';
 
     await query(
       `INSERT INTO transactions
          (user_id, date, revenue, total_expenses, expense_breakdown,
-          profit, margin, customers, notes, entry_method)
-       VALUES ($1, $2::DATE, $3, COALESCE($4,0), '{}', $5, $6, 0, $7, 'kemi')`,
+          profit, margin, customers, notes, entry_method, margin_basis)
+       VALUES ($1, $2::DATE, $3, COALESCE($4,0), '{}', $5, $6, 0, $7, 'kemi', $8)`,
       [user.id, today, total, cogs, txProfit, txMargin,
-       `Kemi: sold ${qty} ${unit || 'units'} ${canonicalName}`]
+       `Kemi: sold ${qty} ${unit || 'units'} ${canonicalName}`, marginBasis]
     );
   }
 
@@ -431,8 +434,8 @@ async function correctLastEntryHandler({ action, new_amount, new_item, new_quant
       await query(
         `INSERT INTO transactions
            (user_id, date, revenue, total_expenses, expense_breakdown,
-            profit, margin, customers, notes, entry_method)
-         VALUES ($1, $2::DATE, $3, 0, '{}', $3, NULL, 0, $4, 'kemi')`,
+            profit, margin, customers, notes, entry_method, margin_basis)
+         VALUES ($1, $2::DATE, $3, 0, '{}', $3, NULL, 0, $4, 'kemi', 'not_applicable')`,
         [user.id, today, -voidedAmount,
          `Kemi: voided sale of ${entry.product_name} [correction]`]
       );
@@ -509,13 +512,14 @@ async function settleDebtHandler({ debtor_name, amount, whatsappNumber }) {
   await DebtorModel.markPaid(debt.id, paidAmount);
 
   // Record as revenue in transactions table.
-  // Debt repayments are pure cash — no COGS applies, so margin is NULL.
+  // Debt repayments are pure cash — no COGS applies, so margin is NULL and
+  // margin_basis is not_applicable (Fix 2 / A1-7).
   const today = todayWAT();
   await query(
     `INSERT INTO transactions
        (user_id, date, revenue, total_expenses, expense_breakdown,
-        profit, margin, customers, notes, entry_method)
-     VALUES ($1, $2::DATE, $3, 0, '{}', $3, NULL, 0, $4, 'kemi')`,
+        profit, margin, customers, notes, entry_method, margin_basis)
+     VALUES ($1, $2::DATE, $3, 0, '{}', $3, NULL, 0, $4, 'kemi', 'not_applicable')`,
     [user.id, today, paidAmount, `Debt payment from ${debtor_name}`]
   );
 
@@ -621,8 +625,8 @@ async function logExpenseHandler({ category, amount, note, whatsappNumber }) {
   await query(
     `INSERT INTO transactions
        (user_id, date, revenue, total_expenses, expense_breakdown,
-        profit, margin, customers, notes, entry_method)
-     VALUES ($1, $2::DATE, 0, $3, $4, -$3, 0, 0, $5, 'kemi')`,
+        profit, margin, customers, notes, entry_method, margin_basis)
+     VALUES ($1, $2::DATE, 0, $3, $4, -$3, 0, 0, $5, 'kemi', 'net_of_expenses')`,
     [user.id, today, amt, JSON.stringify(breakdown),
      note || `${category} expense`]
   );
