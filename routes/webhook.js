@@ -185,6 +185,20 @@ router.post('/', async (req, res) => {
         return;
       }
 
+      const promptText = caption ||
+        'I sent you a photo of my stock notebook or receipt. Please read every item and quantity you can see and log them for me.';
+
+      // Dedup BEFORE any processing — Meta redelivers on timeout/non-2xx, and runAgent
+      // can write sales/stock via Kemi tools, so this must happen before it runs
+      // (mirrors the text branch dedup at logResult below).
+      const photoLogResult = await MessageModel.logInbound(from, photoUser.id, promptText, wasMsgId)
+        .catch(() => ({ id: null, duplicate: false }));
+      if (photoLogResult.duplicate) {
+        console.log(`[Webhook] ⏭ Duplicate image message_id ${wasMsgId} — skipping`);
+        return;
+      }
+      const photoMsgLogId = photoLogResult.id;
+
       await WhatsAppService.sendMessage(from,
         `📸 Got your photo, ${photoUser.name.split(' ')[0]}! Reading it now...`
       ).catch(() => {});
@@ -193,21 +207,18 @@ router.post('/', async (req, res) => {
         const { buffer, mimeType } = await downloadWhatsAppMedia(mediaId);
         const imageBase64   = buffer.toString('base64');
         const imageMimeType = (mimeType || 'image/jpeg').split(';')[0];
-        const promptText    = caption ||
-          'I sent you a photo of my stock notebook or receipt. Please read every item and quantity you can see and log them for me.';
 
         const { runAgent } = require('../src/agent/agentLoop');
         const kemisResponse = await runAgent(from, promptText, { imageBase64, imageMimeType });
         await WhatsAppService.sendMessage(from, kemisResponse);
 
-        await MessageModel.logInbound(from, photoUser.id, promptText, wasMsgId).then(r =>
-          MessageModel.updateLog(r?.id, { intent: 'kemi_image', status: 'processed' })
-        ).catch(() => {});
+        await MessageModel.updateLog(photoMsgLogId, { intent: 'kemi_image', status: 'processed' }).catch(() => {});
       } catch (err) {
         console.error('[Webhook] Image processing failed:', err.message);
         await WhatsAppService.sendMessage(from,
           `📸 Had trouble reading that photo, ${photoUser.name.split(' ')[0]}.\n\n` +
           `You can type your stock instead:\n_"I have 20 bags rice, 10 cartons indomie"_`);
+        await MessageModel.updateLog(photoMsgLogId, { intent: 'kemi_image', status: 'failed' }).catch(() => {});
       }
       return;
     }
