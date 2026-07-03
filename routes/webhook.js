@@ -20,7 +20,7 @@ const axios           = require('axios');
 const crypto          = require('crypto');
 
 const UserModel       = require('../models/user');
-const { MessageModel }= require('../models/db');
+const { MessageModel, query } = require('../models/db');
 const { normalizePhone } = require('../utils/phone');
 
 const GeminiService      = require('../services/gemini');
@@ -96,6 +96,55 @@ router.post('/', async (req, res) => {
     if (msg.type === 'text') {
       text = msg.text.body.trim();
       console.log(`[Webhook] Text message from ${from}: "${text}"`);
+
+      // ── Batch 1 (A2-3/A2-9): STOP / DISPUTE compliance intercept ──────────
+      // Fires only for numbers already tracked as a trader's customer contact
+      // (see models/customer.js) — a registered trader's own number won't
+      // match this, so it can't hijack a trader's own conversation with Kemi.
+      // Runs before dedup/onboarding so a customer reply is never swallowed
+      // into the "what's your name?" registration flow.
+      const CustomerModel = require('../models/customer');
+      const knownCustomer = await CustomerModel.findAnyByPhone(from).catch(() => null);
+      if (knownCustomer) {
+        const upperText = text.toUpperCase();
+
+        if (upperText === 'STOP') {
+          await CustomerModel.markOptedOutByPhone(from);
+          await WhatsAppService.sendMessage(from,
+            `You've been removed from payment reminders. You won't receive any more messages like this.`
+          );
+          return;
+        }
+
+        if (upperText === 'DISPUTE') {
+          const disputedRes = await query(
+            `SELECT d.*, u.whatsapp_number AS trader_whatsapp, u.name AS trader_name
+             FROM debtors d
+             JOIN customers c ON c.id = d.customer_id
+             JOIN users u ON u.id = d.user_id
+             WHERE c.phone = $1 AND d.status IN ('pending', 'partial')
+             ORDER BY d.last_reminder_sent_at DESC NULLS LAST
+             LIMIT 1`,
+            [from]
+          );
+          const debt = disputedRes.rows[0];
+          if (debt) {
+            await query(`UPDATE debtors SET disputed = true, disputed_at = NOW() WHERE id = $1`, [debt.id]);
+            await WhatsAppService.sendMessage(from,
+              `Thanks for letting us know — we've flagged this for ${debt.trader_name || 'the business'} to review.`
+            );
+            await WhatsAppService.sendMessage(debt.trader_whatsapp,
+              `⚠️ ${debt.debtor_name} disputed the ₦${Number(debt.amount).toLocaleString('en-NG')} debt reminder — please review it.`
+            ).catch(() => {});
+          } else {
+            await WhatsAppService.sendMessage(from,
+              `Thanks for letting us know — we couldn't find an active reminder to flag, but we've noted your message.`
+            );
+          }
+          return;
+        }
+      }
+      // ────────────────────────────────────────────────────────────────────
     } else if (msg.type === 'audio') {
       // ── Audio / voice note — transcribe then pass to Kemi ──
       entryMethod = 'voice';
