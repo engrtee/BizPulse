@@ -505,11 +505,22 @@ async function settleDebtHandler({ debtor_name, amount, whatsappNumber }) {
     return { settled: false, reason: `No outstanding debt found for ${debtor_name}.` };
   }
 
-  const debtAmount = parseInt(debt.amount, 10);
-  const paidAmount = amount ? Math.round(parseFloat(amount)) : debtAmount;
-  const isFullPay  = paidAmount >= debtAmount;
+  // A1-3 fix: default full-settlement amount is the remaining balance, not the
+  // original total — otherwise a "fully paid" reply after a prior partial
+  // payment re-settles the whole original amount and overpays the ledger.
+  const debtAmount    = parseInt(debt.amount, 10);
+  const alreadyPaid   = parseInt(debt.amount_paid, 10) || 0;
+  const remainingOwed = Math.max(0, debtAmount - alreadyPaid);
+  const paidAmount    = amount ? Math.round(parseFloat(amount)) : remainingOwed;
+  const isFullPay     = (alreadyPaid + paidAmount) >= debtAmount;
 
   await DebtorModel.markPaid(debt.id, paidAmount);
+
+  // A1-3: full-payment → receipt hook (stub until Batch 2)
+  if (isFullPay) {
+    const ReceiptService = require('../../services/receipts');
+    ReceiptService.onDebtFullyPaid(debt).catch(() => {});
+  }
 
   // Record as revenue in transactions table.
   // Debt repayments are pure cash — no COGS applies, so margin is NULL and
@@ -528,7 +539,7 @@ async function settleDebtHandler({ debtor_name, amount, whatsappNumber }) {
     debtor_name,
     amount_paid: paidAmount,
     fully_paid:  isFullPay,
-    remaining:   isFullPay ? 0 : debtAmount - paidAmount,
+    remaining:   isFullPay ? 0 : debtAmount - (alreadyPaid + paidAmount),
   };
 }
 
@@ -536,7 +547,9 @@ async function getDebtsHandler({ status, whatsappNumber }) {
   const user = await getUser(whatsappNumber);
   const effectiveStatus = status || 'outstanding';
 
-  // Query debtors table (canonical — new writes go here)
+  // Canonical source since the A1-3 debts→debtors migration (Batch 1) —
+  // the legacy `debts` table has no live writers and its rows were migrated
+  // in, so it no longer needs to be read here.
   const debtorStatusFilter = effectiveStatus === 'outstanding'
     ? `AND d.status IN ('pending', 'partial')`
     : effectiveStatus === 'settled'
@@ -544,47 +557,134 @@ async function getDebtsHandler({ status, whatsappNumber }) {
     : '';                   // 'all' — no filter
 
   const debtorsRes = await query(
-    `SELECT debtor_name, amount, product_name AS item, notes AS note,
-            CASE WHEN status IN ('pending','partial') THEN 'outstanding' ELSE 'settled' END AS status,
-            created_at
+    `SELECT d.debtor_name, d.amount, d.amount_paid, d.product_name AS item, d.notes AS note,
+            d.disputed,
+            CASE WHEN d.status IN ('pending','partial') THEN 'outstanding' ELSE 'settled' END AS status,
+            d.created_at,
+            (c.phone IS NOT NULL AND c.opted_out = false) AS has_contact
      FROM debtors d
-     WHERE user_id = $1 ${debtorStatusFilter}
-     ORDER BY created_at DESC`,
+     LEFT JOIN customers c ON c.id = d.customer_id
+     WHERE d.user_id = $1 ${debtorStatusFilter}
+     ORDER BY d.created_at DESC`,
     [user.id]
   );
 
-  // Also pull legacy rows from debts table (written before this consolidation)
-  const debtsStatusFilter = effectiveStatus === 'all' ? '' : `AND status = '${effectiveStatus === 'outstanding' ? 'outstanding' : 'settled'}'`;
-  const debtsRes = await query(
-    `SELECT debtor_name, amount, item, note, status, created_at
-     FROM debts
-     WHERE whatsapp_number = $1 ${debtsStatusFilter}
-     ORDER BY created_at DESC`,
-    [whatsappNumber]
-  );
-
-  const allRows = [
-    ...debtorsRes.rows.map(r => ({
-      debtor_name: r.debtor_name,
-      amount:      parseInt(r.amount, 10),
-      item:        r.item,
-      status:      r.status,
-      days_ago:    Math.round((Date.now() - new Date(r.created_at).getTime()) / 86400000),
-    })),
-    ...debtsRes.rows.map(r => ({
-      debtor_name: r.debtor_name,
-      amount:      parseInt(r.amount, 10),
-      item:        r.item,
-      status:      r.status,
-      days_ago:    Math.round((Date.now() - new Date(r.created_at).getTime()) / 86400000),
-    })),
-  ].sort((a, b) => b.days_ago - a.days_ago);
+  const allRows = debtorsRes.rows.map(r => ({
+    debtor_name:  r.debtor_name,
+    amount:       parseInt(r.amount, 10),
+    remaining:    parseInt(r.amount, 10) - parseInt(r.amount_paid, 10),
+    item:         r.item,
+    status:       r.status,
+    disputed:     r.disputed === true,
+    has_contact:  r.has_contact === true,
+    days_ago:     Math.round((Date.now() - new Date(r.created_at).getTime()) / 86400000),
+  }));
 
   const totalOutstanding = allRows
     .filter(r => r.status === 'outstanding')
-    .reduce((s, r) => s + r.amount, 0);
+    .reduce((s, r) => s + r.remaining, 0);
 
   return { debts: allRows, total_outstanding: totalOutstanding };
+}
+
+/**
+ * send_debt_reminder (A1-3, Batch 1). Phone capture is on-demand only —
+ * a debtor with no linked customer/phone and no customer_phone argument
+ * comes back as needs_phone so Kemi can ask for it in her own voice,
+ * rather than every credit sale asking for a number up front.
+ */
+async function sendDebtReminderHandler({ target, debtor_name, customer_phone, whatsappNumber }) {
+  const user           = await getUser(whatsappNumber);
+  const CustomerModel  = require('../../models/customer');
+  const WhatsAppService = require('../../services/whatsapp');
+
+  async function resolveContact(debtorRow) {
+    if (debtorRow.customer_id) {
+      const c = await query(`SELECT * FROM customers WHERE id = $1`, [debtorRow.customer_id]);
+      return c.rows[0] || null;
+    }
+    if (customer_phone) {
+      const customer = await CustomerModel.findOrCreate(user.id, debtorRow.debtor_name, customer_phone);
+      await query(`UPDATE debtors SET customer_id = $1 WHERE id = $2`, [customer.id, debtorRow.id]);
+      return customer;
+    }
+    return null;
+  }
+
+  async function remindOne(debtorRow) {
+    if (debtorRow.disputed) {
+      return { name: debtorRow.debtor_name, outcome: 'skipped_disputed' };
+    }
+    const contact = await resolveContact(debtorRow);
+    if (!contact) {
+      return { name: debtorRow.debtor_name, outcome: 'needs_phone' };
+    }
+    if (contact.opted_out) {
+      return { name: debtorRow.debtor_name, outcome: 'skipped_opted_out' };
+    }
+
+    const remaining = parseFloat(debtorRow.amount) - parseFloat(debtorRow.amount_paid || 0);
+    const dateLabel = new Date(debtorRow.created_at).toLocaleDateString('en-NG', { day: 'numeric', month: 'short' });
+
+    // Meta can reject a template send (not yet approved, rate-limited, number
+    // issue, etc.) even with live credentials configured — that must degrade
+    // honestly, not crash the whole tool call or the caller's cron loop.
+    try {
+      await WhatsAppService.sendDebtReminderTemplate(contact.phone, {
+        customerFirstName: (contact.name || debtorRow.debtor_name || '').split(' ')[0],
+        shopName:          user.biz_name || user.name,
+        amountNaira:       remaining,
+        dateLabel,
+      });
+    } catch (err) {
+      console.error(`[send_debt_reminder] Send failed for ${debtorRow.debtor_name}:`, err.message);
+      return { name: debtorRow.debtor_name, outcome: 'send_failed' };
+    }
+    await query(`UPDATE debtors SET last_reminder_sent_at = NOW() WHERE id = $1`, [debtorRow.id]);
+
+    return { name: debtorRow.debtor_name, outcome: 'sent' };
+  }
+
+  if (target === 'one') {
+    if (!debtor_name) return { error: 'debtor_name is required when target is "one".' };
+    const DebtorModel = require('../../models/debtor');
+    const debt = await DebtorModel.findPending(user.id, debtor_name);
+    if (!debt) return { sent: false, reason: `No outstanding debt found for ${debtor_name}.` };
+
+    const result = await remindOne(debt);
+    return {
+      sent:             result.outcome === 'sent',
+      needs_phone:      result.outcome === 'needs_phone',
+      opted_out:        result.outcome === 'skipped_opted_out',
+      disputed:         result.outcome === 'skipped_disputed',
+      send_failed:      result.outcome === 'send_failed',
+      debtor_name:      debt.debtor_name,
+    };
+  }
+
+  // target === 'all'
+  const outstandingRes = await query(
+    `SELECT * FROM debtors WHERE user_id = $1 AND status IN ('pending', 'partial') ORDER BY created_at ASC`,
+    [user.id]
+  );
+
+  const sent = [], needsPhoneFor = [], skippedOptedOut = [], skippedDisputed = [], sendFailed = [];
+  for (const debt of outstandingRes.rows) {
+    const result = await remindOne(debt);
+    if (result.outcome === 'sent')              sent.push(result.name);
+    else if (result.outcome === 'needs_phone')   needsPhoneFor.push(result.name);
+    else if (result.outcome === 'skipped_opted_out') skippedOptedOut.push(result.name);
+    else if (result.outcome === 'skipped_disputed')  skippedDisputed.push(result.name);
+    else if (result.outcome === 'send_failed')       sendFailed.push(result.name);
+  }
+
+  return {
+    sent,
+    needs_phone_for:      needsPhoneFor,
+    skipped_opted_out:    skippedOptedOut,
+    skipped_disputed:     skippedDisputed,
+    send_failed:          sendFailed,
+  };
 }
 
 async function setGoalHandler({ type, amount, period, whatsappNumber }) {
@@ -686,6 +786,7 @@ module.exports = {
   logDebtHandler,
   settleDebtHandler,
   getDebtsHandler,
+  sendDebtReminderHandler,
   setGoalHandler,
   comparePeriodsHandler,
 };

@@ -295,6 +295,35 @@ const TOOLS = [
     cache_control: { type: 'ephemeral' },
   },
 
+  // ─── 14. send_debt_reminder ─────────────────────────────────────────────────
+  {
+    name: 'send_debt_reminder',
+    description:
+      'Send a payment reminder to a customer who owes the trader money. ' +
+      'Use when the trader says: "remind [name]", "send [name] a reminder", "remind all my debtors", ' +
+      '"remind everyone who owes me", replying to "Reply REMIND ALL" in a debt digest. ' +
+      'If the result comes back with needs_phone true, ask the trader for that customer\'s WhatsApp ' +
+      'number in plain language, then call this tool again with the same debtor_name plus customer_phone. ' +
+      'Never claim a reminder was sent to someone it was skipped for (opted out, disputed, or still ' +
+      'missing a phone number) — narrate those honestly.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        target: {
+          type: 'string',
+          enum: ['one', 'all'],
+          description: '"one" for a single named debtor, "all" for every outstanding debtor.',
+        },
+        debtor_name: { type: 'string', description: 'Required when target is "one".' },
+        customer_phone: {
+          type: 'string',
+          description: 'The customer\'s WhatsApp number — only pass this when the trader has just supplied it in response to a needs_phone question.',
+        },
+      },
+      required: ['target'],
+    },
+  },
+
 ];
 
 module.exports = { TOOLS };

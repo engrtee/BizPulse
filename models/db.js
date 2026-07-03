@@ -424,6 +424,35 @@ async function initDb() {
   )`, 'CREATE debtors');
   await run(`CREATE INDEX IF NOT EXISTS idx_debtors_user_status ON debtors(user_id, status)`, 'INDEX debtors');
 
+  // ── Batch 1 (A1-3): customers (trader's named contacts, on-demand phone capture) ─
+  await run(`CREATE TABLE IF NOT EXISTS customers (
+    id            SERIAL PRIMARY KEY,
+    user_id       INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    name          VARCHAR(200),
+    phone         VARCHAR(20) NOT NULL,
+    opted_out     BOOLEAN DEFAULT false,
+    opted_out_at  TIMESTAMPTZ,
+    created_at    TIMESTAMPTZ DEFAULT NOW(),
+    updated_at    TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(user_id, phone)
+  )`, 'CREATE customers');
+  await run(`CREATE INDEX IF NOT EXISTS idx_customers_phone ON customers(phone)`, 'INDEX customers phone');
+
+  // ── Batch 1 (A1-3): debt_payments — append-only ledger backing DebtorModel.markPaid ─
+  await run(`CREATE TABLE IF NOT EXISTS debt_payments (
+    id         SERIAL PRIMARY KEY,
+    debtor_id  INTEGER REFERENCES debtors(id) ON DELETE CASCADE,
+    amount     NUMERIC(15,2) NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+  )`, 'CREATE debt_payments');
+  await run(`CREATE INDEX IF NOT EXISTS idx_debt_payments_debtor ON debt_payments(debtor_id)`, 'INDEX debt_payments');
+
+  // ── Batch 1 (A1-3): debtors extensions for customer linking + reminders/disputes ─
+  await run(`ALTER TABLE debtors ADD COLUMN IF NOT EXISTS customer_id INTEGER REFERENCES customers(id)`, 'ADD debtors.customer_id');
+  await run(`ALTER TABLE debtors ADD COLUMN IF NOT EXISTS disputed BOOLEAN DEFAULT false`, 'ADD debtors.disputed');
+  await run(`ALTER TABLE debtors ADD COLUMN IF NOT EXISTS disputed_at TIMESTAMPTZ`, 'ADD debtors.disputed_at');
+  await run(`ALTER TABLE debtors ADD COLUMN IF NOT EXISTS last_reminder_sent_at TIMESTAMPTZ`, 'ADD debtors.last_reminder_sent_at');
+
   // ── Layer 0: WhatsApp-native onboarding sessions ─────────────────────
   await run(`CREATE TABLE IF NOT EXISTS onboarding_sessions (
     phone       TEXT PRIMARY KEY,

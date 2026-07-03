@@ -35,15 +35,31 @@ const DebtorModel = {
     return res.rows;
   },
 
+  /**
+   * Append-only ledger (A1-3, Batch 1): INSERT a debt_payments row, then
+   * recompute (never blindly increment) debtors.amount_paid/status/paid_at
+   * from SUM(debt_payments) — debt_payments is the source of truth, the
+   * columns on debtors are just a cache always rebuilt from it.
+   */
   async markPaid(debtorId, amountPaid) {
-    const res = await query(
-      `UPDATE debtors
-       SET amount_paid = amount_paid + $2,
-           status      = CASE WHEN amount_paid + $2 >= amount THEN 'paid' ELSE 'partial' END,
-           paid_at     = CASE WHEN amount_paid + $2 >= amount THEN NOW() ELSE NULL END
-       WHERE id = $1
-       RETURNING *`,
+    await query(
+      `INSERT INTO debt_payments (debtor_id, amount) VALUES ($1, $2)`,
       [debtorId, amountPaid]
+    );
+    const res = await query(
+      `UPDATE debtors d
+       SET amount_paid = sub.total_paid,
+           status       = CASE WHEN sub.total_paid >= d.amount THEN 'paid' ELSE 'partial' END,
+           paid_at      = CASE WHEN sub.total_paid >= d.amount THEN NOW() ELSE NULL END
+       FROM (
+         SELECT debtor_id, COALESCE(SUM(amount), 0) AS total_paid
+         FROM debt_payments
+         WHERE debtor_id = $1
+         GROUP BY debtor_id
+       ) sub
+       WHERE d.id = $1 AND sub.debtor_id = d.id
+       RETURNING *`,
+      [debtorId]
     );
     return res.rows[0];
   },
