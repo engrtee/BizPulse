@@ -27,15 +27,21 @@ this — noting it here so nobody goes looking for "the A1-2 commit" and stops a
 | 6 (A2-10) | Delete dormant Google Sheets/OAuth remnants | ✅ Done | `0197ad1` |
 | 7 (A1-7) | Margin column honesty — `margin_basis` column | ✅ Done | `3c92c5b` |
 | — | Meta template drafts + send capability (parallel track, "start first") | ✅ Done | `6118b1f` + `docs/meta-templates.md` |
-| — (A1-5) | Exit-gate test: deliberately-unparseable message → Kemi names what she didn't understand and asks again | ❌ **Not done** | — |
+| — (A1-5) | Exit-gate test: deliberately-unparseable message → Kemi names what she didn't understand and asks again | ✅ Done | `4eb1f0c` |
 
-**Batch 0 is NOT closed** — the A1-5 exit-gate test is the one remaining piece. Kemi's system prompt
-(`src/agent/systemPrompt.js`, "Ambiguity" section) already instructs this behavior, but nothing proves
-it against the real agent loop yet. No automated test runner exists in this repo (no jest/mocha,
-`package.json` has no `test` script) — the existing precedent is standalone scripts like
-`scripts/stress-test-parser.js`. Next session: write an equivalent script/test that calls `runAgent()`
-with a garbage message and asserts the reply asks a clarifying question rather than guessing or
-silently dropping it.
+**Batch 0 is CLOSED (2026-07-03).** `tests/unparseable_honesty_test.js` (`npm run test:honesty`) sends
+5 deliberately unparseable messages through the real `runAgent()` loop against a live Postgres +
+Anthropic API (no mocks) and asserts: nothing is silently committed, no false "✅" confirmation is
+sent, and Kemi names what's missing and invites the trader to supply it. 5/5 pass. Along the way this
+surfaced and fixed one real gap in `systemPrompt.js`'s Ambiguity section (Kemi was deferring passively
+instead of asking a concrete question for rambling/uncertain input) — see `4eb1f0c` for the full
+before/after.
+
+**Local dev environment note:** running `npm run test:honesty` requires a local Postgres running. It
+was found stopped with a bad `pg_hba.conf` (UTF-8 BOM on line 1 causing "invalid connection type" and
+a silent service-start timeout) — fixed by stripping the BOM (backup at
+`C:\Program Files\PostgreSQL\16\data\pg_hba.conf.bak-bom-fix`). If the service won't start again, check
+that file first before assuming it's a BizPulse code issue.
 
 ## Batch 1 — Debt book consolidation + reminders (revised: consolidation, not greenfield)
 
