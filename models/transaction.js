@@ -201,20 +201,20 @@ const TransactionModel = {
   async getMonthlyTotals(userId) {
     const res = await query(
       `SELECT
-         COALESCE(SUM(CASE WHEN date >= date_trunc('month', CURRENT_DATE)
+         COALESCE(SUM(CASE WHEN date >= date_trunc('month', (CURRENT_TIMESTAMP AT TIME ZONE 'Africa/Lagos')::DATE)
                            THEN revenue ELSE 0 END), 0)        AS this_revenue,
-         COALESCE(SUM(CASE WHEN date >= date_trunc('month', CURRENT_DATE)
+         COALESCE(SUM(CASE WHEN date >= date_trunc('month', (CURRENT_TIMESTAMP AT TIME ZONE 'Africa/Lagos')::DATE)
                            THEN total_expenses ELSE 0 END), 0) AS this_expenses,
-         COALESCE(SUM(CASE WHEN date >= date_trunc('month', CURRENT_DATE)
+         COALESCE(SUM(CASE WHEN date >= date_trunc('month', (CURRENT_TIMESTAMP AT TIME ZONE 'Africa/Lagos')::DATE)
                            THEN profit ELSE 0 END), 0)         AS this_profit,
-         COALESCE(SUM(CASE WHEN date >= date_trunc('month', CURRENT_DATE - INTERVAL '1 month')
-                            AND date < date_trunc('month', CURRENT_DATE)
+         COALESCE(SUM(CASE WHEN date >= date_trunc('month', (CURRENT_TIMESTAMP AT TIME ZONE 'Africa/Lagos')::DATE - INTERVAL '1 month')
+                            AND date < date_trunc('month', (CURRENT_TIMESTAMP AT TIME ZONE 'Africa/Lagos')::DATE)
                            THEN revenue ELSE 0 END), 0)        AS last_revenue,
-         COALESCE(SUM(CASE WHEN date >= date_trunc('month', CURRENT_DATE - INTERVAL '1 month')
-                            AND date < date_trunc('month', CURRENT_DATE)
+         COALESCE(SUM(CASE WHEN date >= date_trunc('month', (CURRENT_TIMESTAMP AT TIME ZONE 'Africa/Lagos')::DATE - INTERVAL '1 month')
+                            AND date < date_trunc('month', (CURRENT_TIMESTAMP AT TIME ZONE 'Africa/Lagos')::DATE)
                            THEN total_expenses ELSE 0 END), 0) AS last_expenses,
-         COALESCE(SUM(CASE WHEN date >= date_trunc('month', CURRENT_DATE - INTERVAL '1 month')
-                            AND date < date_trunc('month', CURRENT_DATE)
+         COALESCE(SUM(CASE WHEN date >= date_trunc('month', (CURRENT_TIMESTAMP AT TIME ZONE 'Africa/Lagos')::DATE - INTERVAL '1 month')
+                            AND date < date_trunc('month', (CURRENT_TIMESTAMP AT TIME ZONE 'Africa/Lagos')::DATE)
                            THEN profit ELSE 0 END), 0)         AS last_profit
        FROM transactions
        WHERE user_id = $1`,

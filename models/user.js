@@ -135,12 +135,12 @@ const UserModel = {
       SELECT
         COUNT(*)                                                                  AS total_users,
         COUNT(first_message_date)                                                 AS activated,
-        COUNT(CASE WHEN last_message_date >= CURRENT_DATE - INTERVAL '7 days'
+        COUNT(CASE WHEN last_message_date >= (CURRENT_TIMESTAMP AT TIME ZONE 'Africa/Lagos')::DATE - INTERVAL '7 days'
                    THEN 1 END)                                                   AS active_this_week,
-        COUNT(CASE WHEN last_message_date >= CURRENT_DATE - INTERVAL '14 days'
-                    AND last_message_date <  CURRENT_DATE - INTERVAL '5 days'
+        COUNT(CASE WHEN last_message_date >= (CURRENT_TIMESTAMP AT TIME ZONE 'Africa/Lagos')::DATE - INTERVAL '14 days'
+                    AND last_message_date <  (CURRENT_TIMESTAMP AT TIME ZONE 'Africa/Lagos')::DATE - INTERVAL '5 days'
                    THEN 1 END)                                                   AS at_risk,
-        COUNT(CASE WHEN last_message_date <  CURRENT_DATE - INTERVAL '14 days'
+        COUNT(CASE WHEN last_message_date <  (CURRENT_TIMESTAMP AT TIME ZONE 'Africa/Lagos')::DATE - INTERVAL '14 days'
                     OR last_message_date IS NULL AND first_message_date IS NOT NULL
                    THEN 1 END)                                                   AS churned,
         ROUND(AVG(total_messages_sent), 1)                                       AS avg_messages_per_user
@@ -171,8 +171,8 @@ const UserModel = {
          AND (
            last_message_date IS NULL
            OR last_message_date BETWEEN
-                CURRENT_DATE - $1::INTEGER * INTERVAL '1 day'
-                AND CURRENT_DATE - ($1::INTEGER - 1) * INTERVAL '1 day'
+                (CURRENT_TIMESTAMP AT TIME ZONE 'Africa/Lagos')::DATE - $1::INTEGER * INTERVAL '1 day'
+                AND (CURRENT_TIMESTAMP AT TIME ZONE 'Africa/Lagos')::DATE - ($1::INTEGER - 1) * INTERVAL '1 day'
          )
        ORDER BY id`,
       [days]

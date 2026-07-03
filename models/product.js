@@ -120,13 +120,13 @@ const ProductModel = {
       `SELECT
          COALESCE(SUM(quantity), 0) /
          LEAST(
-           GREATEST((CURRENT_DATE - MIN(transaction_date))::int + 1, 1),
+           GREATEST(((CURRENT_TIMESTAMP AT TIME ZONE 'Africa/Lagos')::DATE - MIN(transaction_date))::int + 1, 1),
            7
          )::numeric AS velocity
        FROM product_transactions
        WHERE product_id       = $1
          AND transaction_type = 'sale'
-         AND transaction_date >= CURRENT_DATE - INTERVAL '7 days'`,
+         AND transaction_date >= (CURRENT_TIMESTAMP AT TIME ZONE 'Africa/Lagos')::DATE - INTERVAL '7 days'`,
       [productId]
     );
     return parseFloat(res.rows[0]?.velocity || 0);
@@ -149,7 +149,7 @@ const ProductModel = {
       `SELECT id FROM stock_alerts_sent
        WHERE user_id    = $1
          AND product_id = $2
-         AND alert_date = CURRENT_DATE
+         AND alert_date = (CURRENT_TIMESTAMP AT TIME ZONE 'Africa/Lagos')::DATE
          AND alert_type = $3`,
       [userId, productId, alertType]
     );
@@ -160,7 +160,7 @@ const ProductModel = {
   async recordAlert(userId, productId, alertType) {
     await query(
       `INSERT INTO stock_alerts_sent (user_id, product_id, alert_date, alert_type)
-       VALUES ($1, $2, CURRENT_DATE, $3)
+       VALUES ($1, $2, (CURRENT_TIMESTAMP AT TIME ZONE 'Africa/Lagos')::DATE, $3)
        ON CONFLICT DO NOTHING`,
       [userId, productId, alertType]
     );

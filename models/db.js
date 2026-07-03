@@ -99,11 +99,12 @@ async function initDb() {
   await run(`CREATE TABLE IF NOT EXISTS customer_logs (
     id         SERIAL PRIMARY KEY,
     user_id    INTEGER REFERENCES users(id) ON DELETE CASCADE,
-    date       DATE NOT NULL DEFAULT CURRENT_DATE,
+    date       DATE NOT NULL DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'Africa/Lagos')::DATE,
     count      INTEGER DEFAULT 0,
     notes      TEXT,
     created_at TIMESTAMPTZ DEFAULT NOW()
   )`, 'CREATE customer_logs');
+  await run(`ALTER TABLE customer_logs ALTER COLUMN date SET DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'Africa/Lagos')::DATE`, 'WAT default customer_logs.date');
 
   await run(`CREATE TABLE IF NOT EXISTS whatsapp_messages (
     id            SERIAL PRIMARY KEY,
@@ -239,24 +240,26 @@ async function initDb() {
     quantity         NUMERIC(12,2),
     unit_price       NUMERIC(12,2),
     total_amount     NUMERIC(12,2),
-    transaction_date DATE NOT NULL DEFAULT CURRENT_DATE,
+    transaction_date DATE NOT NULL DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'Africa/Lagos')::DATE,
     daily_entry_id   INTEGER,
     notes            VARCHAR(500),
     created_at       TIMESTAMPTZ DEFAULT NOW()
   )`, 'CREATE product_transactions');
   await run(`CREATE INDEX IF NOT EXISTS idx_pt_user_date    ON product_transactions(user_id, transaction_date DESC)`,   'INDEX pt_user_date');
   await run(`CREATE INDEX IF NOT EXISTS idx_pt_product_date ON product_transactions(product_id, transaction_date DESC)`, 'INDEX pt_product');
+  await run(`ALTER TABLE product_transactions ALTER COLUMN transaction_date SET DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'Africa/Lagos')::DATE`, 'WAT default product_transactions.transaction_date');
 
   // ── Task 2: Stock alerts sent (one alert per product per day) ─────────
   await run(`CREATE TABLE IF NOT EXISTS stock_alerts_sent (
     id         SERIAL PRIMARY KEY,
     user_id    INTEGER REFERENCES users(id) ON DELETE CASCADE,
     product_id INTEGER REFERENCES products(id) ON DELETE CASCADE,
-    alert_date DATE NOT NULL DEFAULT CURRENT_DATE,
+    alert_date DATE NOT NULL DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'Africa/Lagos')::DATE,
     alert_type VARCHAR(50),
     created_at TIMESTAMPTZ DEFAULT NOW()
   )`, 'CREATE stock_alerts_sent');
   await run(`CREATE UNIQUE INDEX IF NOT EXISTS idx_stock_alert_daily ON stock_alerts_sent(user_id, product_id, alert_date, alert_type)`, 'UNIQUE INDEX stock_alerts_sent');
+  await run(`ALTER TABLE stock_alerts_sent ALTER COLUMN alert_date SET DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'Africa/Lagos')::DATE`, 'WAT default stock_alerts_sent.alert_date');
 
   // ── Task 3: Product name dictionary ──────────────────────────────────
   await run(`CREATE TABLE IF NOT EXISTS product_name_dictionary (
@@ -450,10 +453,11 @@ async function initDb() {
     role            VARCHAR     NOT NULL CHECK (role IN ('user','assistant')),
     content         TEXT        NOT NULL,
     created_at      TIMESTAMPTZ DEFAULT now(),
-    session_date    DATE        DEFAULT CURRENT_DATE
+    session_date    DATE        DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'Africa/Lagos')::DATE
   )`, 'CREATE conversation_history');
   await run(`CREATE INDEX IF NOT EXISTS idx_conv_hist_number_date
     ON conversation_history(whatsapp_number, created_at DESC)`, 'INDEX conversation_history');
+  await run(`ALTER TABLE conversation_history ALTER COLUMN session_date SET DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'Africa/Lagos')::DATE`, 'WAT default conversation_history.session_date');
 
   await run(`CREATE TABLE IF NOT EXISTS trader_facts (
     id                      UUID        PRIMARY KEY DEFAULT gen_random_uuid(),

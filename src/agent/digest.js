@@ -124,8 +124,8 @@ async function runDailyDigest() {
     `SELECT whatsapp_number FROM users
      WHERE whatsapp_number IS NOT NULL
        AND (
-         last_entry_date   >= CURRENT_DATE - 7
-         OR last_message_date >= CURRENT_DATE - 7
+         last_entry_date   >= (CURRENT_TIMESTAMP AT TIME ZONE 'Africa/Lagos')::DATE - 7
+         OR last_message_date >= (CURRENT_TIMESTAMP AT TIME ZONE 'Africa/Lagos')::DATE - 7
        )`,
   );
 
