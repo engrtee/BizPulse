@@ -9,7 +9,8 @@
     "setup-db": "node scripts/setupDb.js",
     "test:parser": "node scripts/stress-test-parser.js",
     "test:parser:dry": "node scripts/stress-test-parser.js --dry-run",
-    "test:parser:quick": "node scripts/stress-test-parser.js --batch 15 --delay 500"
+    "test:parser:quick": "node scripts/stress-test-parser.js --batch 15 --delay 500",
+    "test:honesty": "node tests/unparseable_honesty_test.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.87.0",
