@@ -56,7 +56,16 @@
       "Bash(gh pr *)",
       "PowerShell(gh pr list --head feature/market-fit-2026-07 --json number,title,body,url 2>&1)",
       "Bash(node -c src/agent/agentLoop.js)",
-      "Bash(node -c src/agent/systemPrompt.js)"
+      "Bash(node -c src/agent/systemPrompt.js)",
+      "Bash(git log *)",
+      "Bash(sed -i '795,852d' routes/webhook.js)",
+      "Bash(sed -i '330,768d' routes/webhook.js)",
+      "Bash(sed -i '516,543d' routes/webhook.js)",
+      "Bash(node -c routes/webhook.js)",
+      "Bash(node -e \"require\\('./package.json'\\).scripts && console.log\\(JSON.stringify\\(require\\('./package.json'\\).scripts, null, 2\\)\\)\")",
+      "Bash(node -e ' *)",
+      "Bash(node -e \"console.log\\(Object.keys\\(require\\('./services/parser.js'\\)\\)\\)\")",
+      "Bash(node -c server.js)"
     ]
   }
 }

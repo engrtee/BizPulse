@@ -198,9 +198,13 @@ deleted. Slated for removal; do not build anything new against them.
 **Problem fixed:** Users created duplicate inventory items due to case differences, plurals, or spelling
 variants ("Laptop", "laptop", "laptops", "oud" vs "oudh").
 **Two matching systems currently exist and must both be preserved:**
-- `services/productService.js` (`findProductFuzzy`) — used by the legacy webhook confirmation path.
-  Exact normalized match first, then JS-side Levenshtein distance (≤2) against all of the user's products,
-  then a canonical-dictionary fallback (`PRODUCT_DICTIONARY`).
+- `services/productService.js` (`findProductFuzzy`, `processProductTransactions`) — exact normalized
+  match first, then JS-side Levenshtein distance (≤2) against all of the user's products, then a
+  canonical-dictionary fallback (`PRODUCT_DICTIONARY`). Its only caller was the legacy webhook
+  confirmation path, deleted in A1-2 (2026-07) — it now has no production caller (only
+  `scripts/migrate-old-inventory.js` and `scripts/stock_stress_test.js` still call it). Left in place
+  rather than deleted since those scripts depend on it; do not build new production code against it —
+  use `normaliser.js` below instead.
 - `src/agent/normaliser.js` (`normaliseProduct`) — used by Kemi's tool handlers
   (`findOrCreateProduct` in `toolHandlers.js`) before every `log_sale`/`log_restock` call.
 **Rule:** Any new write path that creates or looks up a `products` row MUST go through one of these two
@@ -243,9 +247,9 @@ agent. Build and reason about new features against Kemi's tools, not the older r
 **How a message flows today:**
 1. `routes/webhook.js` receives the POST, verifies the Meta signature, dedups by `whatsapp_message_id`
    (Fix 5), and looks up the user.
-2. A handful of special-case intercepts run first and short-circuit if matched: NPS rating replies,
-   pending-entry YES/EDIT/CANCEL confirmations (legacy path only — see below), margin-recalculation
-   percentage replies, and the "Other" business-type clarification flow.
+2. A couple of special-case intercepts run first and short-circuit if matched: NPS rating replies, and
+   the "Other" business-type clarification flow (still the one live user of `pending_entries`/
+   `confirmationService.js` — see below).
 3. Everything else is handed to `runAgent(whatsappNumber, text, opts)` in `src/agent/agentLoop.js`.
 4. `agentLoop.js` loads the last ~20 turns of conversation history and a `trader_facts` rolling-context
    summary, builds a system prompt (`systemPrompt.js`) with the trader's persona/business type baked in,
@@ -262,11 +266,11 @@ agent. Build and reason about new features against Kemi's tools, not the older r
 
 **Important behavioral gap (open, tracked for Batch 4):** Kemi's write tools commit immediately —
 there is no confirm-before-commit step in her tool-call path today. A separate, older confirmation
-system (`services/confirmationService.js` + the `pending_entries` table, YES/EDIT/CANCEL) exists and is
-wired into the legacy rule-based webhook path only (oversell confirmation, biz-type clarification,
-margin-recalculation). Any feature that needs "show a draft, wait for YES before committing" (e.g.
-photo-in extraction) must explicitly route through `pending_entries` from inside a Kemi tool — it is not
-automatic just because the infrastructure exists elsewhere in the file.
+system (`services/confirmationService.js` + the `pending_entries` table, YES/EDIT/CANCEL) exists and,
+since the A1-2 legacy-code deletion (2026-07), is wired to exactly one live flow: the "Other"
+business-type clarification in `routes/webhook.js`. Any feature that needs "show a draft, wait for YES
+before committing" (e.g. photo-in extraction) must explicitly route through `pending_entries` from
+inside a Kemi tool — it is not automatic just because the infrastructure exists elsewhere in the file.
 
 **Kemi's own image-handling path** (`routes/webhook.js`, `msg.type === 'image'`) downloads the photo,
 base64-encodes it, and passes it straight into `runAgent()` as an image content block — Claude's vision
@@ -284,11 +288,16 @@ handles voice-note transcription before the transcript is handed to Kemi. `parse
 message-classifier — has no live callers outside test/stress-test scripts; it is dead code pending
 removal.
 
-**The legacy rule-based pipeline** (`ParserService`, `GeminiService.parseWithAI`, `handleConfirmedEntry`,
-`handleOversellYes/No`, `handleOnDemandSummary`, `buildCalcReply` in `routes/webhook.js`) predates Kemi
-and is no longer reachable by real users for the message types Kemi owns. Do not extend it. It is being
-removed as part of the market-fit build (2026-07) — if you find yourself editing it, stop and check
-whether the equivalent Kemi tool already exists instead.
+**The legacy rule-based pipeline is gone (A1-2, 2026-07).** `ParserService` (`services/parser.js`) was
+deleted outright — it had zero callers left anywhere in the codebase. `handleConfirmedEntry`,
+`handleOversellYes/No`, `handleDailyEntry`, `handleOnDemandSummary`, and `buildCalcReply` were deleted
+from `routes/webhook.js` along with the YES/EDIT/CANCEL and margin-recalculation intercepts that only
+existed to reach them — none of it had a live caller: nothing created the `pending_entries` rows those
+handlers expected. `GeminiService.parseWithAI` (`services/gemini.js`) is left in place (still has
+stress-test-script callers) but has no production caller — do not add one. `routes/webhook.js` now only
+routes text/voice/image to Kemi, plus the "Other" business-type clarification and WhatsApp-native
+onboarding flows. If you're tempted to extend webhook.js with new parsing/confirmation logic, stop —
+build it as a Kemi tool instead.
 
 ---
 
