@@ -511,7 +511,6 @@ async function settleDebtHandler({ debtor_name, amount, whatsappNumber }) {
   // Record as revenue in transactions table.
   // Debt repayments are pure cash — no COGS applies, so margin is NULL.
   const today = todayWAT();
-  const user  = await getUser(whatsappNumber);
   await query(
     `INSERT INTO transactions
        (user_id, date, revenue, total_expenses, expense_breakdown,
