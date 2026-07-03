@@ -52,7 +52,11 @@
       "Bash(find . -iname \"*audit*\" -not -path \"*/node_modules/*\")",
       "Bash(find . -iname \"*backlog*\" -not -path \"*/node_modules/*\")",
       "Bash(find . -iname \"*batch*\" -not -path \"*/node_modules/*\")",
-      "Bash(node --check src/agent/systemPrompt.js)"
+      "Bash(node --check src/agent/systemPrompt.js)",
+      "Bash(gh pr *)",
+      "PowerShell(gh pr list --head feature/market-fit-2026-07 --json number,title,body,url 2>&1)",
+      "Bash(node -c src/agent/agentLoop.js)",
+      "Bash(node -c src/agent/systemPrompt.js)"
     ]
   }
 }

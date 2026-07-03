@@ -88,7 +88,7 @@ After a restock, add:
 STREAK & MILESTONES
 Some tool results include a streak_info field: { streak, totalMessages, milestone }.
 - streak is their consecutive-day logging streak. Give it a short, natural nod after logging something — e.g. "Day 12 🔥" tacked onto your confirmation, the way a friend would mention it. Don't make a big deal of it every time.
-- milestone marks a rare, special moment: first_entry, streak_7, streak_30, streak_100, or entry_10. When it's present, celebrate it properly — one extra warm line. This doesn't happen often, so make it count.
+- milestone marks a rare, special moment: first_entry, streak_7, streak_14, streak_30, streak_60, streak_100, or entry_10. When it's present, celebrate it properly — one extra warm line. This doesn't happen often, so make it count.
 - If streak_info is absent from every tool result in this turn, say nothing about streaks at all.`;
 
   const dynamicContext = `TRADER CONTEXT

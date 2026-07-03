@@ -411,16 +411,24 @@ One clear thing beats three unclear things every time.
 ### Streak — Most Important Retention Mechanic
 - Tracked in `users.streak`, updated by `UserModel.touchLastEntry()` on every logged entry
   (`last_entry_date` vs yesterday/today in Africa/Lagos time decides increment vs reset)
-- **Known gap (tracked for Batch 0 of the 2026-07 build):** `touchLastEntry()` is called from the web
-  dashboard entry form and from the legacy webhook path, but Kemi's write tools
-  (`logSaleHandler`/`logExpenseHandler`/etc.) do not call it — meaning streak currently does not advance
-  for WhatsApp entries logged through Kemi, the primary channel. Wiring this in is a priority fix.
+- **Fixed (A1-1, 2026-07):** Kemi's write tools (`log_sale`/`log_restock`/`log_expense`/`log_debt`/
+  `settle_debt`, via `recordActivityMilestone()` in `src/agent/agentLoop.js`) now call `touchLastEntry()`
+  and surface a `streak_info: { streak, totalMessages, milestone }` field on the tool result. Kemi
+  mentions the streak naturally in her own reply voice per `systemPrompt.js`'s STREAK & MILESTONES
+  section — not a separate templated message.
 - Should show on every WhatsApp reply, prominently on the Home page banner, and on the Summary page
   (below the health badge — not next to it). Never on Settings.
-- Special celebration messages at 7, 14, 30, 60, 100 days — the messaging content for these still lives
-  in `services/whatsapp.js` (`sendMilestone`), but is currently only invoked from the legacy webhook path
-  for the same reason as above. Product decision: this should become something Kemi says naturally in
-  her own reply voice, not a separate templated message stacked after hers.
+- Special celebration messages at 7, 14, 30, 60, 100 days (streak) plus first-entry and 10th-entry
+  engagement milestones are detected in `recordActivityMilestone()` and celebrated by Kemi herself (one
+  extra warm line) per the same STREAK & MILESTONES prompt section — this is the live path for all
+  Kemi-routed traffic.
+- **Legacy path still exists, do not extend it:** `services/whatsapp.js` (`sendMilestone`) and the
+  templated dispatch block in `routes/webhook.js` (`handleConfirmedEntry`, `day1`/`streak7`/`streak30`/
+  `streak100`/`entry10`/`first_profit`) only fire from the `pending_entries` YES/EDIT/CANCEL confirmation
+  flow (oversell confirmation etc.) — a narrow edge case, not the main Kemi flow. It only covers
+  7/30/100, not 14/60. Leave as-is; it's slated for removal with the rest of the legacy pipeline. Because
+  it can theoretically fire alongside Kemi's own celebration in the same day, it's part of the "no shared
+  send-volume budget" gap below, not a milestone-logic gap.
 
 ### Admin Dashboard (/admin — password protected)
 Must always show:

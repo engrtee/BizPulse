@@ -89,7 +89,9 @@ async function recordActivityMilestone(userId) {
     let milestone = null;
     if (totalMessages === 1)      milestone = 'first_entry';
     else if (s === 7)              milestone = 'streak_7';
+    else if (s === 14)             milestone = 'streak_14';
     else if (s === 30)             milestone = 'streak_30';
+    else if (s === 60)             milestone = 'streak_60';
     else if (s === 100)            milestone = 'streak_100';
     else if (totalMessages === 10) milestone = 'entry_10';
 
