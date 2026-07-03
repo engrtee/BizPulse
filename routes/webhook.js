@@ -6,11 +6,10 @@
  * POST /webhook  → Receives all inbound WhatsApp messages
  *
  * Message routing logic:
- *   1. Parse message type with rule-based parser
- *   2. If needsAI, call Gemini to extract structured data
- *   3. Route to the correct service (transaction, inventory, customers)
- *   4. Write to PostgreSQL + Google Sheets
- *   5. Reply instantly on WhatsApp
+ *   1. Dedup by whatsapp_message_id, look up the user
+ *   2. Route to Kemi (src/agent/agentLoop.js) for text/voice/image
+ *   3. Kemi's tools write to PostgreSQL
+ *   4. Reply instantly on WhatsApp
  */
 
 'use strict';
@@ -30,7 +29,6 @@ const GeminiService      = require('../services/gemini');
 const WhatsAppService    = require('../services/whatsapp');
 const InventoryService   = require('../services/inventory');
 const CustomerService    = require('../services/customers');
-const SheetsService      = require('../services/sheets');
 const EmailService       = require('../services/email');
 const { trackOutcome }   = require('../services/messageVariants');
 const ConfirmationService = require('../services/confirmationService');
@@ -788,19 +786,6 @@ async function handleDailyEntry(user, from, data, rawMessage, entryMethod = 'tex
     ).catch(e => { console.error('[Products] processProductTransactions error:', e.message); return []; });
   }
 
-  // Append to Google Sheets (non-blocking — failure must not block the WhatsApp reply)
-  if (user.sheet_id) {
-    SheetsService.appendTransaction(user, {
-      date:             todayWAT(),
-      revenue,
-      totalExpenses,
-      expenseBreakdown: expenseBreakdown || {},
-      profit,
-      margin,
-      customers,
-      notes:            notes || rawMessage,
-    }).catch((err) => console.error('[Sheets] appendTransaction error:', err.message));
-  }
 
   // Fetch cumulative totals for the entry's date (today, or the backdated date)
   const date = entry_date || todayWAT();

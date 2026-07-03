@@ -18,8 +18,6 @@ const UserModel          = require('../models/user');
 const TransactionModel   = require('../models/transaction');
 const InventoryService   = require('../services/inventory');
 const ProductModel       = require('../models/product');
-// SheetsService is legacy — only runs when user.sheet_id is set (never for new users since Google Drive was removed).
-const SheetsService      = require('../services/sheets');
 
 const GeminiService      = require('../services/gemini');
 const EmailService       = require('../services/email');
@@ -176,20 +174,6 @@ router.post('/entry', requireAuth, async (req, res) => {
 
     // Update last_entry_date and streak
     const newStreak = await UserModel.touchLastEntry(user.id);
-
-    // Append to Google Sheets (non-blocking)
-    if (user.sheet_id) {
-      SheetsService.appendTransaction(user, {
-        date:             todayWAT(),
-        revenue:          rev,
-        totalExpenses,
-        expenseBreakdown,
-        profit,
-        margin,
-        customers:        parseInt(customers, 10) || 0,
-        notes:            combinedNotes || '',
-      }).catch((err) => console.error('[Sheets] web entry append error:', err.message));
-    }
 
     // Handle stock movements from the web form
     if (Array.isArray(stockMovements)) {

@@ -1,6 +1,6 @@
 /**
  * services/customers.js
- * Handles standalone customer count messages and appends to Google Sheets.
+ * Handles standalone customer count messages.
  *
  * Standalone customer messages ("customers 15") are logged separately.
  * Customer counts bundled inside daily_entry messages are handled by the
@@ -13,7 +13,6 @@
 'use strict';
 
 const { query }      = require('../models/db');
-const SheetsService  = require('./sheets');
 const { todayWAT }   = require('../utils/formatter');
 
 /**
@@ -32,12 +31,6 @@ async function logCustomers(user, count, notes = '') {
      VALUES ($1, $2, $3, $4)`,
     [user.id, date, count, notes]
   );
-
-  // Append to Google Sheets if connected
-  if (user.sheet_id) {
-    await SheetsService.appendCustomers(user, { date, count, notes })
-      .catch((err) => console.error('[Sheets] appendCustomers error:', err.message));
-  }
 
   return { date, count, notes };
 }

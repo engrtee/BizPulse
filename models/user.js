@@ -65,28 +65,6 @@ const UserModel = {
     return res.rows[0];
   },
 
-  /** Save Google OAuth tokens after user connects Drive */
-  async saveGoogleTokens(userId, { accessToken, refreshToken, sheetId }) {
-    const res = await query(
-      `UPDATE users
-       SET google_access_token = $1,
-           google_refresh_token = $2,
-           sheet_id = $3
-       WHERE id = $4
-       RETURNING *`,
-      [accessToken, refreshToken, sheetId, userId]
-    );
-    return res.rows[0];
-  },
-
-  /** Refresh the access token (called automatically when 401 returned) */
-  async updateAccessToken(userId, newAccessToken) {
-    await query(
-      'UPDATE users SET google_access_token = $1 WHERE id = $2',
-      [newAccessToken, userId]
-    );
-  },
-
   /** Update last entry date, recalculate streak, and track message activity */
   async touchLastEntry(userId) {
     const cur = await query(
