@@ -79,9 +79,27 @@ letting it crash the tool call (or the weekly digest cron loop, which was alread
 
 ## Batch 2 — Receipt generator
 
-Not started. Items: outbound media capability in `services/whatsapp.js` (A2-1), `receipts` table with
-race-safe per-trader sequence, HTML→PNG renderer, `generate_receipt` Kemi tool, credit-method receipt
-auto-creates a debtor entry (Edge 1↔2 interlock).
+| # | Item | Status | Commit |
+|---|---|---|---|
+| 1 (A2-1) | Outbound media capability in `services/whatsapp.js` — `uploadMedia`, `sendImageMessage`, `sendReceiptImage` | ✅ Done | `8c581fe` |
+| 2 | Schema: `receipts` + `receipt_counters` tables, race-safe atomic per-trader sequence via single-statement UPSERT | ✅ Done | `8c581fe` |
+| 3 | `services/receiptRenderer.js` — Satori + `@resvg/resvg-js` HTML→PNG renderer, no headless browser | ✅ Done | `8c581fe` |
+| 4 | `generate_receipt` Kemi tool (schema, handler, dispatch, systemPrompt guidance) | ✅ Done | `b1b6b9b` |
+| 5 | Edge 1↔2 interlock, both directions: credit receipt → auto-creates a `debtors` row; `settleDebtHandler`'s full-payment hook (Batch 1 stub) → auto-generates a cash receipt | ✅ Done | `b1b6b9b` |
+| 6 | `tests/receipt_generator_test.js` (`npm run test:receipts`) — cash/credit paths, 10-way concurrent race-safety proof, send-failure path | ✅ Done | `a622596` |
+| 7 | CLAUDE.md Receipts section + tables + tools list + folder structure updated | ✅ Done | this commit |
+
+**Real bug caught during this batch, not just a passed checklist:** the first rendered receipt showed a
+missing-glyph box instead of ₦ — DM Sans's, Noto Sans's, Noto Sans Symbols', and Roboto's
+Fontsource-bundled subset files were all tested and **none** include the Naira sign (U+20A6, Currency
+Symbols block; these per-script subset builds only bundle what their target script needs). Fixed by
+registering `dejavu-fonts-ttf` (a full, broad-Unicode-coverage font known for exactly this kind of
+fallback role) as an explicit CSS font-family fallback, verified by re-rendering and visually checking
+the output — not just trusting that "a font was added."
+
+**Batch 2 is CLOSED (2026-07-04).** `npm run test:receipts` — 15/15 pass against live Postgres (dev-mode
+WhatsApp send). Also manually rendered a full receipt to PNG and visually confirmed the layout and the
+₦ glyph fix before closing.
 
 ## Batch 3 — Pushed insights + the global send cap (revised: cap governs old sends too)
 

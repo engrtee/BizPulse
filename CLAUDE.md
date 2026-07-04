@@ -262,7 +262,7 @@ agent. Build and reason about new features against Kemi's tools, not the older r
 **Kemi's tools (`src/agent/tools.js` schemas, `toolHandlers.js` implementations):**
 `log_sale`, `log_restock`, `log_expense`, `get_stock_level`, `get_stock_intelligence`,
 `get_sales_summary`, `search_products`, `correct_last_entry`, `log_debt`, `settle_debt`, `get_debts`,
-`send_debt_reminder`, `set_goal`, `compare_periods`.
+`send_debt_reminder`, `generate_receipt`, `set_goal`, `compare_periods`.
 
 **Important behavioral gap (open, tracked for Batch 4):** Kemi's write tools commit immediately —
 there is no confirm-before-commit step in her tool-call path today. A separate, older confirmation
@@ -376,8 +376,50 @@ doesn't mean a given template is approved.
 debt a `weekly_debt_digest` template summary; skips traders with zero outstanding debt.
 
 **Full-payment → receipt hook:** `settleDebtHandler` calls `services/receipts.js`'s
-`onDebtFullyPaid()` when a debt is fully settled — currently a stub that only logs intent; real receipt
-generation is Batch 2 work.
+`onDebtFullyPaid()` when a debt is fully settled — as of Batch 2 this generates and sends a real cash
+receipt to the trader via `generate_receipt`'s underlying handler (see Receipts section below). It can
+never recurse into creating another debt, since the synthesized receipt is always `payment_method:
+'cash'`.
+
+---
+
+## RECEIPTS (Batch 2, 2026-07)
+
+`generate_receipt` is a Kemi tool that renders a receipt image and sends it back to the **trader**
+(not the customer directly — the trader forwards it themselves; sending straight to a customer is
+deferred to a future batch, since it would mean extending the STOP/consent machinery built for debt
+reminders to a second message type). It is presentation-only: it never writes `transactions`/
+`product_transactions` — if the trader wants the sale logged too, Kemi calls `log_sale` in the same turn.
+
+**The Edge 1↔2 interlock** between receipts and debts runs both directions:
+- Receipt → debt: a `generate_receipt` call with `payment_method: 'credit'` always creates a `debtors`
+  row too (via the same `DebtorModel.create` `log_debt` uses), linked via `receipts.debtor_id` — a
+  credit receipt can never exist without a matching debt record.
+- Debt → receipt: `settleDebtHandler`'s full-payment hook (above) auto-generates a cash receipt the
+  moment a debt is fully paid off.
+
+**Rendering** (`services/receiptRenderer.js`): Satori (plain-object layout tree → SVG, no JSX/build step)
++ `@resvg/resvg-js` (SVG → PNG) — no headless browser, both ship prebuilt binaries, a light footprint
+for a small Render.com web service. Fonts are DM Sans/DM Serif Display (`@fontsource/*`, read from
+`node_modules` at runtime — no network fetch at request time), **plus `dejavu-fonts-ttf` registered as a
+fallback font** for the Naira sign specifically: DM Sans, DM Serif Display, Noto Sans, Noto Sans Symbols,
+and Roboto were all tested and none of their Fontsource-bundled subset files include U+20A6 (Currency
+Symbols block) — only DejaVu Sans does. Registered last in the `fonts` array with an explicit
+`fontFamily: 'DM Sans, DejaVu Sans'` CSS fallback stack, so it only kicks in for the glyphs DM Sans
+lacks.
+
+**Sequencing** (`receipt_counters` table): a per-trader receipt number, assigned via a single atomic
+UPSERT (`INSERT ... ON CONFLICT DO UPDATE SET next_number = next_number + 1 RETURNING next_number - 1`)
+— race-safe under concurrent `generate_receipt` calls because Postgres serializes that statement per
+row, with no explicit locking needed. Verified under 10 concurrent calls in
+`tests/receipt_generator_test.js`.
+
+**Outbound media** (`services/whatsapp.js`, A2-1): `uploadMedia()` (Meta Media API upload),
+`sendImageMessage()` (regular, non-template image send — no Meta template approval needed since the
+trader just asked for this), and `sendReceiptImage()` (the two combined). Same dev-mode-safe fallback
+pattern as `sendMessage`/`sendTemplateMessage`, and the send is wrapped in try/catch in
+`generateReceiptHandler` — a Meta send failure returns `send_failed` for Kemi to narrate honestly rather
+than crashing the tool call, the same lesson Batch 1's `send_debt_reminder` learned.
 
 ---
 
@@ -547,6 +589,12 @@ dedup (Fix 5).
 
 **ai_inference_log** — every Gemini parse/recommendation call, for future fine-tuning data.
 
+**receipts** (see Receipts section) — `id, user_id, sequence_number, customer_name, items(JSONB),
+total_amount, payment_method('cash'|'credit'), debtor_id, created_at`.
+
+**receipt_counters** — `user_id PRIMARY KEY, next_number`. Atomic per-trader receipt sequence, never
+read directly outside the UPSERT that assigns the next number.
+
 **Full list of other tables present:** `customer_logs`, `business_personas`, `message_variants`,
 `message_log`, `stock_alerts_sent`, `product_name_dictionary`, `media_log`, `parse_corrections`,
 `learned_phrases`, `onboarding_sessions`, `user_sessions`. See `models/db.js` `initDb()` for exact
@@ -589,7 +637,8 @@ bizpulse/
 │   ├── stockIntelligence.js (reads stock_intelligence_mv)
 │   └── digest.js          (8pm digest, 3am cleanup, 15-min MV refresh crons)
 ├── services/
-│   ├── whatsapp.js         (outbound send — text, templates, and debt/digest senders)
+│   ├── whatsapp.js         (outbound send — text, templates, media upload/image send, debt/digest/receipt senders)
+│   ├── receiptRenderer.js  (Satori + @resvg/resvg-js HTML→PNG receipt renderer)
 │   ├── gemini.js           (email recommendation + voice transcription; parseWithAI is legacy/dead)
 │   ├── claude.js           (Claude client used for the 6pm nudge coaching tip)
 │   ├── email.js            (build + send emails via Brevo HTTP API)
@@ -597,7 +646,7 @@ bizpulse/
 │   ├── productService.js   (legacy-path product fuzzy-matching, stock alerts)
 │   ├── inventory.js        (legacy inventory table operations)
 │   ├── customers.js        (standalone customer-COUNT logging — NOT the debt-contact model, see models/customer.js)
-│   ├── receipts.js         (full-payment → receipt hook, stub until Batch 2)
+│   ├── receipts.js         (full-payment → receipt hook — generates a real receipt as of Batch 2)
 │   ├── personaEngine.js    (business-persona-aware messaging)
 │   ├── nudgeBuilder.js     (retention nudge copy)
 │   ├── messageVariants.js  (A/B message variant tracking)
