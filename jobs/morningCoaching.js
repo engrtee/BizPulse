@@ -17,6 +17,7 @@ const UserModel       = require('../models/user');
 const ProductModel    = require('../models/product');
 const WhatsAppService = require('../services/whatsapp');
 const { getPersona }  = require('../services/personaEngine');
+const { checkPushBudget, recordPush } = require('../services/pushBudget');
 
 // ── Main job ──────────────────────────────────────────────────────────────
 async function runMorningCoaching() {
@@ -45,6 +46,11 @@ async function runMorningCoaching() {
 
     for (const user of eligible) {
       try {
+        if (!(await checkPushBudget(user.id, 'morning_briefing'))) {
+          console.log(`[Morning Coaching] ⏭ Skipped for ${user.name} — weekly push budget spent`);
+          continue;
+        }
+
         const firstName = user.name.split(' ')[0];
 
         // Fetch persona + products in parallel
@@ -72,6 +78,7 @@ async function runMorningCoaching() {
         await WhatsAppService.sendMorningStockBriefing(
           user.whatsapp_number, firstName, bizEmoji, products, lastUpdateDaysAgo
         );
+        await recordPush(user.id, 'morning_briefing');
 
         console.log(`[Morning Coaching] ✅ Briefing sent to ${user.name} (${products.length} products, ${lastUpdateDaysAgo}d stale)`);
       } catch (err) {

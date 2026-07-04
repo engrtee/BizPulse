@@ -13,6 +13,7 @@ const cron = require('node-cron');
 const UserModel       = require('../models/user');
 const DebtorModel     = require('../models/debtor');
 const WhatsAppService = require('../services/whatsapp');
+const { checkPushBudget, recordPush } = require('../services/pushBudget');
 
 async function runDebtDigest() {
   console.log(`[Cron] 💳 Debt digest job started at ${new Date().toISOString()}`);
@@ -28,12 +29,18 @@ async function runDebtDigest() {
         const totalOwed = await DebtorModel.getTotalOwed(user.id);
         if (totalOwed <= 0) continue;
 
+        if (!(await checkPushBudget(user.id, 'debt_digest'))) {
+          console.log(`[Cron] ⏭ Debt digest skipped for ${user.name} — weekly push budget spent`);
+          continue;
+        }
+
         await WhatsAppService.sendWeeklyDebtDigestTemplate(user.whatsapp_number, {
           firstName:     user.name.split(' ')[0],
           shopName:      user.biz_name || user.name,
           customerCount: outstanding.length,
           totalOwed,
         });
+        await recordPush(user.id, 'debt_digest');
         console.log(`[Cron] 💳 Debt digest sent to ${user.name} (${outstanding.length} debtors, ₦${totalOwed.toLocaleString('en-NG')})`);
       } catch (err) {
         console.error(`[Cron] Debt digest failed for ${user.name}:`, err.message);

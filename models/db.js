@@ -475,6 +475,15 @@ async function initDb() {
   )`, 'CREATE receipts');
   await run(`CREATE INDEX IF NOT EXISTS idx_receipts_user ON receipts(user_id, created_at DESC)`, 'INDEX receipts');
 
+  // ── Batch 3: push_log — shared weekly send-volume budget across all proactive pushes ─
+  await run(`CREATE TABLE IF NOT EXISTS push_log (
+    id        SERIAL PRIMARY KEY,
+    user_id   INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    push_type VARCHAR(50) NOT NULL,
+    sent_at   TIMESTAMPTZ DEFAULT NOW()
+  )`, 'CREATE push_log');
+  await run(`CREATE INDEX IF NOT EXISTS idx_push_log_user_time ON push_log(user_id, sent_at DESC)`, 'INDEX push_log');
+
   // ── Layer 0: WhatsApp-native onboarding sessions ─────────────────────
   await run(`CREATE TABLE IF NOT EXISTS onboarding_sessions (
     phone       TEXT PRIMARY KEY,

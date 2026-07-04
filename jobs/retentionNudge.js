@@ -28,6 +28,7 @@ const WhatsAppService    = require('../services/whatsapp');
 const { getPersona }     = require('../services/personaEngine');
 const { buildNudgeMessage } = require('../services/nudgeBuilder');
 const { logSent }        = require('../services/messageVariants');
+const { checkPushBudget, recordPush } = require('../services/pushBudget');
 const { query }          = require('../models/db');
 
 const NUDGE_DAYS = [3, 5, 7, 14];
@@ -119,6 +120,11 @@ async function runRetentionNudge() {
         const firstName   = user.name.split(' ')[0];
         const messageType = `retention_day${days}`;
 
+        if (!(await checkPushBudget(user.id, 'retention_nudge'))) {
+          console.log(`[Retention] ⏭ Nudge skipped for ${user.name} (day-${days}) — weekly push budget spent`);
+          continue;
+        }
+
         try {
           // Fetch persona + log days in parallel
           const [persona, totalLogDays] = await Promise.all([
@@ -131,6 +137,7 @@ async function runRetentionNudge() {
           );
 
           await WhatsAppService.sendMessage(user.whatsapp_number, text);
+          await recordPush(user.id, 'retention_nudge');
 
           // Log the send non-blocking — never let this block message delivery
           logSent(user.id, messageType, format).catch(() => {});
@@ -143,6 +150,7 @@ async function runRetentionNudge() {
             const fallback = getFallbackMessage(user, days);
             if (fallback) {
               await WhatsAppService.sendMessage(user.whatsapp_number, fallback);
+              await recordPush(user.id, 'retention_nudge');
               logSent(user.id, messageType, 'fallback').catch(() => {});
               console.log(`[Retention] ✅ Sent fallback to ${user.name} (day-${days})`);
             }

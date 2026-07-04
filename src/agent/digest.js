@@ -7,6 +7,7 @@ const Anthropic = require('@anthropic-ai/sdk');
 const { query }              = require('../../models/db');
 const { getDailySummaryPack } = require('./stockIntelligence');
 const { appendMessage, getRollingContext, clearOldHistory } = require('./memory');
+const { checkPushBudget, recordPush } = require('../../services/pushBudget');
 
 const MODEL      = 'claude-sonnet-4-6';
 const MAX_TOKENS = 300;
@@ -97,6 +98,13 @@ async function runDigestForTrader(whatsappNumber) {
       return;
     }
 
+    const UserModel = require('../../models/user');
+    const user = await UserModel.findByWhatsapp(whatsappNumber);
+    if (user && !(await checkPushBudget(user.id, 'evening_digest'))) {
+      console.log(`[Digest] ⏭ Digest skipped for ${whatsappNumber} — weekly push budget spent`);
+      return;
+    }
+
     // Stage 2 — Claude narration
     const context  = await getRollingContext(whatsappNumber);
     const message  = await narrateDigest(dataPack, context.language_preference);
@@ -104,6 +112,7 @@ async function runDigestForTrader(whatsappNumber) {
     // Send via WhatsApp
     const WA = getWhatsAppService();
     await WA.sendMessage(whatsappNumber, message);
+    if (user) await recordPush(user.id, 'evening_digest');
 
     // Log the digest as an assistant message so Kemi remembers it
     await appendMessage(whatsappNumber, 'assistant', message);

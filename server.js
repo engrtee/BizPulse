@@ -24,7 +24,9 @@ const adminRouter              = require('./routes/admin');
 require('./jobs/dailySummary');
 require('./jobs/morningCoaching');
 require('./jobs/retentionNudge');
-require('./jobs/debtDigest');    // Monday 8am WAT weekly debt digest (Batch 1, A1-3)
+require('./jobs/debtDigest');       // Monday 8am WAT weekly debt digest (Batch 1, A1-3)
+require('./jobs/weeklyProfitNote'); // Sunday 7pm WAT weekly profit note (Batch 3)
+require('./jobs/deadStockNudge');   // Wednesday 9am WAT slow-mover nudge (Batch 3)
 require('./src/agent/digest');   // 8pm Kemi digest + 15-min stock_intelligence_mv refresh + 3am history cleanup
 
 const app  = express();

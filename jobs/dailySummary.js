@@ -32,6 +32,7 @@ const WhatsAppService      = require('../services/whatsapp');
 const { getPersona }       = require('../services/personaEngine');
 const { nairaShort }       = require('../services/nudgeBuilder');
 const ConfirmationService  = require('../services/confirmationService');
+const { checkPushBudget, recordPush } = require('../services/pushBudget');
 
 const { calcHealthScore, healthLabel, topExpenseCategory, todayWAT } = require('../utils/formatter');
 const { calcMargin } = require('../utils/naira');
@@ -238,6 +239,11 @@ async function runReminderJob() {
         if (lastDate === today) continue;
       }
       try {
+        if (!(await checkPushBudget(user.id, 'evening_reminder'))) {
+          console.log(`[Cron] ⏭ Reminder skipped for ${user.name} — weekly push budget spent`);
+          continue;
+        }
+
         const firstName = user.name.split(' ')[0];
         const persona   = await getPersona(user).catch(() => null);
 
@@ -252,6 +258,7 @@ async function runReminderJob() {
         }
 
         await WhatsAppService.sendMessage(user.whatsapp_number, msg);
+        await recordPush(user.id, 'evening_reminder');
         console.log(`[Cron] 🔔 Reminder sent to ${user.name}`);
       } catch (err) {
         console.error(`[Cron] Reminder failed for ${user.name}:`, err.message);
