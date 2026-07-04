@@ -103,10 +103,27 @@ WhatsApp send). Also manually rendered a full receipt to PNG and visually confir
 
 ## Batch 3 — Pushed insights + the global send cap (revised: cap governs old sends too)
 
-Not started. Items: `push_log` table + `checkPushBudget()` (A2-5, A2-7), retrofit all four existing
-send-sites (`dailySummary.js` 6pm/7pm, `digest.js` 8pm, `morningCoaching.js` 7:30am,
-`retentionNudge.js` 10am) onto one shared budget, Sunday profit note / Monday debt digest / dead-stock
-nudge / low-stock alert, honest degradation when cost data missing for >30% of items sold.
+| # | Item | Status | Commit |
+|---|---|---|---|
+| 1 (A2-5/A2-7) | `push_log` table + `services/pushBudget.js` (`checkPushBudget`/`recordPush`); weekly cap set to 10/trader, `out_of_stock` exempt (no response from Tosin to the clarifying question on cap size/exemptions — proceeded on this recommendation, called out in CLAUDE.md and the plan) | ✅ Done | `f72dd10` |
+| 2 | Retrofit onto the shared budget: `dailySummary.js` 6pm reminder, `digest.js` 8pm digest, `morningCoaching.js` 7:30am briefing, `retentionNudge.js` 10am nudges, `debtDigest.js` Mon 8am (built in Batch 1) | ✅ Done | `f72dd10` |
+| 3 | New: `jobs/weeklyProfitNote.js` (Sunday 7pm) — wires the Batch-0-built `sendWeeklyProfitTemplate` to a real caller for the first time, honest degradation when >30% of this week's sold items have no cost price | ✅ Done | `94d2be5` |
+| 4 | New: `jobs/deadStockNudge.js` (Wednesday 9am) — reads `stock_intelligence_mv.is_slow_mover` | ✅ Done | `94d2be5` |
+| 5 | Real low-stock alert fix: `checkAndSendLowStockAlert` had **zero production callers** since A1-2 deleted its only caller (Batch 0) — wired into Kemi's live `logSaleHandler`, plus budget-gated (`out_of_stock` exempt, `low_stock` counts) | ✅ Done | `2e69eb9` |
+| 6 | `tests/push_budget_test.js` (`npm run test:pushbudget`) — cap enforcement, exempt bypass, live-path proof, degradation-fraction check | ✅ Done | `2eeca38` |
+| 7 | CLAUDE.md Retention/Inventory sections + tables + folder structure updated | ✅ Done | this commit |
+
+**Real gap caught during exploration, not from the tracker text:** `services/productService.js`'s
+`checkAndSendLowStockAlert()` was only ever called from the legacy `processProductTransactions()` path,
+which A1-2 (Batch 0) deleted outright. Low-stock/out-of-stock alerts have been **silently dead for every
+Kemi-routed sale** since Batch 0 — CLAUDE.md had already flagged this exact risk ("verify Kemi's
+log_sale path triggers the equivalent before shipping any inventory-dependent push feature") but nothing
+had acted on it until this batch. Fixed by calling it from `logSaleHandler` after every stock decrement.
+
+**Batch 3 is CLOSED (2026-07-04).** `npm run test:pushbudget` — 5/5 pass against live Postgres, including
+a real WhatsApp dev-mode send triggered by the live-path fix (not just a function call that returns
+successfully). `test:debts` (16/16) and `test:receipts` (15/15) re-run clean — no regressions from
+touching shared files (`toolHandlers.js`, `productService.js`).
 
 ## Batch 4 — Photo-in with confirmation (revised: behavior change to Kemi)
 

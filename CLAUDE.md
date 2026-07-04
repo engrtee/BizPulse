@@ -319,13 +319,19 @@ build it as a Kemi tool instead.
   (`productService.js` `processProductTransactions`) detects oversell before applying the delta and can
   trigger an interactive confirmation via `pending_entries`
 
-**Low stock / out of stock alerts** (`productService.js` `checkAndSendLowStockAlert`, legacy path only
-today — verify Kemi's `log_sale` path triggers the equivalent before shipping any inventory-dependent
-push feature):
+**Low stock / out of stock alerts** (`productService.js` `checkAndSendLowStockAlert`):
+- **Fixed (Batch 3, 2026-07):** this had zero production callers since the legacy webhook path that
+  called it was deleted in A1-2 (Batch 0) — low-stock alerts were silently dead for every Kemi-routed
+  sale. `src/agent/toolHandlers.js`'s `logSaleHandler` now calls it (non-blocking) after every stock
+  decrement, using the freshly-updated product row.
 - Out of stock: `current_stock === 0`
 - Low stock: velocity-aware — if 7-day sales velocity > 0, alert when `daysRemaining <= 2`; otherwise
   falls back to the static `current_stock / total_ever_received < 0.20` threshold
-- One alert per product per type per day (`stock_alerts_sent` table, unique-indexed)
+- One alert per product per type per day (`stock_alerts_sent` table, unique-indexed) — a separate,
+  narrower dedup than the weekly `push_log` budget (see Retention section): `stock_alerts_sent` stops
+  the *same* alert repeating same-day, `push_log` caps total proactive volume across *all* push types.
+- Also gated by the shared weekly push budget (`services/pushBudget.js`) — `out_of_stock` is exempt from
+  the cap, non-zero `low_stock` counts against it like any other push.
 
 **`stock_intelligence_mv`** (materialized view, refreshed every 15 min by `digest.js`) precomputes, per
 product: 7-day and 28-day velocity, days-of-cover, trend, reorder-suggested flag, a 0–100 stockout-risk
@@ -532,10 +538,19 @@ Must always show:
 - `jobs/retentionNudge.js` — 10:00 AM WAT, checks inactive users, sends WhatsApp nudges at day 3/5/7/14
   of inactivity
 - `jobs/debtDigest.js` — Monday 8:00 AM WAT weekly debt digest (Batch 1, A1-3) — see Debt Tracking section
-**Known gap:** these five jobs currently share no send-volume budget — an active user could receive a
-6pm reminder, an 8pm digest, and (on the right day) a 10am nudge and a 7:30am briefing, all in one day,
-with nothing coordinating total volume. Any new proactive-push feature must be built against a shared
-per-user weekly send cap, not just its own logic.
+- `jobs/weeklyProfitNote.js` — Sunday 7:00 PM WAT weekly profit/margin note (Batch 3)
+- `jobs/deadStockNudge.js` — Wednesday 9:00 AM WAT slow-mover nudge (Batch 3)
+
+**Resolved (Batch 3, 2026-07):** all six proactive WhatsApp send-sites above, plus the live low-stock
+alert (see Inventory section), now share one weekly send-volume budget via `services/pushBudget.js` —
+`checkPushBudget(userId, pushType)` / `recordPush(userId, pushType)`, backed by the `push_log` table.
+**Weekly cap: 10 sends per rolling 7 days per trader.** `out_of_stock` alerts are the one exempt type
+(still logged in `push_log` for admin visibility, just never blocked or counted against the shared
+budget) — a "you have zero left" alert is time-sensitive lost-revenue information, not an engagement
+nudge. Every other push type (digest, briefing, retention nudges, non-zero low-stock, dead-stock,
+weekly profit/debt notes) shares the one budget; a job that can't send due to the cap logs why and
+moves on rather than retrying or erroring. The 7pm *email* summary is a separate channel and is not
+subject to this WhatsApp-specific budget.
 
 ---
 
@@ -595,6 +610,9 @@ total_amount, payment_method('cash'|'credit'), debtor_id, created_at`.
 **receipt_counters** — `user_id PRIMARY KEY, next_number`. Atomic per-trader receipt sequence, never
 read directly outside the UPSERT that assigns the next number.
 
+**push_log** — `id, user_id, push_type, sent_at`. Backs the shared weekly send-volume budget (see
+Retention section) — every proactive WhatsApp push is recorded here, including cap-exempt ones.
+
 **Full list of other tables present:** `customer_logs`, `business_personas`, `message_variants`,
 `message_log`, `stock_alerts_sent`, `product_name_dictionary`, `media_log`, `parse_corrections`,
 `learned_phrases`, `onboarding_sessions`, `user_sessions`. See `models/db.js` `initDb()` for exact
@@ -647,6 +665,7 @@ bizpulse/
 │   ├── inventory.js        (legacy inventory table operations)
 │   ├── customers.js        (standalone customer-COUNT logging — NOT the debt-contact model, see models/customer.js)
 │   ├── receipts.js         (full-payment → receipt hook — generates a real receipt as of Batch 2)
+│   ├── pushBudget.js       (shared weekly send-volume budget across all proactive pushes, Batch 3)
 │   ├── personaEngine.js    (business-persona-aware messaging)
 │   ├── nudgeBuilder.js     (retention nudge copy)
 │   ├── messageVariants.js  (A/B message variant tracking)
@@ -670,7 +689,9 @@ bizpulse/
 │   ├── dailySummary.js     (6pm reminder + 7pm email summary + confirmation sweeps)
 │   ├── morningCoaching.js  (7:30am stock briefing)
 │   ├── retentionNudge.js   (10am day 3/5/7/14 inactivity nudges)
-│   └── debtDigest.js       (Monday 8am weekly debt digest)
+│   ├── debtDigest.js       (Monday 8am weekly debt digest)
+│   ├── weeklyProfitNote.js (Sunday 7pm weekly profit/margin note, Batch 3)
+│   └── deadStockNudge.js   (Wednesday 9am slow-mover nudge, Batch 3)
 ├── utils/
 │   ├── formatter.js        (₦ formatting, dates, health score)
 │   ├── naira.js             (currency parsing helpers)
