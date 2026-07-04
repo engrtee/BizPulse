@@ -231,6 +231,14 @@ async function checkAndSendLowStockAlert(user, product, WhatsAppService) {
   const alreadySent = await ProductModel.alertAlreadySentToday(user.id, product.id, alertType);
   if (alreadySent) return;
 
+  // Batch 3: shared weekly push budget. out_of_stock is exempt (time-sensitive
+  // lost-revenue info, not an engagement nudge) — non-zero low_stock counts.
+  const { checkPushBudget, recordPush } = require('./pushBudget');
+  if (!(await checkPushBudget(user.id, alertType))) {
+    console.log(`[Products] ⏭ ${alertType} alert skipped for ${user.name} (${name}) — weekly push budget spent`);
+    return;
+  }
+
   let msg;
   if (alertType === 'out_of_stock') {
     msg =
@@ -257,6 +265,7 @@ async function checkAndSendLowStockAlert(user, product, WhatsAppService) {
 
   await WhatsAppService.sendMessage(user.whatsapp_number, msg);
   await ProductModel.recordAlert(user.id, product.id, alertType);
+  await recordPush(user.id, alertType);
   console.log(`[Products] 🔔 ${alertType} alert sent to ${user.name} for ${name}`);
 }
 

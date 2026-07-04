@@ -166,10 +166,23 @@ async function logSaleHandler({ product, quantity, unit, unit_price, customer_na
 
   // Fetch updated stock
   const updated = await query(
-    `SELECT current_stock FROM products WHERE id = $1`, [productRow.id]
+    `SELECT id, product_name, current_stock, total_ever_received, unit, last_purchase_price
+     FROM products WHERE id = $1`,
+    [productRow.id]
   );
-  const newStock       = parseFloat(updated.rows[0]?.current_stock) || 0;
+  const updatedProduct = updated.rows[0];
+  const newStock       = parseFloat(updatedProduct?.current_stock) || 0;
   const dailyRevenue   = await getDailyRevenueSoFar(user.id);
+
+  // Batch 3: low-stock alerting now actually fires from Kemi's live sale path —
+  // checkAndSendLowStockAlert previously had zero production callers since the
+  // legacy webhook path it was written for was deleted in A1-2. Non-blocking:
+  // never let an alert-send failure affect the trader's sale confirmation.
+  if (updatedProduct) {
+    const ProductService = require('../../services/productService');
+    ProductService.checkAndSendLowStockAlert(user, updatedProduct, require('../../services/whatsapp'))
+      .catch(e => console.error('[logSaleHandler] Low-stock alert check failed:', e.message));
+  }
 
   return {
     success:           true,
