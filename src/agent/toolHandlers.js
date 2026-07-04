@@ -687,6 +687,82 @@ async function sendDebtReminderHandler({ target, debtor_name, customer_phone, wh
   };
 }
 
+/**
+ * generate_receipt (Batch 2). Presentation-layer only — never writes
+ * transactions/product_transactions (log_sale's job). Credit-method receipts
+ * always create a debtors row too (Edge 1↔2 interlock), so the receipt and
+ * debt book can't silently diverge.
+ */
+async function generateReceiptHandler({ customer_name, items, payment_method, whatsappNumber }) {
+  const user = await getUser(whatsappNumber);
+
+  const cleanItems = (items || []).map(it => ({
+    product:    it.product,
+    quantity:   parseFloat(it.quantity) || 1,
+    unit_price: parseFloat(it.unit_price) || 0,
+  }));
+  const totalAmount = cleanItems.reduce((s, it) => s + it.quantity * it.unit_price, 0);
+  const isCredit = payment_method === 'credit';
+
+  // Atomically assign this trader's next receipt number — a single UPSERT is
+  // serialized per-row by Postgres, so this is race-safe under concurrent calls.
+  const counterRes = await query(
+    `INSERT INTO receipt_counters (user_id, next_number) VALUES ($1, 2)
+     ON CONFLICT (user_id) DO UPDATE SET next_number = receipt_counters.next_number + 1
+     RETURNING next_number - 1 AS assigned_number`,
+    [user.id]
+  );
+  const sequenceNumber = counterRes.rows[0].assigned_number;
+
+  let debtorId = null;
+  if (isCredit) {
+    const DebtorModel = require('../../models/debtor');
+    const debtor = await DebtorModel.create({
+      userId:      user.id,
+      debtorName:  customer_name || 'Customer',
+      amount:      Math.round(totalAmount),
+      productName: cleanItems.map(it => it.product).join(', '),
+      notes:       `Auto-created from receipt #${sequenceNumber}`,
+    });
+    debtorId = debtor.id;
+  }
+
+  await query(
+    `INSERT INTO receipts (user_id, sequence_number, customer_name, items, total_amount, payment_method, debtor_id)
+     VALUES ($1, $2, $3, $4::JSONB, $5, $6, $7)`,
+    [user.id, sequenceNumber, customer_name || null, JSON.stringify(cleanItems), totalAmount, payment_method, debtorId]
+  );
+
+  const dateLabel = new Date(todayWAT() + 'T12:00:00Z').toLocaleDateString('en-NG', { day: 'numeric', month: 'short', year: 'numeric' });
+
+  const { renderReceiptPng } = require('../../services/receiptRenderer');
+  const png = await renderReceiptPng({
+    shopName:       user.biz_name || user.name,
+    sequenceNumber,
+    customerName:   customer_name || null,
+    items:          cleanItems,
+    totalAmount,
+    paymentMethod:  payment_method,
+    dateLabel,
+  });
+
+  const WhatsAppService = require('../../services/whatsapp');
+  try {
+    await WhatsAppService.sendReceiptImage(whatsappNumber, png, `Receipt #${String(sequenceNumber).padStart(4, '0')}`);
+  } catch (err) {
+    console.error(`[generate_receipt] Send failed for receipt #${sequenceNumber}:`, err.message);
+    return {
+      generated: true, sent: false, send_failed: true,
+      sequence_number: sequenceNumber, total_amount: totalAmount, debtor_created: isCredit,
+    };
+  }
+
+  return {
+    generated: true, sent: true,
+    sequence_number: sequenceNumber, total_amount: totalAmount, debtor_created: isCredit,
+  };
+}
+
 async function setGoalHandler({ type, amount, period, whatsappNumber }) {
   const rounded = Math.round(parseFloat(amount) || 0);
   await query(
@@ -787,6 +863,7 @@ module.exports = {
   settleDebtHandler,
   getDebtsHandler,
   sendDebtReminderHandler,
+  generateReceiptHandler,
   setGoalHandler,
   comparePeriodsHandler,
 };

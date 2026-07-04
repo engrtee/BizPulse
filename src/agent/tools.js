@@ -324,6 +324,47 @@ const TOOLS = [
     },
   },
 
+  // ─── 15. generate_receipt ───────────────────────────────────────────────────
+  {
+    name: 'generate_receipt',
+    description:
+      'Generate a receipt image for a sale and send it back to the trader (they forward it to their ' +
+      'customer themselves — this tool does not message the customer directly). ' +
+      'Use when the trader says: "give me a receipt", "receipt for [name]", "print receipt", ' +
+      '"send me a receipt for this". ' +
+      'This is presentation-only — it does NOT log a sale or update stock. If the trader also wants the ' +
+      'sale logged, call log_sale as well (in the same turn is fine). ' +
+      'If payment_method is "credit", this also creates an outstanding debt record for the customer — ' +
+      'the receipt and the debt book always stay in sync for credit sales. ' +
+      'Ask once for whatever is missing (items/prices, cash vs credit) rather than guessing — customer ' +
+      'name is optional.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        customer_name: { type: 'string', description: 'Optional — who the receipt is for.' },
+        items: {
+          type: 'array',
+          description: 'One entry per line item.',
+          items: {
+            type: 'object',
+            properties: {
+              product:    { type: 'string', description: 'Item name.' },
+              quantity:   { type: 'number', description: 'Quantity sold.' },
+              unit_price: { type: 'number', description: 'Price per unit in Naira.' },
+            },
+            required: ['product', 'quantity', 'unit_price'],
+          },
+        },
+        payment_method: {
+          type: 'string',
+          enum: ['cash', 'credit'],
+          description: '"credit" also creates a debt record for this customer.',
+        },
+      },
+      required: ['items', 'payment_method'],
+    },
+  },
+
 ];
 
 module.exports = { TOOLS };

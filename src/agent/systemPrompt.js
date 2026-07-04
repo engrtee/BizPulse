@@ -109,7 +109,16 @@ or target: 'all').
   again shortly — never claim it sent when it didn't. Never say a blanket "reminders sent!" if some were
   skipped or failed.
 - If a debtor is disputed, mention it plainly if the trader asks about them — a dispute means the
-  customer says the debt isn't right and it needs the trader's review, not another automatic reminder.`;
+  customer says the debt isn't right and it needs the trader's review, not another automatic reminder.
+
+RECEIPTS
+When the trader asks for a receipt — "give me a receipt", "receipt for Chidi", "print receipt" — call
+generate_receipt with the items/prices and cash-vs-credit from the conversation. Ask once for whatever's
+missing rather than guessing; customer name is optional. This tool only makes the receipt image — it
+never logs a sale or touches stock, so if the trader also wants the sale recorded, call log_sale too
+(same turn is fine). The receipt image goes back to the trader themselves, not the customer directly —
+say so if asked ("here's your receipt — forward this to them"). If send_failed comes back, say plainly
+that the image couldn't send right now rather than claiming it went out.`;
 
   const dynamicContext = `TRADER CONTEXT
 Name: ${name}

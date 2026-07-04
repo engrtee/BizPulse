@@ -25,6 +25,7 @@ const {
   settleDebtHandler,
   getDebtsHandler,
   sendDebtReminderHandler,
+  generateReceiptHandler,
   setGoalHandler,
   comparePeriodsHandler,
 } = require('./toolHandlers');
@@ -48,7 +49,7 @@ function getClient() {
 // Tools that write to the DB — run sequentially to avoid race conditions
 const WRITE_TOOLS = new Set([
   'log_sale', 'log_restock', 'log_expense', 'correct_last_entry',
-  'log_debt', 'settle_debt', 'set_goal', 'send_debt_reminder',
+  'log_debt', 'settle_debt', 'set_goal', 'send_debt_reminder', 'generate_receipt',
 ]);
 
 // Tools that represent the trader actually reporting a day's activity —
@@ -72,6 +73,8 @@ function toolSucceeded(name, result) {
       return result.settled === true;
     case 'send_debt_reminder':
       return result.sent === true || Array.isArray(result.sent);
+    case 'generate_receipt':
+      return result.generated === true;
     default:
       return false;
   }
@@ -122,6 +125,7 @@ async function dispatch(toolName, input, whatsappNumber) {
     settle_debt:           () => settleDebtHandler(       { ...input, whatsappNumber }),
     get_debts:             () => getDebtsHandler(         { ...input, whatsappNumber }),
     send_debt_reminder:    () => sendDebtReminderHandler( { ...input, whatsappNumber }),
+    generate_receipt:      () => generateReceiptHandler(  { ...input, whatsappNumber }),
     set_goal:              () => setGoalHandler(          { ...input, whatsappNumber }),
     compare_periods:       () => comparePeriodsHandler(   { ...input, whatsappNumber }),
   };
