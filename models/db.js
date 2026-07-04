@@ -453,6 +453,28 @@ async function initDb() {
   await run(`ALTER TABLE debtors ADD COLUMN IF NOT EXISTS disputed_at TIMESTAMPTZ`, 'ADD debtors.disputed_at');
   await run(`ALTER TABLE debtors ADD COLUMN IF NOT EXISTS last_reminder_sent_at TIMESTAMPTZ`, 'ADD debtors.last_reminder_sent_at');
 
+  // ── Batch 2: receipt_counters — atomic per-trader sequence numbers ───────
+  // A single UPSERT statement is serialized per-row by Postgres, so this is
+  // race-safe under concurrent generate_receipt calls with no explicit locking.
+  await run(`CREATE TABLE IF NOT EXISTS receipt_counters (
+    user_id     INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    next_number INTEGER NOT NULL DEFAULT 1
+  )`, 'CREATE receipt_counters');
+
+  // ── Batch 2: receipts — generate_receipt Kemi tool's records ──────────────
+  await run(`CREATE TABLE IF NOT EXISTS receipts (
+    id              SERIAL PRIMARY KEY,
+    user_id         INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    sequence_number INTEGER NOT NULL,
+    customer_name   VARCHAR(200),
+    items           JSONB NOT NULL DEFAULT '[]',
+    total_amount    NUMERIC(15,2) NOT NULL DEFAULT 0,
+    payment_method  VARCHAR(20) DEFAULT 'cash',
+    debtor_id       INTEGER REFERENCES debtors(id),
+    created_at      TIMESTAMPTZ DEFAULT NOW()
+  )`, 'CREATE receipts');
+  await run(`CREATE INDEX IF NOT EXISTS idx_receipts_user ON receipts(user_id, created_at DESC)`, 'INDEX receipts');
+
   // ── Layer 0: WhatsApp-native onboarding sessions ─────────────────────
   await run(`CREATE TABLE IF NOT EXISTS onboarding_sessions (
     phone       TEXT PRIMARY KEY,

@@ -11,21 +11,28 @@
     "test:parser:dry": "node scripts/stress-test-parser.js --dry-run",
     "test:parser:quick": "node scripts/stress-test-parser.js --batch 15 --delay 500",
     "test:honesty": "node tests/unparseable_honesty_test.js",
-    "test:debts": "node tests/debt_consolidation_test.js"
+    "test:debts": "node tests/debt_consolidation_test.js",
+    "test:receipts": "node tests/receipt_generator_test.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.87.0",
+    "@fontsource/dm-sans": "^5.2.8",
+    "@fontsource/dm-serif-display": "^5.2.8",
     "@google/generative-ai": "^0.15.0",
+    "@resvg/resvg-js": "^2.6.2",
     "axios": "^1.7.2",
     "bcryptjs": "^3.0.3",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
+    "dejavu-fonts-ttf": "^2.37.3",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
     "express-rate-limit": "^8.5.2",
+    "form-data": "^4.0.6",
     "googleapis": "^140.0.1",
     "node-cron": "^3.0.3",
-    "pg": "^8.12.0"
+    "pg": "^8.12.0",
+    "satori": "^0.26.0"
   },
   "devDependencies": {
     "nodemon": "^3.1.4"

@@ -11,6 +11,7 @@
 
 require('dotenv').config();
 const axios = require('axios');
+const FormData = require('form-data');
 const { normalizePhone } = require('../utils/phone');
 const { MessageModel } = require('../models/db');
 const { getStockExamples } = require('./stockExamples');
@@ -128,6 +129,91 @@ async function sendTemplateMessage(to, templateName, languageCode, bodyParams = 
     console.error(`[WhatsApp] Template send error (${templateName}):`, err?.response?.data || err.message);
     throw err;
   }
+}
+
+/**
+ * Upload a media buffer (e.g. a generated receipt PNG) to Meta's Media API,
+ * returning a media id to reference in a subsequent image message.
+ * Batch 2 (A2-1) — first outbound-media capability in this file.
+ *
+ * @param {Buffer} buffer   Raw file bytes
+ * @param {string} mimeType e.g. "image/png"
+ */
+async function uploadMedia(buffer, mimeType) {
+  const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+  const token         = process.env.WHATSAPP_TOKEN;
+
+  if (!phoneNumberId || !token) {
+    console.log(`[WhatsApp DEV] → media upload skipped (${buffer.length} bytes, ${mimeType})`);
+    return { id: `dev_media_${Date.now()}` };
+  }
+
+  const form = new FormData();
+  form.append('messaging_product', 'whatsapp');
+  form.append('file', buffer, { filename: 'upload', contentType: mimeType });
+
+  try {
+    const res = await axios.post(
+      `${BASE_URL}/${phoneNumberId}/media`,
+      form,
+      { headers: { Authorization: `Bearer ${token}`, ...form.getHeaders() } }
+    );
+    return res.data; // { id }
+  } catch (err) {
+    console.error('[WhatsApp] Media upload error:', err?.response?.data || err.message);
+    throw err;
+  }
+}
+
+/**
+ * Send an image message referencing an already-uploaded media id.
+ * Regular (non-template) message — allowed within the 24h customer-service
+ * window with no Meta template approval needed, since the trader initiated
+ * the request this responds to (e.g. asking for a receipt).
+ */
+async function sendImageMessage(to, mediaId, caption = '') {
+  const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+  const token         = process.env.WHATSAPP_TOKEN;
+
+  const normalizedTo = normalizePhone(to);
+  if (!normalizedTo) {
+    console.error(`[WhatsApp] ❌ Invalid phone number: ${to}`);
+    throw new Error(`Invalid phone number: ${to}`);
+  }
+
+  if (!phoneNumberId || !token) {
+    console.log(`[WhatsApp DEV] → ${normalizedTo}\n[image:${mediaId}] ${caption}\n`);
+    MessageModel.logOutbound(normalizedTo, `[image:${mediaId}] ${caption}`).catch(() => {});
+    return { status: 'dev_mode', to: normalizedTo, mediaId, caption };
+  }
+
+  try {
+    const res = await axios.post(
+      `${BASE_URL}/${phoneNumberId}/messages`,
+      {
+        messaging_product: 'whatsapp',
+        recipient_type:    'individual',
+        to:                normalizedTo,
+        type:              'image',
+        image:             { id: mediaId, caption },
+      },
+      { headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' } }
+    );
+    MessageModel.logOutbound(normalizedTo, `[image:${mediaId}] ${caption}`).catch(() => {});
+    return res.data;
+  } catch (err) {
+    console.error('[WhatsApp] Image send error:', err?.response?.data || err.message);
+    throw err;
+  }
+}
+
+/**
+ * Convenience wrapper for generate_receipt — uploads the receipt PNG then
+ * sends it as an image message to the trader.
+ */
+async function sendReceiptImage(to, pngBuffer, caption = '') {
+  const media = await uploadMedia(pngBuffer, 'image/png');
+  return sendImageMessage(to, media.id, caption);
 }
 
 /**
@@ -644,6 +730,9 @@ async function sendDebtorList(to, firstName, debtors) {
 module.exports = {
   sendMessage,
   sendTemplateMessage,
+  uploadMedia,
+  sendImageMessage,
+  sendReceiptImage,
   sendDebtReminderTemplate,
   sendWeeklyProfitTemplate,
   sendWeeklyDebtDigestTemplate,
