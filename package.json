@@ -14,7 +14,8 @@
     "test:debts": "node tests/debt_consolidation_test.js",
     "test:receipts": "node tests/receipt_generator_test.js",
     "test:pushbudget": "node tests/push_budget_test.js",
-    "test:photoconfirm": "node tests/photo_confirmation_test.js"
+    "test:photoconfirm": "node tests/photo_confirmation_test.js",
+    "test:fullloop": "node tests/full_loop_test.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.87.0",
