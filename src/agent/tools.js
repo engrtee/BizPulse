@@ -365,6 +365,58 @@ const TOOLS = [
     },
   },
 
+  // ─── 16. stage_photo_stock_entry ────────────────────────────────────────────
+  {
+    name: 'stage_photo_stock_entry',
+    description:
+      'Save a draft of stock items read from a photo (shelf, notebook, or supplier receipt) WITHOUT ' +
+      'committing anything yet. Use this instead of log_restock for every item you read off a photo — ' +
+      'photo-sourced stock entries always need the trader\'s confirmation before they land. ' +
+      'Only include items you read with real confidence; leave out anything blurry or ambiguous and ' +
+      'name it as unreadable in your reply instead of guessing. ' +
+      'After staging, present what you read and ask for a clear yes before anything is committed.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        items: {
+          type: 'array',
+          description: 'Confidently-read items only.',
+          items: {
+            type: 'object',
+            properties: {
+              product:    { type: 'string', description: 'Item name.' },
+              quantity:   { type: 'number', description: 'Quantity received.' },
+              unit:       { type: 'string', description: 'Unit, e.g. "bags", "cartons". Optional.' },
+              unit_cost:  { type: 'number', description: 'Cost price per unit in Naira, if visible on the receipt. Optional.' },
+            },
+            required: ['product', 'quantity'],
+          },
+        },
+        supplier_name: { type: 'string', description: 'Optional — supplier/vendor name if visible or mentioned.' },
+        note:          { type: 'string', description: 'Optional — anything worth remembering, e.g. items you could not read.' },
+      },
+      required: ['items'],
+    },
+  },
+
+  // ─── 17. confirm_pending_stock_entry ────────────────────────────────────────
+  {
+    name: 'confirm_pending_stock_entry',
+    description:
+      'Confirm or cancel a photo-sourced stock draft previously staged with stage_photo_stock_entry. ' +
+      'Use "confirm" when the trader gives a clear yes. Use "cancel" when they say it\'s wrong or they ' +
+      'don\'t want it logged — if they instead describe a correction, cancel this draft and call ' +
+      'stage_photo_stock_entry again with the corrected items rather than trying to patch it in place. ' +
+      'If there is no pending entry, this tells you so — say plainly there is nothing to confirm.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        action: { type: 'string', enum: ['confirm', 'cancel'] },
+      },
+      required: ['action'],
+    },
+  },
+
 ];
 
 module.exports = { TOOLS };

@@ -1,6 +1,6 @@
 'use strict';
 
-const { query }           = require('../../models/db');
+const { query, withTransaction } = require('../../models/db');
 const { normaliseProduct } = require('./normaliser');
 const { getStockIntelligence, todayWAT } = require('./stockIntelligence');
 
@@ -105,53 +105,59 @@ async function logSaleHandler({ product, quantity, unit, unit_price, customer_na
   const total     = unitPrice > 0 ? qty * unitPrice : 0;
   const today     = todayWAT();
 
-  // Decrement stock (floor at 0)
-  await query(
-    `UPDATE products
-     SET current_stock = GREATEST(0, current_stock - $1),
-         last_sale_price = CASE WHEN $2 > 0 THEN $2 ELSE last_sale_price END,
-         updated_at = NOW()
-     WHERE id = $3`,
-    [qty, unitPrice, productRow.id]
-  );
-
-  // Insert product transaction
-  await query(
-    `INSERT INTO product_transactions
-       (user_id, product_id, transaction_type, quantity, unit_price,
-        total_amount, transaction_date, sale_type, notes)
-     VALUES ($1, $2, 'sale', $3, $4::NUMERIC, $5::NUMERIC, $6, $7, $8)`,
-    [user.id, productRow.id, qty, unitPrice || null, total || null,
-     today, is_credit ? 'credit' : 'cash', note || customer_name || null]
-  );
-
-  // Write to transactions table so the existing 7pm summary job sees the revenue.
-  // Use last_purchase_price as COGS when available — otherwise margin stays NULL
-  // rather than the misleading 100% that was here before.
-  if (total > 0 && !is_credit) {
-    const costRes = await query(
-      `SELECT last_purchase_price FROM products WHERE id = $1`,
-      [productRow.id]
+  // A1-8: stock UPDATE + product_transactions INSERT (+ transactions INSERT
+  // when applicable) run atomically — previously two/three independent pool
+  // queries, so a crash mid-write could desync current_stock from the
+  // transaction history it's supposed to be derived from.
+  await withTransaction(async (txQuery) => {
+    // Decrement stock (floor at 0)
+    await txQuery(
+      `UPDATE products
+       SET current_stock = GREATEST(0, current_stock - $1),
+           last_sale_price = CASE WHEN $2 > 0 THEN $2 ELSE last_sale_price END,
+           updated_at = NOW()
+       WHERE id = $3`,
+      [qty, unitPrice, productRow.id]
     );
-    const costPerUnit = parseFloat(costRes.rows[0]?.last_purchase_price) || null;
-    const cogs        = costPerUnit !== null ? costPerUnit * qty : null;
-    const txProfit    = cogs !== null ? total - cogs : null;
-    const txMargin    = txProfit !== null && total > 0
-      ? parseFloat(((txProfit / total) * 100).toFixed(2))
-      : null;
-    // Fix 2 / A1-7: margin here is gross-COGS on this one sale, not net-of-expenses.
-    // 'not_applicable' when there's no cost price on file (txMargin is NULL too).
-    const marginBasis = txMargin !== null ? 'gross_cogs' : 'not_applicable';
 
-    await query(
-      `INSERT INTO transactions
-         (user_id, date, revenue, total_expenses, expense_breakdown,
-          profit, margin, customers, notes, entry_method, margin_basis)
-       VALUES ($1, $2::DATE, $3, COALESCE($4,0), '{}', $5, $6, 0, $7, 'kemi', $8)`,
-      [user.id, today, total, cogs, txProfit, txMargin,
-       `Kemi: sold ${qty} ${unit || 'units'} ${canonicalName}`, marginBasis]
+    // Insert product transaction
+    await txQuery(
+      `INSERT INTO product_transactions
+         (user_id, product_id, transaction_type, quantity, unit_price,
+          total_amount, transaction_date, sale_type, notes)
+       VALUES ($1, $2, 'sale', $3, $4::NUMERIC, $5::NUMERIC, $6, $7, $8)`,
+      [user.id, productRow.id, qty, unitPrice || null, total || null,
+       today, is_credit ? 'credit' : 'cash', note || customer_name || null]
     );
-  }
+
+    // Write to transactions table so the existing 7pm summary job sees the revenue.
+    // Use last_purchase_price as COGS when available — otherwise margin stays NULL
+    // rather than the misleading 100% that was here before.
+    if (total > 0 && !is_credit) {
+      const costRes = await txQuery(
+        `SELECT last_purchase_price FROM products WHERE id = $1`,
+        [productRow.id]
+      );
+      const costPerUnit = parseFloat(costRes.rows[0]?.last_purchase_price) || null;
+      const cogs        = costPerUnit !== null ? costPerUnit * qty : null;
+      const txProfit    = cogs !== null ? total - cogs : null;
+      const txMargin    = txProfit !== null && total > 0
+        ? parseFloat(((txProfit / total) * 100).toFixed(2))
+        : null;
+      // Fix 2 / A1-7: margin here is gross-COGS on this one sale, not net-of-expenses.
+      // 'not_applicable' when there's no cost price on file (txMargin is NULL too).
+      const marginBasis = txMargin !== null ? 'gross_cogs' : 'not_applicable';
+
+      await txQuery(
+        `INSERT INTO transactions
+           (user_id, date, revenue, total_expenses, expense_breakdown,
+            profit, margin, customers, notes, entry_method, margin_basis)
+         VALUES ($1, $2::DATE, $3, COALESCE($4,0), '{}', $5, $6, 0, $7, 'kemi', $8)`,
+        [user.id, today, total, cogs, txProfit, txMargin,
+         `Kemi: sold ${qty} ${unit || 'units'} ${canonicalName}`, marginBasis]
+      );
+    }
+  });
 
   // If credit, also create a debt record
   if (is_credit) {
@@ -210,26 +216,29 @@ async function logRestockHandler({ product, quantity, unit, unit_cost, total_cos
                  : (cost ? cost * qty : null);
   const today    = todayWAT();
 
-  // Increment stock
-  await query(
-    `UPDATE products
-     SET current_stock       = current_stock + $1,
-         total_ever_received = total_ever_received + $1,
-         last_purchase_price = COALESCE($2::NUMERIC, last_purchase_price),
-         updated_at = NOW()
-     WHERE id = $3`,
-    [qty, cost ?? null, productRow.id]
-  );
+  // A1-8: stock UPDATE + product_transactions INSERT run atomically.
+  await withTransaction(async (txQuery) => {
+    // Increment stock
+    await txQuery(
+      `UPDATE products
+       SET current_stock       = current_stock + $1,
+           total_ever_received = total_ever_received + $1,
+           last_purchase_price = COALESCE($2::NUMERIC, last_purchase_price),
+           updated_at = NOW()
+       WHERE id = $3`,
+      [qty, cost ?? null, productRow.id]
+    );
 
-  // Insert product transaction
-  await query(
-    `INSERT INTO product_transactions
-       (user_id, product_id, transaction_type, quantity, unit_price,
-        total_amount, transaction_date, notes)
-     VALUES ($1, $2, 'stock_in', $3, $4::NUMERIC, $5::NUMERIC, $6, $7)`,
-    [user.id, productRow.id, qty, cost ?? null, totalVal ?? null,
-     today, [supplier_name, note].filter(Boolean).join(' — ') || null]
-  );
+    // Insert product transaction
+    await txQuery(
+      `INSERT INTO product_transactions
+         (user_id, product_id, transaction_type, quantity, unit_price,
+          total_amount, transaction_date, notes)
+       VALUES ($1, $2, 'stock_in', $3, $4::NUMERIC, $5::NUMERIC, $6, $7)`,
+      [user.id, productRow.id, qty, cost ?? null, totalVal ?? null,
+       today, [supplier_name, note].filter(Boolean).join(' — ') || null]
+    );
+  });
 
   // Fetch updated stock and days-of-cover from materialized view
   const updatedRes = await query(
@@ -264,6 +273,112 @@ async function logRestockHandler({ product, quantity, unit, unit_cost, total_cos
     new_stock_level:            newStock,
     days_of_cover_after_restock: daysOfCover,
     velocity_7d:                velocity7d,
+  };
+}
+
+/**
+ * stage_photo_stock_entry (Batch 4, A2-8). Never commits anything — saves a
+ * draft into pending_entries so a fresh runAgent() call on the trader's next
+ * message (which won't have the photo anymore — images aren't persisted to
+ * conversation_history) can still see it via agentLoop's pending-entry
+ * context injection and ask for/act on confirmation.
+ */
+async function stagePhotoStockEntryHandler({ items, supplier_name, note, whatsappNumber }) {
+  const user = await getUser(whatsappNumber);
+  const ConfirmationService = require('../../services/confirmationService');
+
+  const cleanItems = (items || []).map(it => ({
+    product:   it.product,
+    quantity:  parseFloat(it.quantity) || 0,
+    unit:      it.unit || 'units',
+    unit_cost: it.unit_cost != null ? parseFloat(it.unit_cost) : null,
+  })).filter(it => it.product && it.quantity > 0);
+
+  if (cleanItems.length === 0) {
+    return { staged: false, reason: 'Nothing readable enough to stage.' };
+  }
+
+  const label = `Photo stock entry: ${cleanItems.map(i => i.product).join(', ')}`;
+  const pendingId = await ConfirmationService.savePending(
+    user.id, 'photo_stock_in', { items: cleanItems, supplier_name: supplier_name || null, note: note || null }, label
+  );
+
+  return {
+    staged:       true,
+    pending_id:   pendingId,
+    items:        cleanItems,
+    item_count:   cleanItems.length,
+  };
+}
+
+/**
+ * confirm_pending_stock_entry (Batch 4, A2-8). "confirm" commits every staged
+ * item exactly like logRestockHandler would, atomically per item. "cancel"
+ * discards the draft. No fine-grained per-item edit — a correction means
+ * cancel this draft and stage_photo_stock_entry again with the fix.
+ */
+async function confirmPendingStockEntryHandler({ action, whatsappNumber }) {
+  const user = await getUser(whatsappNumber);
+  const ConfirmationService = require('../../services/confirmationService');
+
+  const pending = await ConfirmationService.getPendingEntry(user.id);
+  if (!pending || pending.entry_type !== 'photo_stock_in') {
+    return { error: true, message: 'No pending photo stock entry to confirm.' };
+  }
+
+  if (action === 'cancel') {
+    await ConfirmationService.discardEntry(pending.id);
+    return { cancelled: true };
+  }
+
+  // action === 'confirm'
+  const parsedData = typeof pending.parsed_data === 'string'
+    ? JSON.parse(pending.parsed_data)
+    : pending.parsed_data;
+  const items = parsedData.items || [];
+  const today = todayWAT();
+
+  let totalValue = 0;
+  const committed = [];
+
+  for (const item of items) {
+    const canonicalName = await normaliseProduct(item.product, whatsappNumber);
+    const productRow    = await findOrCreateProduct(user.id, canonicalName, item.unit);
+    const qty           = parseFloat(item.quantity) || 0;
+    const cost          = item.unit_cost != null ? parseFloat(item.unit_cost) : null;
+    const totalCost     = cost != null ? cost * qty : null;
+
+    // A1-8: atomic per item, same pattern as logRestockHandler.
+    await withTransaction(async (txQuery) => {
+      await txQuery(
+        `UPDATE products
+         SET current_stock       = current_stock + $1,
+             total_ever_received = total_ever_received + $1,
+             last_purchase_price = COALESCE($2::NUMERIC, last_purchase_price),
+             updated_at = NOW()
+         WHERE id = $3`,
+        [qty, cost ?? null, productRow.id]
+      );
+      await txQuery(
+        `INSERT INTO product_transactions
+           (user_id, product_id, transaction_type, quantity, unit_price,
+            total_amount, transaction_date, notes)
+         VALUES ($1, $2, 'stock_in', $3, $4::NUMERIC, $5::NUMERIC, $6, $7)`,
+        [user.id, productRow.id, qty, cost ?? null, totalCost ?? null,
+         today, parsedData.supplier_name || null]
+      );
+    });
+
+    if (totalCost) totalValue += totalCost;
+    committed.push({ product: canonicalName, quantity: qty });
+  }
+
+  await ConfirmationService.confirmEntry(pending.id);
+
+  return {
+    confirmed:        true,
+    items_committed:  committed,
+    total_value:      totalValue,
   };
 }
 
@@ -428,9 +543,12 @@ async function correctLastEntryHandler({ action, new_amount, new_item, new_quant
   const entry = recent.rows[0];
 
   if (action === 'delete') {
-    // Soft-delete: mark the product_transaction as voided and restore stock
+    // Soft-delete: mark the product_transaction as voided and restore stock.
+    // A1-8 fix: also zero quantity, not just total_amount — ProductModel.getVelocity()
+    // and stock_intelligence_mv both SUM(quantity) for sale rows with no voided-row
+    // exclusion, so a voided sale was still inflating velocity after being "undone."
     await query(
-      `UPDATE product_transactions SET notes = CONCAT(notes, ' [VOIDED]'), total_amount = 0
+      `UPDATE product_transactions SET notes = CONCAT(notes, ' [VOIDED]'), total_amount = 0, quantity = 0
        WHERE id = $1`,
       [entry.id]
     );
@@ -877,6 +995,8 @@ module.exports = {
   getDebtsHandler,
   sendDebtReminderHandler,
   generateReceiptHandler,
+  stagePhotoStockEntryHandler,
+  confirmPendingStockEntryHandler,
   setGoalHandler,
   comparePeriodsHandler,
 };

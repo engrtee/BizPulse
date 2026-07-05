@@ -26,6 +26,8 @@ const {
   getDebtsHandler,
   sendDebtReminderHandler,
   generateReceiptHandler,
+  stagePhotoStockEntryHandler,
+  confirmPendingStockEntryHandler,
   setGoalHandler,
   comparePeriodsHandler,
 } = require('./toolHandlers');
@@ -50,13 +52,17 @@ function getClient() {
 const WRITE_TOOLS = new Set([
   'log_sale', 'log_restock', 'log_expense', 'correct_last_entry',
   'log_debt', 'settle_debt', 'set_goal', 'send_debt_reminder', 'generate_receipt',
+  'stage_photo_stock_entry', 'confirm_pending_stock_entry',
 ]);
 
 // Tools that represent the trader actually reporting a day's activity —
 // these advance the streak (A1-1). correct_last_entry and set_goal don't
-// count as new activity, so they're excluded.
+// count as new activity, so they're excluded. stage_photo_stock_entry only
+// drafts — the streak advances when confirm_pending_stock_entry actually
+// commits, same as a normal restock would.
 const STREAK_TOOLS = new Set([
   'log_sale', 'log_restock', 'log_expense', 'log_debt', 'settle_debt',
+  'confirm_pending_stock_entry',
 ]);
 
 /** Per-tool success check — each handler signals success differently. */
@@ -75,6 +81,13 @@ function toolSucceeded(name, result) {
       return result.sent === true || Array.isArray(result.sent);
     case 'generate_receipt':
       return result.generated === true;
+    case 'stage_photo_stock_entry':
+      return result.staged === true;
+    case 'confirm_pending_stock_entry':
+      // Only a real "confirm" commit counts as activity — cancelling a
+      // draft is not the trader reporting anything, so it must not advance
+      // the streak (this is the only thing toolSucceeded's result gates).
+      return result.confirmed === true;
     default:
       return false;
   }
@@ -126,6 +139,8 @@ async function dispatch(toolName, input, whatsappNumber) {
     get_debts:             () => getDebtsHandler(         { ...input, whatsappNumber }),
     send_debt_reminder:    () => sendDebtReminderHandler( { ...input, whatsappNumber }),
     generate_receipt:      () => generateReceiptHandler(  { ...input, whatsappNumber }),
+    stage_photo_stock_entry:      () => stagePhotoStockEntryHandler(    { ...input, whatsappNumber }),
+    confirm_pending_stock_entry:  () => confirmPendingStockEntryHandler({ ...input, whatsappNumber }),
     set_goal:              () => setGoalHandler(          { ...input, whatsappNumber }),
     compare_periods:       () => comparePeriodsHandler(   { ...input, whatsappNumber }),
   };
@@ -173,6 +188,28 @@ async function runAgent(whatsappNumber, incomingMessage, opts = {}) {
 
     // 3. Load rolling context (language pref, summary, top products)
     const context = await getRollingContext(whatsappNumber);
+
+    // 3.5 (Batch 4, A2-8): surface any pending photo-stock draft. Images
+    // aren't persisted to conversation_history (step 4 below), so this is
+    // the only way Kemi knows a draft is still awaiting confirmation on a
+    // later turn that has no photo at all.
+    if (user.id) {
+      try {
+        const ConfirmationService = require('../../services/confirmationService');
+        const pending = await ConfirmationService.getPendingEntry(user.id);
+        if (pending && pending.entry_type === 'photo_stock_in') {
+          const parsedData = typeof pending.parsed_data === 'string'
+            ? JSON.parse(pending.parsed_data)
+            : pending.parsed_data;
+          context.pendingEntry = {
+            preview: ConfirmationService.buildConfirmationMessage(pending.entry_type, parsedData),
+            ageMinutes: Math.round((Date.now() - new Date(pending.created_at).getTime()) / 60000),
+          };
+        }
+      } catch (e) {
+        console.error('[Kemi] Pending-entry lookup failed:', e.message);
+      }
+    }
 
     // 4. Persist the incoming message (text only — images are not stored in history)
     await appendMessage(whatsappNumber, 'user', incomingMessage);

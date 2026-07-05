@@ -160,7 +160,26 @@ function buildConfirmationMessage(entryType, parsedData) {
   if (entryType === 'opening_stock') return buildOpeningStockConfirmation(parsedData);
   if (entryType === 'stock_zero')    return buildStockZeroConfirmation(parsedData);
   if (entryType === 'debt_payment')  return buildDebtPaymentConfirmation(parsedData);
+  if (entryType === 'photo_stock_in') return buildPhotoStockEntryConfirmation(parsedData);
   return buildDailyEntryConfirmation(parsedData);
+}
+
+// Batch 4 (A2-8) — preview for a photo-sourced stock draft awaiting
+// confirm_pending_stock_entry. Used both by agentLoop's dynamic system
+// prompt (so Kemi can re-present it on a later, photo-less turn) and by the
+// existing stale-pending-entry reminder sweep in jobs/dailySummary.js.
+function buildPhotoStockEntryConfirmation(data) {
+  const items = data.items || [];
+  const lines = ['Here\'s what I read from your photo:\n', '📦 *STOCK RECEIVED*'];
+  for (const it of items) {
+    const priceNote = it.unit_cost ? ` at ${fmt(it.unit_cost)} each` : '';
+    lines.push(`- ${it.product}: ${it.quantity} ${it.unit || 'units'}${priceNote}`);
+  }
+  if (data.supplier_name) lines.push(`\nSupplier: ${data.supplier_name}`);
+  lines.push('');
+  lines.push('Reply *YES* to log this stock ✅');
+  lines.push('Tell me what\'s wrong if something\'s off ❌');
+  return lines.join('\n');
 }
 
 function buildDailyEntryConfirmation(data) {
