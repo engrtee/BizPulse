@@ -141,6 +141,45 @@ const ProductModel = {
     return parseFloat(res.rows[0]?.current_stock || 0);
   },
 
+  /**
+   * A1-8 — repair utility. Recomputes what current_stock *should* be purely
+   * from the product_transactions ledger (SUM(stock_in) - SUM(sale), floored
+   * at 0 — void-safe since voided sale rows now have quantity zeroed too),
+   * and reports whether the live column has drifted from it. Read-only —
+   * use applyRecompute() to actually write the correction back.
+   */
+  async recomputeStock(productId) {
+    const res = await query(
+      `SELECT
+         p.current_stock AS live_stock,
+         GREATEST(0, COALESCE(SUM(CASE WHEN pt.transaction_type = 'stock_in' THEN pt.quantity ELSE 0 END), 0)
+                   - COALESCE(SUM(CASE WHEN pt.transaction_type = 'sale'     THEN pt.quantity ELSE 0 END), 0)
+         ) AS ledger_stock
+       FROM products p
+       LEFT JOIN product_transactions pt ON pt.product_id = p.id
+       WHERE p.id = $1
+       GROUP BY p.id`,
+      [productId]
+    );
+    if (!res.rows.length) return null;
+    const live   = parseFloat(res.rows[0].live_stock)   || 0;
+    const ledger = parseFloat(res.rows[0].ledger_stock) || 0;
+    return { productId, live, ledger, drifted: Math.abs(live - ledger) > 0.01 };
+  },
+
+  /** Writes the ledger-derived stock value back to products.current_stock. */
+  async applyRecompute(productId) {
+    const result = await this.recomputeStock(productId);
+    if (!result) return null;
+    if (result.drifted) {
+      await query(
+        `UPDATE products SET current_stock = $1, updated_at = NOW() WHERE id = $2`,
+        [result.ledger, productId]
+      );
+    }
+    return result;
+  },
+
   // ── Stock alert deduplication ───────────────────────────────────────────
 
   /** Returns true if an alert of this type was already sent today. */

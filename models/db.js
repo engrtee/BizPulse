@@ -28,6 +28,31 @@ pool.on('error', (err) => {
 const query = (text, params) => pool.query(text, params);
 
 /**
+ * Run a series of queries atomically (A1-8). Checks out a dedicated client,
+ * BEGINs, hands the caller a transaction-scoped query() function, then
+ * COMMITs on success or ROLLBACKs on any thrown error — always releasing
+ * the client back to the pool.
+ *
+ * @param {(txQuery: Function) => Promise<any>} fn
+ * @returns {Promise<any>} whatever fn returns
+ */
+async function withTransaction(fn) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const txQuery = (text, params) => client.query(text, params);
+    const result = await fn(txQuery);
+    await client.query('COMMIT');
+    return result;
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+/**
  * Create all tables on first run.
  * Safe to call repeatedly — uses CREATE TABLE IF NOT EXISTS.
  */
@@ -753,4 +778,4 @@ const MessageModel = {
   },
 };
 
-module.exports = { query, initDb, pool, MessageModel };
+module.exports = { query, withTransaction, initDb, pool, MessageModel };
