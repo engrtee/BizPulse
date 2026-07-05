@@ -154,7 +154,18 @@ follow-up ticket; not touched here since it's unrelated to photo confirmation or
 
 ## Batch 5 — Interlock proof
 
-Not started. Full-loop integration test + the <3-minute demo script.
+| # | Item | Status | Commit |
+|---|---|---|---|
+| 1 | `tests/full_loop_test.js` (`npm run test:fullloop`) — one continuous trader lifecycle through photo-in confirm (Batch 4) → cash + credit sale → receipts (Batch 2, both directions of the Edge 1↔2 interlock) → debt reminder with on-demand phone capture (Batch 1) → full debt settlement auto-generating a receipt. Proves receipt sequence numbers stay monotonic across both the manual `generate_receipt` path and the automatic debt-payoff hook — a genuine cross-batch integration proof, not a repeat of any single batch's own exit gate. | ✅ Done | `6e826a0` |
+| 2 | `docs/demo-script.md` — a timed, <3-minute stakeholder walkthrough (asked Tosin whether this meant a written script or an automated one; no response, built both) | ✅ Done | `266b3c3` |
+
+**No response from Tosin to the clarifying question on what "demo script" meant (written walkthrough vs.
+automated code) — built both, since the ambiguity was cheap to cover once the full-loop test already
+existed.**
+
+**Batch 5 is CLOSED (2026-07-05).** `npm run test:fullloop` — 14/14 pass against live Postgres on the
+first real run; all four prior batches' exit-gate tests (`test:debts`, `test:receipts`,
+`test:pushbudget`, `test:photoconfirm`) re-run clean alongside it.
 
 ## Batch 6 — Multi-currency scope decision
 
