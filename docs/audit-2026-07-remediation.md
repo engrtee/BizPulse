@@ -169,7 +169,17 @@ first real run; all four prior batches' exit-gate tests (`test:debts`, `test:rec
 
 ## Batch 6 — Multi-currency scope decision
 
-Blocked on Tosin's choice (descope vs. build). Not raised yet.
+**DECIDED (2026-07-05): descope. BizPulse stays Naira-only.** Raised with Tosin directly: today the
+product is Naira-only everywhere by explicit design — CLAUDE.md's Currency section ("Always display in
+Nigerian Naira ₦... Never use $ or other currencies"), `utils/naira.js`, every message template, and even
+the Batch 2 font-fallback fix (`dejavu-fonts-ttf`, added specifically because the brand fonts lack the ₦
+glyph) all assume a single currency. Building real multi-currency support would touch most of those call
+sites and is a genuine pivot away from "WhatsApp-native financial OS for Nigerian SMEs" — Tosin confirmed
+staying Naira-only, matching the product's actual target market and every existing hard rule in the
+codebase. No code changes required; CLAUDE.md already states this as a hard rule, so this batch is
+closed by decision alone.
+
+**This closes the 2026-07 audit remediation plan — Batches 0 through 6 are all closed.**
 
 ## Deferred (tracked, not forgotten)
 

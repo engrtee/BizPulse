@@ -134,6 +134,9 @@ Users will not come to look at their data. BizPulse must deliver insight to them
 - Always display in Nigerian Naira ₦
 - Always use toLocaleString('en-NG') for formatting: ₦1,200,000 not ₦1200000
 - Never use $ or other currencies
+- **Reaffirmed by decision, not just default (2026-07 audit, Batch 6):** multi-currency support was
+  explicitly considered and descoped — BizPulse stays Naira-only. Don't add a currency field, FX
+  handling, or non-₦ formatting anywhere without a new, explicit product decision to reverse this.
 
 **Kemi's replies must:**
 - Reference Nigerian business context specifically
