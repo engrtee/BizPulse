@@ -127,10 +127,30 @@ touching shared files (`toolHandlers.js`, `productService.js`).
 
 ## Batch 4 — Photo-in with confirmation (revised: behavior change to Kemi)
 
-Not started. Items: route Kemi's photo path through `pending_entries` (A2-8) with a confirmation tool
-so YES/corrections happen in her voice, supplier-receipt path commits stock + cost-price rows,
-low-confidence items listed as unreadable rather than guessed, stock integrity fixes (A1-8):
-`recomputeStock()`, void-zeroes-quantity fix, atomic stock+transaction writes.
+| # | Item | Status | Commit |
+|---|---|---|---|
+| 1 (A2-8) | `stage_photo_stock_entry` + `confirm_pending_stock_entry` Kemi tools, routing through the pre-existing `pending_entries` table/`confirmationService.js`; applies to **every** photo-driven stock-in, no carve-out for first-time opening-stock photos (no response to the clarifying question asked — proceeded on this recommendation, called out in CLAUDE.md and the plan) | ✅ Done | `77967bb` |
+| 2 | `agentLoop.js` fetches any pending `photo_stock_in` entry every turn and injects it into the dynamic system prompt — the only way Kemi can "remember" a draft once the photo itself is gone from a fresh `runAgent()` call | ✅ Done | `77967bb` |
+| 3 | `systemPrompt.js` READING IMAGES + new PENDING PHOTO ENTRY sections rewritten; low-confidence items left out of the tool call and named as unreadable, never guessed | ✅ Done | `77967bb` |
+| 4 (A1-8) | Void-zeroes-quantity fix: `correctLastEntryHandler`'s `delete` action now zeroes `quantity`, not just `total_amount` | ✅ Done | `77967bb` |
+| 5 (A1-8) | `ProductModel.recomputeStock`/`applyRecompute` + `scripts/recompute-stock.js` repair utility | ✅ Done | `19bb271` |
+| 6 (A1-8) | `models/db.js`'s `withTransaction(fn)` helper; `logSaleHandler`/`logRestockHandler`/`confirmPendingStockEntryHandler` all wrap their stock+transaction writes atomically | ✅ Done | `19bb271` + `77967bb` |
+| 7 | `tests/photo_confirmation_test.js` (`npm run test:photoconfirm`) — stage/confirm/cancel atomicity, void fix, recomputeStock drift detection | ✅ Done | `ae7d833` |
+| 8 | CLAUDE.md Kemi/Inventory sections + tables + folder structure updated | ✅ Done | this commit |
+
+**Note on scope:** photo-driven stock entries are the *only* Kemi write path with confirm-before-commit
+after this batch — every other write tool (log_sale, log_expense, log_debt, etc.) still commits
+immediately, unchanged. That's the batch's original scope (photos are the highest-stakes "Kemi committed
+something wrong" risk), not a shortcut taken here.
+
+**Batch 4 is CLOSED (2026-07-05).** `npm run test:photoconfirm` — 16/16 pass against live Postgres on the
+first real run. `test:debts`/`test:receipts`/`test:pushbudget` re-run clean — no regressions from
+touching shared files (`toolHandlers.js`, `agentLoop.js`, `models/db.js`).
+
+**Unrelated pre-existing bug noticed, not fixed (out of scope for this batch):** `src/agent/normaliser.js`'s
+suffix-stripping step (`stripSuffix`) runs on the alias map's own output, not just raw user input — e.g.
+"indomie" → alias "indomie noodles" → suffix-stripping then mangles "noodles" to "noodl". Worth a
+follow-up ticket; not touched here since it's unrelated to photo confirmation or stock integrity.
 
 ## Batch 5 — Interlock proof
 

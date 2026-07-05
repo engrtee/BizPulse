@@ -248,8 +248,9 @@ agent. Build and reason about new features against Kemi's tools, not the older r
 1. `routes/webhook.js` receives the POST, verifies the Meta signature, dedups by `whatsapp_message_id`
    (Fix 5), and looks up the user.
 2. A couple of special-case intercepts run first and short-circuit if matched: NPS rating replies, and
-   the "Other" business-type clarification flow (still the one live user of `pending_entries`/
-   `confirmationService.js` — see below).
+   the "Other" business-type clarification flow (a second live user of `pending_entries`/
+   `confirmationService.js` alongside Kemi's own `stage_photo_stock_entry`/`confirm_pending_stock_entry`
+   tools since Batch 4 — see below).
 3. Everything else is handed to `runAgent(whatsappNumber, text, opts)` in `src/agent/agentLoop.js`.
 4. `agentLoop.js` loads the last ~20 turns of conversation history and a `trader_facts` rolling-context
    summary, builds a system prompt (`systemPrompt.js`) with the trader's persona/business type baked in,
@@ -262,19 +263,31 @@ agent. Build and reason about new features against Kemi's tools, not the older r
 **Kemi's tools (`src/agent/tools.js` schemas, `toolHandlers.js` implementations):**
 `log_sale`, `log_restock`, `log_expense`, `get_stock_level`, `get_stock_intelligence`,
 `get_sales_summary`, `search_products`, `correct_last_entry`, `log_debt`, `settle_debt`, `get_debts`,
-`send_debt_reminder`, `generate_receipt`, `set_goal`, `compare_periods`.
+`send_debt_reminder`, `generate_receipt`, `stage_photo_stock_entry`, `confirm_pending_stock_entry`,
+`set_goal`, `compare_periods`.
 
-**Important behavioral gap (open, tracked for Batch 4):** Kemi's write tools commit immediately —
-there is no confirm-before-commit step in her tool-call path today. A separate, older confirmation
-system (`services/confirmationService.js` + the `pending_entries` table, YES/EDIT/CANCEL) exists and,
-since the A1-2 legacy-code deletion (2026-07), is wired to exactly one live flow: the "Other"
-business-type clarification in `routes/webhook.js`. Any feature that needs "show a draft, wait for YES
-before committing" (e.g. photo-in extraction) must explicitly route through `pending_entries` from
-inside a Kemi tool — it is not automatic just because the infrastructure exists elsewhere in the file.
+**Resolved (Batch 4, 2026-07):** photo-driven stock entries are the first (and, for now, only) Kemi
+write path with a real confirm-before-commit step. Every write tool other than the two below still
+commits immediately — this remains a deliberate scope choice (photos are the highest-stakes "Kemi
+committed something wrong" risk, per the original Batch 4 audit finding), not an oversight.
+`stage_photo_stock_entry` saves a draft into the pre-existing `pending_entries` table
+(`services/confirmationService.js`'s `savePending`/`getPendingEntry`/`confirmEntry`/`discardEntry` —
+unchanged) and commits nothing; `confirm_pending_stock_entry` (`action: 'confirm'|'cancel'`) actually
+commits or discards it. Because images are never persisted to `conversation_history`
+(`agentLoop.js` step 4 — text only), Kemi can't "look at the photo again" on the trader's next message;
+`agentLoop.js` fetches any pending `photo_stock_in` entry every turn and injects a preview into the
+dynamic system prompt (`systemPrompt.js`'s TRADER CONTEXT block) so she knows a draft is open even on a
+photo-less turn. A correction is handled as cancel-and-restage, not a fine-grained per-item edit tool.
+The older YES/EDIT/CANCEL confirmation system is otherwise still only wired to the "Other" business-type
+clarification flow in `routes/webhook.js` — any other feature needing a confirm-before-commit step must
+still explicitly route through `pending_entries` from inside a Kemi tool, same as before.
 
 **Kemi's own image-handling path** (`routes/webhook.js`, `msg.type === 'image'`) downloads the photo,
 base64-encodes it, and passes it straight into `runAgent()` as an image content block — Claude's vision
-reads it directly as part of the same tool-calling loop, not via a separate Gemini Vision call.
+reads it directly as part of the same tool-calling loop, not via a separate Gemini Vision call. The
+webhook route itself is unchanged by Batch 4 — the confirm-before-commit behavior lives entirely inside
+Kemi's own tool choice (`systemPrompt.js`'s READING IMAGES / PENDING PHOTO ENTRY sections), not a new
+branch in `routes/webhook.js`.
 
 **8pm WAT digest** (`src/agent/digest.js`) is a separate, non-interactive process on its own cron: it
 pulls a SQL data pack per active user and asks Claude to narrate it into a WhatsApp message. It also
@@ -332,6 +345,24 @@ build it as a Kemi tool instead.
   the *same* alert repeating same-day, `push_log` caps total proactive volume across *all* push types.
 - Also gated by the shared weekly push budget (`services/pushBudget.js`) — `out_of_stock` is exempt from
   the cap, non-zero `low_stock` counts against it like any other push.
+
+**Stock integrity fixes (A1-8, Batch 4, 2026-07):**
+- **Void-zeroes-quantity:** `correctLastEntryHandler`'s `delete` action (`src/agent/toolHandlers.js`)
+  now zeroes `quantity` on the voided `product_transactions` row, not just `total_amount` — before this,
+  a voided sale still inflated `ProductModel.getVelocity()` and `stock_intelligence_mv`'s velocity
+  figures, since both `SUM(quantity)` with no voided-row exclusion.
+- **`ProductModel.recomputeStock(productId)` / `applyRecompute(productId)`** (`models/product.js`) —
+  a repair utility, not wired into any hot path. Recomputes what `current_stock` *should* be purely from
+  the `product_transactions` ledger (`SUM(stock_in) - SUM(sale)`, floored at 0, void-safe per the fix
+  above) and reports drift; `applyRecompute` writes the correction back. Manual script
+  `scripts/recompute-stock.js` (`node scripts/recompute-stock.js [--apply] [--user <whatsapp_number>]`)
+  runs it across all products or one trader's — dry-run by default, `--apply` to actually fix drift.
+- **Atomic stock+transaction writes:** `logSaleHandler`, `logRestockHandler`, and
+  `confirmPendingStockEntryHandler`'s commit path each wrap their `products` stock `UPDATE` +
+  `product_transactions` `INSERT` (+ `transactions` `INSERT` where applicable) in a single Postgres
+  transaction via the new `withTransaction(fn)` helper (`models/db.js`) — a checked-out client,
+  `BEGIN`/`COMMIT`/`ROLLBACK`/`release`. Before this, these were independent pool queries and a crash
+  mid-write could desync `current_stock` from the history it's derived from.
 
 **`stock_intelligence_mv`** (materialized view, refreshed every 15 min by `digest.js`) precomputes, per
 product: 7-day and 28-day velocity, days-of-cover, trend, reorder-suggested flag, a 0–100 stockout-risk
@@ -591,8 +622,10 @@ always written in naira — see the Debt Tracking section's data-quality note.
 total_received, unit_price, low_stock_threshold, last_updated`.
 
 **pending_entries** — `id, user_id, entry_type, parsed_data(JSONB), original_message, status,
-reminder_sent, created_at, confirmed_at, expires_at`. Confirm-before-commit staging table; currently only
-wired to the legacy webhook path (see Kemi section).
+reminder_sent, created_at, confirmed_at, expires_at`. Confirm-before-commit staging table; wired to the
+legacy webhook path's "Other" business-type clarification AND (since Batch 4) Kemi's own
+`stage_photo_stock_entry`/`confirm_pending_stock_entry` tools (`entry_type = 'photo_stock_in'`) — see
+Kemi section.
 
 **conversation_history / trader_facts / goals** — Kemi's memory tables, keyed by `whatsapp_number`
 (not `user_id` — a known fragility, see Fix 6).
@@ -660,7 +693,7 @@ bizpulse/
 │   ├── gemini.js           (email recommendation + voice transcription; parseWithAI is legacy/dead)
 │   ├── claude.js           (Claude client used for the 6pm nudge coaching tip)
 │   ├── email.js            (build + send emails via Brevo HTTP API)
-│   ├── confirmationService.js (pending_entries YES/EDIT/CANCEL — legacy path only, see Kemi section)
+│   ├── confirmationService.js (pending_entries staging — legacy "Other" biz-type flow + Kemi's photo-in confirm tools, Batch 4)
 │   ├── productService.js   (legacy-path product fuzzy-matching, stock alerts)
 │   ├── inventory.js        (legacy inventory table operations)
 │   ├── customers.js        (standalone customer-COUNT logging — NOT the debt-contact model, see models/customer.js)
@@ -675,7 +708,7 @@ bizpulse/
 │   ├── sheets.js           (dormant — Fix 3)
 │   └── parser.js           (legacy rule-based parser — dead code pending removal)
 ├── models/
-│   ├── db.js             (connection pool + initDb schema + MessageModel)
+│   ├── db.js             (connection pool + initDb schema + MessageModel + withTransaction helper)
 │   ├── user.js
 │   ├── transaction.js
 │   ├── product.js
