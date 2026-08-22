@@ -27,6 +27,18 @@ const GeminiService      = require('../services/gemini');
 const WhatsAppService    = require('../services/whatsapp');
 const ConfirmationService = require('../services/confirmationService');
 const OnboardingModel     = require('../models/onboarding');
+const SellerModel         = require('../models/seller'); // Reseller Ordering Agent — separate product, see src/reseller-agent/
+
+// One explicit disambiguation question for a brand-new number, shared by the
+// text/audio/image first-contact paths below (bizpulse-v1-build-prompt.md —
+// the reseller agent shares this WhatsApp number with BizPulse, so a truly
+// new sender is ambiguous between "wants to register as a trader" and "wants
+// to order from a seller" until they say which).
+const DISAMBIGUATION_PROMPT =
+  `👋 Hi! Are you here to:\n\n` +
+  `1️⃣ Track your own business with BizPulse\n` +
+  `2️⃣ Order something from a seller\n\n` +
+  `Reply *1* or *2*.`;
 
 // ─────────────────────────────────────────────
 // GET /webhook — Meta verification handshake
@@ -149,6 +161,20 @@ router.post('/', async (req, res) => {
       // ── Audio / voice note — transcribe then pass to Kemi ──
       entryMethod = 'voice';
       const mediaId = msg.audio?.id;
+
+      // ── Reseller Agent: voice isn't supported yet on either side of that
+      // product — keep a registered seller/linked customer from falling into
+      // BizPulse's own voice/onboarding pipeline, which doesn't apply to them.
+      const resellerVoiceSeller = await SellerModel.findByWhatsapp(from);
+      const resellerVoiceLink   = resellerVoiceSeller ? null : await SellerModel.getLinkedSellerId(from);
+      if (resellerVoiceSeller || resellerVoiceLink) {
+        await WhatsAppService.sendMessage(from,
+          `Voice notes aren't supported yet — could you type that instead? 🙏`
+        ).catch(() => {});
+        return;
+      }
+      // ────────────────────────────────────────────────────────────────────
+
       console.log(`[Webhook] Voice note from ${from}, media_id: ${mediaId}`);
 
       const voiceUser = await UserModel.findByWhatsapp(from);
@@ -158,11 +184,8 @@ router.post('/', async (req, res) => {
           await WhatsAppService.sendMessage(from,
             `Almost there! Please reply to my last question as a text message to complete setup. 😊`);
         } else {
-          await OnboardingModel.createSession(from);
-          await WhatsAppService.sendMessage(from,
-            `👋 Hi! Welcome to *BizPulse*.\n\n` +
-            `Let's get you set up first — *what's your name?* 😊`
-          );
+          await OnboardingModel.createSession(from, 'disambiguation');
+          await WhatsAppService.sendMessage(from, DISAMBIGUATION_PROMPT);
         }
         return;
       }
@@ -202,6 +225,61 @@ router.post('/', async (req, res) => {
       const caption = (msg.image?.caption || '').trim();
       console.log(`[Webhook] Image from ${from}, media_id: ${mediaId}`);
 
+      // ── Reseller Agent: route BEFORE BizPulse's own photo pipeline, which
+      // would otherwise misread an unrelated photo as a stock notebook shot ──
+      const resellerImageSeller = await SellerModel.findByWhatsapp(from);
+      if (resellerImageSeller) {
+        const dedup = await MessageModel.logInbound(from, null, caption || '[image]', wasMsgId)
+          .catch(() => ({ id: null, duplicate: false }));
+        if (!dedup.duplicate) {
+          await WhatsAppService.sendMessage(from,
+            `I can only handle text commands right now — for stock updates, just type them ` +
+            `(e.g. "Item 3 restock 20").`
+          );
+          await MessageModel.updateLog(dedup.id, { intent: 'reseller_seller_image_unsupported', status: 'processed' }).catch(() => {});
+        }
+        return;
+      }
+
+      const resellerImageSellerId = await SellerModel.getLinkedSellerId(from);
+      if (resellerImageSellerId) {
+        const dedup = await MessageModel.logInbound(from, null, caption || '[image]', wasMsgId)
+          .catch(() => ({ id: null, duplicate: false }));
+        if (dedup.duplicate) return;
+
+        const { recordPaymentReceiptHandler } = require('../src/reseller-agent/toolHandlers');
+        try {
+          const result = await recordPaymentReceiptHandler({
+            sellerId: resellerImageSellerId, customerPhone: from, mediaId,
+          });
+          if (result.recorded) {
+            await WhatsAppService.sendMessage(from,
+              `Got it — thanks for the payment proof! I've let the seller know so she can confirm. 🙏`
+            );
+            const paidSeller = await SellerModel.findById(resellerImageSellerId);
+            if (paidSeller) {
+              await WhatsAppService.sendMessage(paidSeller.whatsapp_number,
+                `💰 A customer sent payment proof for order #${result.order.id}. Check your dashboard to confirm.`
+              ).catch(() => {});
+            }
+          } else {
+            await WhatsAppService.sendMessage(from,
+              `I don't see an order of yours waiting on payment right now — want to check your order ` +
+              `status or place a new order?`
+            );
+          }
+          await MessageModel.updateLog(dedup.id, { intent: 'reseller_payment_receipt', status: 'processed' }).catch(() => {});
+        } catch (err) {
+          console.error('[Webhook] Reseller payment-receipt processing failed:', err.message);
+          await WhatsAppService.sendMessage(from,
+            `Had trouble processing that just now — please try again shortly.`
+          ).catch(() => {});
+          await MessageModel.updateLog(dedup.id, { intent: 'reseller_payment_receipt', status: 'failed' }).catch(() => {});
+        }
+        return;
+      }
+      // ────────────────────────────────────────────────────────────────────
+
       const photoUser = await UserModel.findByWhatsapp(from);
       if (!photoUser) {
         const photoSession = await OnboardingModel.getSession(from);
@@ -209,11 +287,8 @@ router.post('/', async (req, res) => {
           await WhatsAppService.sendMessage(from,
             `Almost there! Please reply to my last question as a text message to complete setup. 😊`);
         } else {
-          await OnboardingModel.createSession(from);
-          await WhatsAppService.sendMessage(from,
-            `👋 Hi! Welcome to *BizPulse*.\n\n` +
-            `Let's get you set up first — *what's your name?* 😊`
-          );
+          await OnboardingModel.createSession(from, 'disambiguation');
+          await WhatsAppService.sendMessage(from, DISAMBIGUATION_PROMPT);
         }
         return;
       }
@@ -256,6 +331,13 @@ router.post('/', async (req, res) => {
       return;
     }
 
+    // ── Reseller Agent: registered seller or already-linked customer? ──────
+    // Runs before BizPulse's own trader lookup so the two products never
+    // fight over the same inbound message. Handles its own dedup (Fix 5)
+    // since both roles below can write (stock/order changes).
+    if (await tryResellerRouting(from, text, wasMsgId)) return;
+    // ────────────────────────────────────────────────────────────────────
+
     // ── Look up user ──
     const user = await UserModel.findByWhatsapp(from);
     if (!user) {
@@ -264,13 +346,8 @@ router.post('/', async (req, res) => {
       if (session) {
         await handleOnboarding(from, text, session);
       } else {
-        await OnboardingModel.createSession(from);
-        await WhatsAppService.sendMessage(from,
-          `👋 Hi! Welcome to *BizPulse* — your WhatsApp business tracker.\n\n` +
-          `I help Nigerian business owners track sales, expenses, and stock — ` +
-          `all from WhatsApp. No app needed.\n\n` +
-          `*What's your name?* (Just your first name is fine 😊)`
-        );
+        await OnboardingModel.createSession(from, 'disambiguation');
+        await WhatsAppService.sendMessage(from, DISAMBIGUATION_PROMPT);
       }
       await MessageModel.logInbound(from, null, text, wasMsgId).then(r =>
         MessageModel.updateLog(r?.id, { intent: 'onboarding', status: 'in_progress' })
@@ -402,6 +479,49 @@ async function downloadWhatsAppMedia(mediaId) {
 }
 
 // ─────────────────────────────────────────────
+// Internal: Reseller Ordering Agent routing (separate product, see src/reseller-agent/)
+// ─────────────────────────────────────────────
+/**
+ * Routes an inbound text/voice-transcribed message to the reseller ordering
+ * agent when the sender is either a registered seller or a customer already
+ * linked to one. Returns true if it fully handled the message (caller should
+ * return immediately) — false if neither applies, so the caller should fall
+ * through to BizPulse's own trader lookup.
+ *
+ * Read-only identity checks happen first with no side effects; dedup (Fix 5)
+ * only runs once we know we're actually going to handle — and write to —
+ * this message, so an unrelated BizPulse trader's first message is never
+ * poisoned by a whatsapp_message_id row this function didn't need to create.
+ */
+async function tryResellerRouting(from, text, wasMsgId) {
+  const seller = await SellerModel.findByWhatsapp(from);
+  const linkedSellerId = seller ? null : await SellerModel.getLinkedSellerId(from);
+  if (!seller && !linkedSellerId) return false;
+
+  const dedup = await MessageModel.logInbound(from, null, text, wasMsgId)
+    .catch(() => ({ id: null, duplicate: false }));
+  if (dedup.duplicate) {
+    console.log(`[Webhook] ⏭ Duplicate reseller message_id ${wasMsgId} — skipping`);
+    return true;
+  }
+
+  if (seller) {
+    const { runSellerAgent } = require('../src/reseller-agent/sellerAgentLoop');
+    const reply = await runSellerAgent(seller, text, { whatsappMessageId: wasMsgId });
+    await WhatsAppService.sendMessage(from, reply);
+    await MessageModel.updateLog(dedup.id, { intent: 'reseller_seller_agent', status: 'processed' }).catch(() => {});
+    return true;
+  }
+
+  await SellerModel.touchCustomerSeen(from);
+  const { runCustomerAgent } = require('../src/reseller-agent/agentLoop');
+  const reply = await runCustomerAgent(from, linkedSellerId, text, { whatsappMessageId: wasMsgId });
+  await WhatsAppService.sendMessage(from, reply);
+  await MessageModel.updateLog(dedup.id, { intent: 'reseller_customer_agent', status: 'processed' }).catch(() => {});
+  return true;
+}
+
+// ─────────────────────────────────────────────
 // Internal: WhatsApp-native conversational registration
 // ─────────────────────────────────────────────
 const BIZ_TYPES = {
@@ -418,6 +538,59 @@ async function handleOnboarding(from, text, session) {
   const collected = typeof session.collected === 'string'
     ? JSON.parse(session.collected)
     : (session.collected || {});
+
+  // ── Reseller Agent: disambiguation gate + seller-identification steps ────
+  // A brand-new number is ambiguous between "wants to register on BizPulse"
+  // and "wants to order from a seller" (this product shares BizPulse's
+  // WhatsApp number) — see DISAMBIGUATION_PROMPT above and tryResellerRouting.
+  if (step === 'disambiguation') {
+    const choice = text.trim();
+    if (choice === '1' || /\b(business|track|bizpulse)\b/i.test(choice)) {
+      await OnboardingModel.updateSession(from, 'name', {});
+      await WhatsAppService.sendMessage(from,
+        `👋 Welcome to *BizPulse* — your WhatsApp business tracker.\n\n` +
+        `I help Nigerian business owners track sales, expenses, and stock — ` +
+        `all from WhatsApp. No app needed.\n\n` +
+        `*What's your name?* (Just your first name is fine 😊)`
+      );
+      return;
+    }
+    if (choice === '2' || /\b(order|seller|buy|shop)\b/i.test(choice)) {
+      await OnboardingModel.updateSession(from, 'reseller_seller_id', {});
+      await WhatsAppService.sendMessage(from, `Which seller are you shopping from today? 🙂`);
+      return;
+    }
+    await WhatsAppService.sendMessage(from,
+      `Sorry, just reply *1* to track your business, or *2* to order from a seller.`
+    );
+    return;
+  }
+
+  if (step === 'reseller_seller_id') {
+    const { identifySeller } = require('../src/reseller-agent/sellerMatcher');
+    const { match, candidates } = await identifySeller(text);
+
+    if (match) {
+      await SellerModel.linkCustomer(from, match.id);
+      await OnboardingModel.deleteSession(from);
+      await WhatsAppService.sendMessage(from,
+        `Got it — you're shopping from *${match.business_name}*! What would you like to order? 🛍️\n\n` +
+        `_Tip: next time, just mention their name or code (${match.code}) and you'll skip this step!_`
+      );
+      return;
+    }
+    if (candidates.length > 0) {
+      const names = candidates.map(c => c.business_name).join(' or ');
+      await WhatsAppService.sendMessage(from, `Did you mean *${names}*? Reply with the one you meant.`);
+      return;
+    }
+    await WhatsAppService.sendMessage(from,
+      `Hmm, I couldn't find that seller. Could you tell me their name or code again?\n\n` +
+      `_Tip: next time, just include their code or tap their link to skip this step!_`
+    );
+    return;
+  }
+  // ─────────────────────────────────────────────────────────────────────────
 
   if (step === 'name') {
     const raw  = text.trim().replace(/[^a-zA-Z\s'.-]/g, '').trim();

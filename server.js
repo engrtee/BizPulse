@@ -20,6 +20,7 @@ const webhookRouter            = require('./routes/webhook');
 const apiRouter                = require('./routes/api');
 const emailRouter              = require('./routes/email');
 const adminRouter              = require('./routes/admin');
+const resellerAdminRouter      = require('./routes/resellerAdmin'); // Reseller Ordering Agent dashboard — separate product
 // Requiring these modules starts their internal cron schedules immediately
 require('./jobs/dailySummary');
 require('./jobs/morningCoaching');
@@ -63,9 +64,17 @@ const adminLimiter = rateLimit({
   legacyHeaders: false,
   message: 'Too many requests.',
 });
+const resellerLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: 'Too many requests.',
+});
 
 app.use('/api',    apiLimiter);
 app.use('/admin',  adminLimiter);
+app.use('/reseller', resellerLimiter);
 app.use('/webhook', webhookLimiter);
 
 // Raw body captured for WhatsApp webhook signature verification
@@ -87,6 +96,7 @@ app.use('/webhook',        webhookRouter);
 app.use('/api',            apiRouter);
 app.use('/api/summary',    emailRouter);
 app.use('/admin',          adminRouter);
+app.use('/reseller',       resellerAdminRouter);
 
 // Health check (useful for Render and uptime monitors)
 // Handles both GET and POST for cron monitoring services

@@ -695,6 +695,131 @@ async function initDb() {
   await run(`CREATE UNIQUE INDEX IF NOT EXISTS idx_stock_intel_mv_unique
     ON stock_intelligence_mv(whatsapp_number, product_id)`, 'UNIQUE INDEX stock_intelligence_mv');
 
+  // ── Reseller Ordering Agent tables (separate product, shares this DB/number/hosting) ─
+  // Every table is scoped by seller_id from day one (tenant-aware, even with one seller
+  // live in V1). Prefixed reseller_ to keep it grep-ably separate from BizPulse's own
+  // trader/transaction schema above — this is a different product, not a Kemi feature.
+  await run(`CREATE TABLE IF NOT EXISTS reseller_sellers (
+    id                  SERIAL PRIMARY KEY,
+    name                VARCHAR(200) NOT NULL,
+    business_name       VARCHAR(200) NOT NULL,
+    code                VARCHAR(50) UNIQUE NOT NULL,
+    whatsapp_number     VARCHAR(20) UNIQUE NOT NULL,
+    bank_account_name   VARCHAR(200),
+    bank_account_number VARCHAR(20),
+    bank_name           VARCHAR(100),
+    active              BOOLEAN DEFAULT TRUE,
+    created_at          TIMESTAMPTZ DEFAULT NOW(),
+    otp_code            VARCHAR(10),
+    otp_expires_at      TIMESTAMPTZ
+  )`, 'CREATE reseller_sellers');
+
+  await run(`CREATE TABLE IF NOT EXISTS reseller_catalog_items (
+    id                   SERIAL PRIMARY KEY,
+    seller_id            INTEGER REFERENCES reseller_sellers(id) ON DELETE CASCADE,
+    item_number          INTEGER NOT NULL,
+    name                 VARCHAR(200) NOT NULL,
+    description          TEXT,
+    price_naira          NUMERIC(15,2) NOT NULL DEFAULT 0,
+    variant_info         VARCHAR(200),
+    source_type          VARCHAR(20) NOT NULL DEFAULT 'seller_owned'
+                         CHECK (source_type IN ('seller_owned','supplier_dependent')),
+    current_stock        NUMERIC(12,2),
+    total_ever_received  NUMERIC(12,2) DEFAULT 0,
+    is_active            BOOLEAN DEFAULT TRUE,
+    created_at           TIMESTAMPTZ DEFAULT NOW(),
+    updated_at           TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(seller_id, item_number)
+  )`, 'CREATE reseller_catalog_items');
+  await run(`CREATE INDEX IF NOT EXISTS idx_reseller_catalog_seller ON reseller_catalog_items(seller_id, is_active)`, 'INDEX reseller_catalog_items');
+
+  // Atomic per-seller item-number sequence — same race-safe UPSERT pattern as receipt_counters.
+  await run(`CREATE TABLE IF NOT EXISTS reseller_catalog_counters (
+    seller_id   INTEGER PRIMARY KEY REFERENCES reseller_sellers(id) ON DELETE CASCADE,
+    next_number INTEGER NOT NULL DEFAULT 1
+  )`, 'CREATE reseller_catalog_counters');
+
+  await run(`CREATE TABLE IF NOT EXISTS reseller_orders (
+    id                       SERIAL PRIMARY KEY,
+    seller_id                INTEGER REFERENCES reseller_sellers(id) ON DELETE CASCADE,
+    customer_phone           VARCHAR(20) NOT NULL,
+    customer_name            VARCHAR(200),
+    status                   VARCHAR(30) NOT NULL DEFAULT 'pending_verification'
+                             CHECK (status IN ('pending_verification','confirmed','declined',
+                                                'awaiting_payment','payment_received','paid',
+                                                'delivered','cancelled')),
+    created_at               TIMESTAMPTZ DEFAULT NOW(),
+    confirmed_at             TIMESTAMPTZ,
+    paid_at                  TIMESTAMPTZ,
+    delivered_at             TIMESTAMPTZ,
+    cancelled_at             TIMESTAMPTZ,
+    payment_receipt_media_id VARCHAR(200),
+    notes                    TEXT
+  )`, 'CREATE reseller_orders');
+  await run(`CREATE INDEX IF NOT EXISTS idx_reseller_orders_seller_status ON reseller_orders(seller_id, status)`, 'INDEX reseller_orders seller_status');
+  await run(`CREATE INDEX IF NOT EXISTS idx_reseller_orders_customer ON reseller_orders(customer_phone)`, 'INDEX reseller_orders customer');
+
+  await run(`CREATE TABLE IF NOT EXISTS reseller_order_items (
+    id                    SERIAL PRIMARY KEY,
+    order_id              INTEGER REFERENCES reseller_orders(id) ON DELETE CASCADE,
+    catalog_item_id       INTEGER REFERENCES reseller_catalog_items(id) ON DELETE SET NULL,
+    item_number_snapshot  INTEGER NOT NULL,
+    item_name_snapshot    VARCHAR(200) NOT NULL,
+    unit_price_snapshot   NUMERIC(15,2) NOT NULL DEFAULT 0,
+    quantity              NUMERIC(10,2) NOT NULL DEFAULT 1,
+    variant               VARCHAR(200),
+    line_total            NUMERIC(15,2) NOT NULL DEFAULT 0
+  )`, 'CREATE reseller_order_items');
+  await run(`CREATE INDEX IF NOT EXISTS idx_reseller_order_items_order ON reseller_order_items(order_id)`, 'INDEX reseller_order_items');
+  // Migration for tables created before ON DELETE SET NULL was added above —
+  // without it, a catalog item that has ever been ordered can't be deleted.
+  await run(`ALTER TABLE reseller_order_items DROP CONSTRAINT IF EXISTS reseller_order_items_catalog_item_id_fkey`, 'DROP old reseller_order_items catalog_item_id FK');
+  await run(`ALTER TABLE reseller_order_items ADD CONSTRAINT reseller_order_items_catalog_item_id_fkey
+    FOREIGN KEY (catalog_item_id) REFERENCES reseller_catalog_items(id) ON DELETE SET NULL`, 'ADD reseller_order_items catalog_item_id FK ON DELETE SET NULL');
+
+  // Session-memory mapping from Section 4a: identify a customer's seller once, reuse it
+  // for the rest of that relationship rather than asking again on every message.
+  await run(`CREATE TABLE IF NOT EXISTS reseller_customer_seller_link (
+    phone         VARCHAR(20) PRIMARY KEY,
+    seller_id     INTEGER REFERENCES reseller_sellers(id) ON DELETE CASCADE,
+    first_seen_at TIMESTAMPTZ DEFAULT NOW(),
+    last_seen_at  TIMESTAMPTZ DEFAULT NOW()
+  )`, 'CREATE reseller_customer_seller_link');
+  await run(`CREATE INDEX IF NOT EXISTS idx_reseller_cust_link_seller ON reseller_customer_seller_link(seller_id)`, 'INDEX reseller_customer_seller_link');
+
+  await run(`CREATE TABLE IF NOT EXISTS reseller_conversation_history (
+    id             UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+    customer_phone VARCHAR(20) NOT NULL,
+    role           VARCHAR     NOT NULL CHECK (role IN ('user','assistant')),
+    content        TEXT        NOT NULL,
+    created_at     TIMESTAMPTZ DEFAULT NOW()
+  )`, 'CREATE reseller_conversation_history');
+  await run(`CREATE INDEX IF NOT EXISTS idx_reseller_conv_hist_phone ON reseller_conversation_history(customer_phone, created_at DESC)`, 'INDEX reseller_conversation_history');
+
+  // Audit trail per the source prompt's Section 4 — what the agent parsed/decided each
+  // turn, for debugging parse accuracy and the before/after time-saved metrics (Section 6).
+  await run(`CREATE TABLE IF NOT EXISTS reseller_agent_log (
+    id                  SERIAL PRIMARY KEY,
+    seller_id           INTEGER REFERENCES reseller_sellers(id) ON DELETE SET NULL,
+    customer_phone      VARCHAR(20),
+    whatsapp_message_id VARCHAR(200),
+    raw_message         TEXT,
+    parsed_tool_calls   JSONB DEFAULT '[]',
+    agent_response_text TEXT,
+    created_at          TIMESTAMPTZ DEFAULT NOW()
+  )`, 'CREATE reseller_agent_log');
+  await run(`CREATE INDEX IF NOT EXISTS idx_reseller_agent_log_seller ON reseller_agent_log(seller_id, created_at DESC)`, 'INDEX reseller_agent_log');
+
+  // Seller dashboard login sessions — mirrors user_sessions, fed by a WhatsApp OTP
+  // (no password to remember, consistent with meeting a low-tech seller where she is).
+  await run(`CREATE TABLE IF NOT EXISTS reseller_seller_sessions (
+    token      TEXT        PRIMARY KEY,
+    seller_id  INTEGER     NOT NULL REFERENCES reseller_sellers(id) ON DELETE CASCADE,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    expires_at TIMESTAMPTZ DEFAULT NOW() + INTERVAL '30 days'
+  )`, 'CREATE reseller_seller_sessions');
+  await run(`CREATE INDEX IF NOT EXISTS idx_reseller_seller_sessions_seller ON reseller_seller_sessions(seller_id)`, 'INDEX reseller_seller_sessions');
+
   console.log('✅ Database tables ready.');
 }
 

@@ -11,14 +11,14 @@ const OnboardingModel = {
     return res.rows[0] || null;
   },
 
-  async createSession(phone) {
+  async createSession(phone, step = 'name') {
     await query(
       `INSERT INTO onboarding_sessions (phone, step, collected, created_at, expires_at)
-       VALUES ($1, 'name', '{}', NOW(), NOW() + INTERVAL '30 minutes')
+       VALUES ($1, $2, '{}', NOW(), NOW() + INTERVAL '30 minutes')
        ON CONFLICT (phone) DO UPDATE
-         SET step = 'name', collected = '{}',
+         SET step = $2, collected = '{}',
              created_at = NOW(), expires_at = NOW() + INTERVAL '30 minutes'`,
-      [phone]
+      [phone, step]
     );
   },
 
