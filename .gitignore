@@ -30,3 +30,5 @@ test-messages.js
 bizpulse-*.json
 *service-account*.json
 ~$*
+*.env
+!.env.example

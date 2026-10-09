@@ -101,6 +101,9 @@ cron.schedule('*/5 * * * *', async () => {
 cron.schedule('30 7 * * *', () => runMorningStock().catch(e => console.error('[SheetJobs] morning fatal:', e.message)), { timezone: 'Africa/Lagos' });
 cron.schedule('30 20 * * *', () => runNightRecap().catch(e => console.error('[SheetJobs] night fatal:', e.message)), { timezone: 'Africa/Lagos' });
 
+console.log(client.isConfigured()
+  ? `[Sheets] service account ready: ${client.getServiceAccountEmail()}`
+  : '[Sheets] ⚠️ GOOGLE_SERVICE_ACCOUNT_JSON missing or unreadable — Sheets mode is OFF');
 console.log('[Cron] Sheets mode jobs scheduled: 5-min sold alerts, 7:30 AM stock, 8:30 PM recap.');
 
 module.exports = { pollSoldAlerts, runMorningStock, runNightRecap };

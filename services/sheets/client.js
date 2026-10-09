@@ -18,8 +18,11 @@ function loadCredentials() {
   const raw = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
   if (!raw) return null;
   try {
-    const text = raw.trim().startsWith('{') ? raw : Buffer.from(raw, 'base64').toString('utf8');
-    return JSON.parse(text);
+    // Hosting dashboards often keep the quotes people wrap around a pasted value ('{...}'), so strip stray quotes from either end (even unbalanced).
+    let v = raw.trim().replace(/^['"`]+/, '').replace(/['"`]+$/, '').trim();
+    const text = v.startsWith('{') ? v : Buffer.from(v, 'base64').toString('utf8');
+    const creds = JSON.parse(text);
+    return creds;
   } catch (e) {
     console.error('[Sheets] GOOGLE_SERVICE_ACCOUNT_JSON is not valid JSON/base64 JSON:', e.message);
     return null;
