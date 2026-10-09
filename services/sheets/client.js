@@ -62,6 +62,7 @@ function extractSpreadsheetId(input) {
 /** Map a Google API failure to a short code the tool layer can narrate. */
 function classifyError(err) {
   if (err.message === 'SHEETS_NOT_CONFIGURED') return 'not_configured';
+  if (/has not been used|is disabled|accessNotConfigured/i.test(err.message || '')) return 'api_disabled';
   const code = err.code || err.status || err.response?.status;
   if (code === 403 || code === 404) return 'no_access';
   if (code === 429) return 'rate_limited';
