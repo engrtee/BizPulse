@@ -126,6 +126,7 @@ async function recordActivityMilestone(userId) {
  * Route a tool call to the correct handler.
  */
 async function dispatch(toolName, input, whatsappNumber, sheetMode = false) {
+  console.log(`[Kemi] tool=${toolName} sheetMode=${sheetMode} to=${String(whatsappNumber).slice(-4)}`);
   // Sheets mode: reads come from the trader's Google Sheet, not Postgres.
   if (sheetMode) {
     const sheetOnly = {
@@ -257,6 +258,7 @@ async function runAgent(whatsappNumber, incomingMessage, opts = {}) {
       const conn = await SheetConnectionModel.getActiveByWhatsapp(whatsappNumber);
       sheetMode = !!conn;
       if (conn) context.sheetTitle = conn.title;
+      console.log(`[Kemi] ${String(whatsappNumber).slice(-4)} sheetMode=${sheetMode}${conn ? ' sheet=' + conn.title : ''}`);
     } catch (e) {
       console.error('[Kemi] Sheet connection lookup failed:', e.message);
     }
