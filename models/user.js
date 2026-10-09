@@ -48,7 +48,11 @@ const UserModel = {
   /** Return all active users (used by the 7pm cron job) */
   async findAllActive() {
     const res = await query(
-      'SELECT * FROM users WHERE active = TRUE ORDER BY id'
+      // Sheets-mode users are excluded: their data lives in their Google Sheet, so every
+      // Postgres-based proactive job would send them empty/"log your sales" messages.
+      `SELECT * FROM users WHERE active = TRUE
+         AND id NOT IN (SELECT user_id FROM sheet_connections)
+       ORDER BY id`
     );
     return res.rows;
   },
@@ -146,6 +150,7 @@ const UserModel = {
        WHERE active = TRUE
          AND whatsapp_number IS NOT NULL
          AND first_message_date IS NOT NULL
+         AND id NOT IN (SELECT user_id FROM sheet_connections)
          AND (
            last_message_date IS NULL
            OR last_message_date BETWEEN

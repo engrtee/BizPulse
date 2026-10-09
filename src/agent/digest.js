@@ -132,6 +132,7 @@ async function runDailyDigest() {
   const res = await query(
     `SELECT whatsapp_number FROM users
      WHERE whatsapp_number IS NOT NULL
+       AND id NOT IN (SELECT user_id FROM sheet_connections)
        AND (
          last_entry_date   >= (CURRENT_TIMESTAMP AT TIME ZONE 'Africa/Lagos')::DATE - 7
          OR last_message_date >= (CURRENT_TIMESTAMP AT TIME ZONE 'Africa/Lagos')::DATE - 7

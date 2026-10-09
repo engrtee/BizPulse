@@ -3,7 +3,8 @@
 require('dotenv').config();
 const Anthropic = require('@anthropic-ai/sdk');
 
-const { TOOLS }                = require('./tools');
+const { toolsFor }             = require('./tools');
+const sheetHandlers            = require('./sheetHandlers');
 const { buildSystemPrompt }    = require('./systemPrompt');
 const {
   getConversationHistory,
@@ -124,8 +125,21 @@ async function recordActivityMilestone(userId) {
 /**
  * Route a tool call to the correct handler.
  */
-async function dispatch(toolName, input, whatsappNumber) {
+async function dispatch(toolName, input, whatsappNumber, sheetMode = false) {
+  // Sheets mode: reads come from the trader's Google Sheet, not Postgres.
+  if (sheetMode) {
+    const sheetOnly = {
+      get_stock_level:        () => sheetHandlers.getStockLevelHandler({ ...input, whatsappNumber }),
+      get_stock_intelligence: () => sheetHandlers.getStockIntelligenceHandler(whatsappNumber),
+      get_sales_summary:      () => sheetHandlers.getSalesSummaryHandler({ ...input, whatsappNumber }),
+      connect_google_sheet:   () => sheetHandlers.connectGoogleSheetHandler({ ...input, whatsappNumber }),
+      disconnect_google_sheet:() => sheetHandlers.disconnectGoogleSheetHandler({ whatsappNumber }),
+    };
+    if (!sheetOnly[toolName]) throw new Error(`Tool not available in Sheets mode: ${toolName}`);
+    return sheetOnly[toolName]();
+  }
   const handlers = {
+    connect_google_sheet:  () => sheetHandlers.connectGoogleSheetHandler({ ...input, whatsappNumber }),
     log_sale:              () => logSaleHandler(          { ...input, whatsappNumber }),
     log_restock:           () => logRestockHandler(       { ...input, whatsappNumber }),
     log_expense:           () => logExpenseHandler(       { ...input, whatsappNumber }),
@@ -236,6 +250,17 @@ async function runAgent(whatsappNumber, incomingMessage, opts = {}) {
       { role: 'user', content: userContent },
     ];
 
+    // 6.5 Sheets mode: is this business running off a connected Google Sheet?
+    let sheetMode = false;
+    try {
+      const SheetConnectionModel = require('../../models/sheetConnection');
+      const conn = await SheetConnectionModel.getActiveByWhatsapp(whatsappNumber);
+      sheetMode = !!conn;
+      if (conn) context.sheetTitle = conn.title;
+    } catch (e) {
+      console.error('[Kemi] Sheet connection lookup failed:', e.message);
+    }
+
     // 7. Build system prompt with cache_control on the static persona block
     const system = buildSystemPrompt(user, context);
 
@@ -249,7 +274,7 @@ async function runAgent(whatsappNumber, incomingMessage, opts = {}) {
         model:      MODEL,
         max_tokens: MAX_TOKENS,
         system,
-        tools:      TOOLS,
+        tools:      toolsFor(sheetMode),
         messages,
         tool_choice: { type: 'auto' },
       });
@@ -273,7 +298,7 @@ async function runAgent(whatsappNumber, incomingMessage, opts = {}) {
       // Sequential writes
       for (const tb of writeBlocks) {
         try {
-          const result = await dispatch(tb.name, tb.input, whatsappNumber);
+          const result = await dispatch(tb.name, tb.input, whatsappNumber, sheetMode);
 
           // A1-1: advance the streak on real activity, and let Claude know so
           // she can mention it naturally rather than a bolted-on template.
@@ -302,7 +327,7 @@ async function runAgent(whatsappNumber, incomingMessage, opts = {}) {
       const readResults = await Promise.all(
         readBlocks.map(async tb => {
           try {
-            const result = await dispatch(tb.name, tb.input, whatsappNumber);
+            const result = await dispatch(tb.name, tb.input, whatsappNumber, sheetMode);
             return {
               type:        'tool_result',
               tool_use_id: tb.id,

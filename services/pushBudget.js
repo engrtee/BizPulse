@@ -17,7 +17,10 @@
 const { query } = require('../models/db');
 
 const WEEKLY_CAP = 10;
-const CAP_EXEMPT_TYPES = new Set(['out_of_stock']);
+// sheet_* pushes belong to Sheets mode, an opt-in feature whose whole point is being told when
+// something sells and seeing stock morning/night — the owner asked for them, so they don't spend
+// the engagement-nudge budget (still logged for admin visibility).
+const CAP_EXEMPT_TYPES = new Set(['out_of_stock', 'sheet_sold', 'sheet_morning', 'sheet_night']);
 
 /** Returns true if this trader has room in their weekly budget for pushType. */
 async function checkPushBudget(userId, pushType) {
@@ -25,8 +28,8 @@ async function checkPushBudget(userId, pushType) {
   const res = await query(
     `SELECT COUNT(*)::int AS n FROM push_log
      WHERE user_id = $1 AND sent_at > NOW() - INTERVAL '7 days'
-       AND push_type NOT IN ('out_of_stock')`,
-    [userId]
+       AND push_type <> ALL($2::text[])`,
+    [userId, [...CAP_EXEMPT_TYPES]]
   );
   return res.rows[0].n < WEEKLY_CAP;
 }

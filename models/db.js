@@ -509,6 +509,26 @@ async function initDb() {
   )`, 'CREATE push_log');
   await run(`CREATE INDEX IF NOT EXISTS idx_push_log_user_time ON push_log(user_id, sent_at DESC)`, 'INDEX push_log');
 
+  // ── Google Sheets mode (opt-in): the owner's sheet is the source of truth, BizPulse only reads it ─
+  await run(`CREATE TABLE IF NOT EXISTS sheet_connections (
+    id             SERIAL PRIMARY KEY,
+    user_id        INTEGER NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+    spreadsheet_id TEXT NOT NULL,
+    title          TEXT,
+    mapping        JSONB NOT NULL DEFAULT '{}',
+    status         VARCHAR(20) NOT NULL DEFAULT 'active',
+    last_error     TEXT,
+    last_synced_at TIMESTAMPTZ,
+    baselined      BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at     TIMESTAMPTZ DEFAULT NOW()
+  )`, 'CREATE sheet_connections');
+  await run(`CREATE TABLE IF NOT EXISTS sheet_seen_sales (
+    connection_id INTEGER NOT NULL REFERENCES sheet_connections(id) ON DELETE CASCADE,
+    row_hash      TEXT NOT NULL,
+    seen_at       TIMESTAMPTZ DEFAULT NOW(),
+    PRIMARY KEY (connection_id, row_hash)
+  )`, 'CREATE sheet_seen_sales');
+
   // ── Layer 0: WhatsApp-native onboarding sessions ─────────────────────
   await run(`CREATE TABLE IF NOT EXISTS onboarding_sessions (
     phone       TEXT PRIMARY KEY,

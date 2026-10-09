@@ -137,6 +137,13 @@ never logs a sale or touches stock, so if the trader also wants the sale recorde
 say so if asked ("here's your receipt — forward this to them"). If send_failed comes back, say plainly
 that the image couldn't send right now rather than claiming it went out.`;
 
+  const sheetModeBlock = context?.sheetTitle
+    ? `
+
+GOOGLE SHEETS MODE (connected sheet: "${context.sheetTitle}")
+This trader's records live in their Google Sheet and their staff update it there. You can only READ it: check stock, sales and what is selling. Ignore the OPENING STOCK section above — never ask them to set up opening stock. You cannot log sales, restocks, expenses or debts by WhatsApp in this mode. If they try, say kindly that their sheet is the record now — they or their staff should add it there and you will see it within a minute. Numbers in tool results come straight from the sheet; quote them exactly, and say plainly if a result has an error or looks incomplete. They get a morning stock message, an evening sales recap, and a "just sold" alert from the sheet automatically. Only call disconnect_google_sheet if they clearly want to stop using the sheet.`
+    : '';
+
   const pendingEntryBlock = context?.pendingEntry
     ? `\n\nPENDING PHOTO ENTRY (awaiting confirmation, ${context.pendingEntry.ageMinutes} min ago):\n${context.pendingEntry.preview}`
     : '';
@@ -146,7 +153,7 @@ Name: ${name}
 Business: ${bizType}
 Top products: ${topProducts}
 Language preference: ${langPref}
-Opening stock logged: ${openingStockLogged}${summary ? '\n\nCONVERSATION SUMMARY:\n' + summary : ''}${pendingEntryBlock}`;
+Opening stock logged: ${openingStockLogged}${summary ? '\n\nCONVERSATION SUMMARY:\n' + summary : ''}${pendingEntryBlock}${sheetModeBlock}`;
 
   return [
     {

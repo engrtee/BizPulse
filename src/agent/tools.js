@@ -417,6 +417,43 @@ const TOOLS = [
     },
   },
 
+  // ─── Google Sheets mode (opt-in) ────────────────────────────────────────────
+  {
+    name: 'connect_google_sheet',
+    description:
+      'Connect the trader\'s Google Sheet so BizPulse reads their stock and sales from it. ' +
+      'Use when the trader says they keep their records in Google Sheets / sends a docs.google.com/spreadsheets link / ' +
+      'asks to connect their sheet. Needs the sheet link. If the result says no_access, tell them to open the sheet, ' +
+      'tap Share, and add the email in share_with_email as a Viewer, then send the link again. ' +
+      'WARNING: once connected, WhatsApp logging is switched off — staff log in the sheet. ' +
+      'Make sure the trader understands that before you call this.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        sheet_link: { type: 'string', description: 'The Google Sheets URL the trader sent.' },
+      },
+      required: ['sheet_link'],
+    },
+  },
+
 ];
 
-module.exports = { TOOLS };
+// Tools that only exist for a business already in Sheets mode.
+const DISCONNECT_SHEET_TOOL = {
+  name: 'disconnect_google_sheet',
+  description:
+    'Disconnect the Google Sheet and go back to logging by WhatsApp. Use only when the trader clearly asks to stop using their sheet.',
+  input_schema: { type: 'object', properties: {}, required: [] },
+};
+
+// Sheets mode is read-only: the sheet is the source of truth, so every log_* / correct / debt /
+// receipt / photo-stock tool is withheld. These three read tools are answered from the sheet instead.
+const SHEET_MODE_TOOL_NAMES = new Set(['get_stock_level', 'get_stock_intelligence', 'get_sales_summary']);
+
+function toolsFor(sheetMode) {
+  if (!sheetMode) return TOOLS;
+  // connect stays available so an owner can re-share a lost sheet or switch to a new one
+  return [...TOOLS.filter(t => SHEET_MODE_TOOL_NAMES.has(t.name) || t.name === 'connect_google_sheet'), DISCONNECT_SHEET_TOOL];
+}
+
+module.exports = { TOOLS, toolsFor };

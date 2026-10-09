@@ -188,6 +188,13 @@ pushes use the net-of-expenses basis; a single-sale confirmation uses the gross-
 **Never calculate margin any other way, and never blend the two bases in one aggregate without noting it.**
 
 ### FIX 3 — No Google Drive / No Google Sheets
+### FIX 3 — No Google Drive / No Google OAuth (amended 2026-10: opt-in read-only Sheets mode)
+**Amendment (2026-10, founder decision):** a business MAY connect its own Google Sheet as its backend
+("Sheets mode") — see the GOOGLE SHEETS MODE section. This is **service-account, read-only, no OAuth**.
+Google OAuth, Google Drive, and any WRITE to a sheet remain prohibited. Postgres stays the default
+backend for everyone who doesn't connect a sheet. The text below is the original decision, still true
+for OAuth/Drive.
+
 **Decision made:** Google Drive and Google OAuth were removed entirely.
 **Reason:** Too much friction for low-tech Nigerian users. OAuth flow kills registration completion.
 **Data storage:** PostgreSQL on Render only.
@@ -314,6 +321,31 @@ stress-test-script callers) but has no production caller — do not add one. `ro
 routes text/voice/image to Kemi, plus the "Other" business-type clarification and WhatsApp-native
 onboarding flows. If you're tempted to extend webhook.js with new parsing/confirmation logic, stop —
 build it as a Kemi tool instead.
+
+---
+
+## GOOGLE SHEETS MODE (opt-in, 2026-10 — Phase 1 of the sheet-backed backend)
+
+A business can keep its records in its own Google Sheet; staff update the sheet, the owner uses WhatsApp
+only to read. **Postgres is not written to for these businesses** (Fix 1 is untouched — nothing here
+INSERTs/UPDATEs `transactions`/`products`).
+
+- **Connect:** the owner pastes the sheet link to Kemi (`connect_google_sheet`). The sheet must be shared
+  as **Viewer** with the BizPulse service account (`GOOGLE_SERVICE_ACCOUNT_JSON`; Kemi tells them the
+  email). No OAuth. Read-only scope (`spreadsheets.readonly`) — Google enforces it.
+- **Layout:** `services/sheets/mapper.js` finds Stock / Purchases / Sales tabs and maps columns by header
+  *name* (synonyms, then a Claude fallback). Stock = Stock-tab quantity column if present, else
+  purchases − sales. Mapping lives in `sheet_connections.mapping`; the sheet's data is never copied in.
+- **Mode switch:** a row in `sheet_connections` = Sheets mode. `agentLoop.js` then offers only
+  `get_stock_level` / `get_stock_intelligence` / `get_sales_summary` (answered from the sheet by
+  `src/agent/sheetHandlers.js`) plus connect/disconnect. All write tools are withheld.
+- **Pushes** (`jobs/sheetJobs.js`): 5-min poll → "just sold" alert for new Sales rows (tracked by row
+  hash in `sheet_seen_sales`; history is baselined on connect; only rows dated today/yesterday alert),
+  7:30 AM stock, 8:30 PM recap. `sheet_*` push types are exempt from the weekly push cap. Sheet users are
+  excluded from every Postgres-based proactive job (`UserModel.findAllActive/findInactiveFor`, 8pm digest).
+- **Known gaps:** proactive sheet pushes use free-form `sendMessage` like the other morning/digest jobs —
+  outside the 24h window they need approved Meta templates before production. Sales "profit" is not
+  computed from sheets (revenue/units only). Phase 2: a WhatsApp/web interface that writes to the sheet.
 
 ---
 
@@ -800,7 +832,7 @@ ADMIN_PASSWORD=               # For /admin dashboard (password-protected)
 
 ## WHAT NOT TO BUILD — EVER (unless explicitly instructed)
 
-- Google OAuth or Google Drive integration (removed — do not add back)
+- Google OAuth or Google Drive integration (removed — do not add back; read-only service-account Sheets mode is the one sanctioned exception)
 - Any feature that requires users to leave WhatsApp for initial setup
 - Complex accounting terminology in any user-facing text
 - Features that require more than one action from a tired user at 8pm
