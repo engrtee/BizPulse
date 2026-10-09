@@ -75,7 +75,9 @@
       "PowerShell(Get-WinEvent -LogName Application -MaxEvents 100 | Where-Object { $_.TimeCreated -gt \\(Get-Date\\).AddMinutes\\(-15\\) } | Select-Object TimeCreated, ProviderName, LevelDisplayName, Message | Format-List)",
       "Bash(\"/c/Program Files/PostgreSQL/16/bin/pg_ctl.exe\" start -D \"/c/Program Files/PostgreSQL/16/data\" -l \"/c/Program Files/PostgreSQL/16/data/log/manual_start.log\" -w -t 20)",
       "Bash(echo \"=== exit code: $? ===\")",
-      "Bash(timeout 10 \"/c/Program Files/PostgreSQL/16/bin/postgres.exe\" -D \"/c/Program Files/PostgreSQL/16/data\" -c logging_collector=off)"
+      "Bash(timeout 10 \"/c/Program Files/PostgreSQL/16/bin/postgres.exe\" -D \"/c/Program Files/PostgreSQL/16/data\" -c logging_collector=off)",
+      "Bash(find docs *)",
+      "Bash(ls docs *)"
     ]
   }
 }

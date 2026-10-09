@@ -187,7 +187,6 @@ get and sell it"* — and be explicit about which basis a given number uses when
 pushes use the net-of-expenses basis; a single-sale confirmation uses the gross-COGS basis).
 **Never calculate margin any other way, and never blend the two bases in one aggregate without noting it.**
 
-### FIX 3 — No Google Drive / No Google Sheets
 ### FIX 3 — No Google Drive / No Google OAuth (amended 2026-10: opt-in read-only Sheets mode)
 **Amendment (2026-10, founder decision):** a business MAY connect its own Google Sheet as its backend
 ("Sheets mode") — see the GOOGLE SHEETS MODE section. This is **service-account, read-only, no OAuth**.
@@ -199,7 +198,7 @@ for OAuth/Drive.
 **Reason:** Too much friction for low-tech Nigerian users. OAuth flow kills registration completion.
 **Data storage:** PostgreSQL on Render only.
 **Data ownership:** Users export their data via CSV download endpoint.
-**DO NOT:** Add Google OAuth, Google Sheets API, or Google Drive back under any circumstances.
+**DO NOT:** Add Google OAuth or Google Drive back under any circumstances. (Read-only Sheets API via service account is allowed only as Sheets mode, below.)
 **Note:** Dormant `google_access_token`/`google_refresh_token`/`sheet_id` columns and `services/sheets.js`
 still exist in the codebase from before this decision — gated off (never set for new users) but not yet
 deleted. Slated for removal; do not build anything new against them.
