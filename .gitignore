@@ -24,3 +24,9 @@ build/
 # Local test/simulation scripts (contain hardcoded test phone numbers)
 simulate-user.js
 test-messages.js
+
+# Service-account / credential key files — NEVER commit
+*-????????????.json
+bizpulse-*.json
+*service-account*.json
+~$*
