@@ -6,6 +6,7 @@
  */
 'use strict';
 require('dotenv').config();
+const { initDb } = require('../models/db');
 const { connectGoogleSheetHandler, disconnectGoogleSheetHandler } = require('../src/agent/sheetHandlers');
 
 (async () => {
@@ -14,6 +15,7 @@ const { connectGoogleSheetHandler, disconnectGoogleSheetHandler } = require('../
     console.error('Usage: node scripts/connect-sheet.js <whatsapp_number> <sheet_link | --disconnect>');
     process.exit(1);
   }
+  await initDb(); // idempotent; makes sure the sheet_* tables exist
   const result = arg === '--disconnect'
     ? await disconnectGoogleSheetHandler({ whatsappNumber: number })
     : await connectGoogleSheetHandler({ whatsappNumber: number, sheet_link: arg });
