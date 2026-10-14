@@ -198,11 +198,29 @@ async function runAgent(whatsappNumber, incomingMessage, opts = {}) {
       console.error('[Kemi] User lookup failed:', e.message);
     }
 
-    // 2. Load conversation history (last 20 turns)
-    const history = await getConversationHistory(whatsappNumber);
+    // 1.5 Sheets mode: is this business running off a connected Google Sheet?
+    // Decided first so Postgres-era chat and product memory never reach a sheet user's prompt.
+    let sheetMode = false;
+    let sheetConn = null;
+    try {
+      const SheetConnectionModel = require('../../models/sheetConnection');
+      sheetConn = await SheetConnectionModel.getActiveByWhatsapp(whatsappNumber);
+      sheetMode = !!sheetConn;
+      console.log(`[Kemi] ${String(whatsappNumber).slice(-4)} sheetMode=${sheetMode}${sheetConn ? ' sheet=' + sheetConn.title : ''}`);
+    } catch (e) {
+      console.error('[Kemi] Sheet connection lookup failed:', e.message);
+    }
+
+    // 2. Load conversation history (last 20 turns; Sheets mode: only since the sheet was connected)
+    const history = await getConversationHistory(whatsappNumber, sheetConn ? sheetConn.created_at : null);
 
     // 3. Load rolling context (language pref, summary, top products)
     const context = await getRollingContext(whatsappNumber);
+    if (sheetConn) {
+      context.sheetTitle     = sheetConn.title;
+      context.top_products   = [];   // came from Postgres sales — the sheet is the record now
+      context.rolling_summary = null; // summarises Postgres-era chat
+    }
 
     // 3.5 (Batch 4, A2-8): surface any pending photo-stock draft. Images
     // aren't persisted to conversation_history (step 4 below), so this is
@@ -250,18 +268,6 @@ async function runAgent(whatsappNumber, incomingMessage, opts = {}) {
       ...history,
       { role: 'user', content: userContent },
     ];
-
-    // 6.5 Sheets mode: is this business running off a connected Google Sheet?
-    let sheetMode = false;
-    try {
-      const SheetConnectionModel = require('../../models/sheetConnection');
-      const conn = await SheetConnectionModel.getActiveByWhatsapp(whatsappNumber);
-      sheetMode = !!conn;
-      if (conn) context.sheetTitle = conn.title;
-      console.log(`[Kemi] ${String(whatsappNumber).slice(-4)} sheetMode=${sheetMode}${conn ? ' sheet=' + conn.title : ''}`);
-    } catch (e) {
-      console.error('[Kemi] Sheet connection lookup failed:', e.message);
-    }
 
     // 7. Build system prompt with cache_control on the static persona block
     const system = buildSystemPrompt(user, context);

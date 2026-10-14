@@ -15,14 +15,17 @@ function getClient() {
  * Return the last 20 conversation turns as a Claude messages array.
  * Ordered oldest-first so Claude sees the conversation in chronological order.
  */
-async function getConversationHistory(whatsappNumber) {
+async function getConversationHistory(whatsappNumber, since = null) {
+  // `since`: Sheets-mode users only see chat from after their sheet was connected,
+  // so stock lists Kemi gave from Postgres earlier can't be echoed back as current.
   const res = await query(
     `SELECT role, content
      FROM conversation_history
      WHERE whatsapp_number = $1
+       AND ($2::timestamptz IS NULL OR created_at >= $2::timestamptz)
      ORDER BY created_at ASC
      LIMIT 15`,
-    [whatsappNumber]
+    [whatsappNumber, since]
   );
   return res.rows.map(r => ({ role: r.role, content: r.content }));
 }
