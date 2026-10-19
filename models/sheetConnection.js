@@ -8,6 +8,7 @@
 'use strict';
 
 const { query } = require('./db');
+const { normalizePhone } = require('../utils/phone');
 
 const SheetConnectionModel = {
   async getByUserId(userId) {
@@ -15,11 +16,21 @@ const SheetConnectionModel = {
     return res.rows[0] || null;
   },
 
+  /** Matches the same way UserModel.findByWhatsapp does (0803… / +234… / 234… all equal), so a
+   *  stored number in a different format can't silently drop a Sheets-mode trader back to Postgres. */
   async getActiveByWhatsapp(whatsappNumber) {
     const res = await query(
       `SELECT c.* FROM sheet_connections c JOIN users u ON u.id = c.user_id
-       WHERE u.whatsapp_number = $1 AND c.status IN ('active', 'access_lost')`,
-      [whatsappNumber]
+       WHERE u.active = TRUE
+         AND c.status IN ('active', 'access_lost')
+         AND CASE
+           WHEN u.whatsapp_number ~ '^0[789][0-9]{9}$'
+             THEN '234' || SUBSTRING(u.whatsapp_number, 2)
+           WHEN u.whatsapp_number ~ '^\\+?234[789][0-9]{9}$'
+             THEN REGEXP_REPLACE(u.whatsapp_number, '^\\+', '')
+           ELSE u.whatsapp_number
+         END = $1`,
+      [normalizePhone(whatsappNumber)]
     );
     return res.rows[0] || null;
   },
