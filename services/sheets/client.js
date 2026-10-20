@@ -95,7 +95,19 @@ async function readTab(spreadsheetId, tabTitle) {
   return res.data.values || [];
 }
 
+/** Several tabs in ONE Google round-trip. Returns rows per tab, in the order asked. */
+async function readTabs(spreadsheetId, tabTitles) {
+  if (!tabTitles.length) return [];
+  const res = await getApi().spreadsheets.values.batchGet({
+    spreadsheetId,
+    ranges: tabTitles.map(t => `'${t.replace(/'/g, "''")}'`),
+    valueRenderOption: 'UNFORMATTED_VALUE',
+    dateTimeRenderOption: 'SERIAL_NUMBER',
+  });
+  return (res.data.valueRanges || []).map(v => v.values || []);
+}
+
 module.exports = {
   isConfigured, getServiceAccountEmail, extractSpreadsheetId,
-  classifyError, getMeta, readTab,
+  classifyError, getMeta, readTab, readTabs,
 };

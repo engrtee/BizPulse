@@ -210,12 +210,9 @@ async function loadSnapshot(conn, { fresh = false } = {}) {
   if (!fresh && hit && Date.now() - hit.at < CACHE_TTL_MS) return hit.snapshot;
 
   const snapshot = { stock: null, purchases: null, sales: null };
-  for (const role of ['stock', 'purchases', 'sales']) {
-    const spec = conn.mapping?.[role];
-    if (!spec) continue;
-    const rows = await client.readTab(conn.spreadsheet_id, spec.tab);
-    snapshot[role] = parseTab(role, spec, rows);
-  }
+  const roles = ['stock', 'purchases', 'sales'].filter(r => conn.mapping?.[r]);
+  const allRows = await client.readTabs(conn.spreadsheet_id, roles.map(r => conn.mapping[r].tab));
+  roles.forEach((role, i) => { snapshot[role] = parseTab(role, conn.mapping[role], allRows[i] || []); });
   _cache.set(conn.id, { at: Date.now(), snapshot });
   return snapshot;
 }
